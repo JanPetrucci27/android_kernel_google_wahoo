@@ -26,6 +26,8 @@
 #include "msm_gem.h"
 #include "msm_mmu.h"
 
+static struct kmem_cache *kmem_vblank_work_pool;
+
 static void msm_fb_output_poll_changed(struct drm_device *dev)
 {
 	struct msm_drm_private *priv = dev->dev_private;
@@ -141,7 +143,7 @@ static void vblank_ctrl_worker(struct kthread_work *work)
 			kms->funcs->disable_vblank(kms,
 						priv->crtcs[vbl_ev->crtc_id]);
 
-		kfree(vbl_ev);
+		kmem_cache_free(kmem_vblank_work_pool, vbl_ev);
 
 		spin_lock_irqsave(&vbl_ctrl->lock, flags);
 	}
@@ -156,7 +158,7 @@ static int vblank_ctrl_queue_work(struct msm_drm_private *priv,
 	struct vblank_event *vbl_ev;
 	unsigned long flags;
 
-	vbl_ev = kzalloc(sizeof(*vbl_ev), GFP_ATOMIC);
+	vbl_ev = kmem_cache_zalloc(kmem_vblank_work_pool, GFP_ATOMIC);
 	if (!vbl_ev)
 		return -ENOMEM;
 
@@ -472,11 +474,21 @@ static int msm_load(struct drm_device *dev, unsigned long flags)
 		priv->disp_thread[i].crtc_id = priv->crtcs[i]->base.id;
 		init_kthread_worker(&priv->disp_thread[i].worker);
 		priv->disp_thread[i].dev = dev;
-		priv->disp_thread[i].thread =
-			kthread_run(kthread_worker_fn,
-				&priv->disp_thread[i].worker,
-				"crtc_commit:%d",
-				priv->disp_thread[i].crtc_id);
+		/* Only pin actual display thread to big cluster */
+		if (i == 0) {
+			priv->disp_thread[i].thread =
+				kthread_run_perf_critical(cpu_perf_mask,
+					kthread_worker_fn,
+					&priv->disp_thread[i].worker,
+					"crtc_commit:%d", priv->disp_thread[i].crtc_id);
+			pr_info("%i to big cluster", priv->disp_thread[i].crtc_id);
+		} else {
+			priv->disp_thread[i].thread =
+				kthread_run_perf_critical(cpu_lp_mask, kthread_worker_fn,
+					&priv->disp_thread[i].worker,
+					"crtc_commit:%d", priv->disp_thread[i].crtc_id);
+			pr_info("%i to little cluster", priv->disp_thread[i].crtc_id);
+		}
 
 		if (IS_ERR(priv->disp_thread[i].thread)) {
 			dev_err(dev->dev, "failed to create kthread\n");
@@ -1935,6 +1947,7 @@ void __exit adreno_unregister(void)
 static int __init msm_drm_register(void)
 {
 	DBG("init");
+	kmem_vblank_work_pool = KMEM_CACHE(vblank_work, SLAB_HWCACHE_ALIGN | SLAB_PANIC);
 	msm_dsi_register();
 	msm_edp_register();
 	hdmi_register();

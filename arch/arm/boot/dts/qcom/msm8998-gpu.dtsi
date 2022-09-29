@@ -66,8 +66,7 @@
 
 		qcom,initial-pwrlevel = <4>;
 
-		qcom,idle-timeout = <80>; //<HZ/12>
-		qcom,no-nap;
+		qcom,idle-timeout = <64>;
 
 		qcom,highest-bank-bit = <15>;
 
@@ -78,6 +77,9 @@
 		qcom,gpu-qtimer = <0x17921000 0x1000>; // base addr, size
 
 		qcom,tsens-name = "tsens_tz_sensor12";
+		
+		/* Avoid L2PC on big cluster CPUs (CPU 4,5,6,7) */
+		qcom,l2pc-cpu-mask = <0x000000f0>;
 
 		/* Quirks */
 		qcom,gpu-quirk-lmloadkill-disable;
@@ -131,15 +133,6 @@
 		/* GDSC oxili regulators */
 		vddcx-supply = <&gdsc_gpu_cx>;
 		vdd-supply = <&gdsc_gpu_gx>;
-
-		/* Trace bus */
-		coresight-name = "coresight-gfx";
-		coresight-atid = <3>;
-		port {
-			gfx_out_funnel_in1: endpoint {
-				remote-endpoint = <&funnel_in1_in_gfx>;
-			};
-		};
 
 		/* GPU Mempools */
 		qcom,gpu-mempools {
@@ -256,6 +249,7 @@
 		clock-names = "iface_clk", "mem_clk", "mem_iface_clk";
 
 		qcom,secure_align_mask = <0xfff>;
+		qcom,unmap_fast;
 		qcom,retention;
 		qcom,hyp_secure_alloc;
 

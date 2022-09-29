@@ -81,6 +81,11 @@ const DECLARE_TLV_DB_LINEAR(msm_compr_vol_gain, 0,
 
 #define COMPRESS_DECODER_OUTPUT_BIT_WIDTH 24
 
+//guoguangyi@mutimedia.2016.04.07
+//use 24bits to get rid of 16bits innate noise
+int gis_24bits = 0;
+int gis_32bits = 0;
+
 /*
  * Max size for getting DTS EAGLE Param through kcontrol
  * Safe for both 32 and 64 bit platforms
@@ -1268,6 +1273,20 @@ static int msm_compr_configure_dsp_for_playback
 	else if (prtd->codec_param.codec.format == SNDRV_PCM_FORMAT_S32_LE)
 		bits_per_sample = 32;
 
+    //guoguangyi@mutimedia.2016.04.23,
+    //use 24bits to get rid of 16bits innate noise
+    //mark by globale value to open adm 24bits
+    //lifei modified in 20160430
+	if (prtd->codec_param.codec.bit_rate == 24) {
+        bits_per_sample = 24;
+        gis_24bits = 1;
+    }
+	
+    if (prtd->codec_param.codec.bit_rate == 32) {
+        bits_per_sample = 32;
+        gis_32bits = 1;
+    }
+
 	if (prtd->compr_passthr != LEGACY_PCM) {
 		ret = q6asm_open_write_compressed(ac, prtd->codec,
 						  prtd->compr_passthr);
@@ -2105,6 +2124,19 @@ static int msm_compr_trigger(struct snd_compr_stream *cstream, int cmd)
 	int stream_id;
 	uint32_t stream_index;
 	uint16_t bits_per_sample = COMPRESS_DECODER_OUTPUT_BIT_WIDTH;
+	
+	//guoguangyi@mutimedia.2016.04.23,
+    //use 24bits to get rid of 16bits innate noise
+    //mark by globale value to open adm 24bits
+    //lifei modified in 20160430
+	
+	if (prtd->codec_param.codec.bit_rate == 24) {
+        bits_per_sample = 24;
+    }
+	
+    if (prtd->codec_param.codec.bit_rate == 32) {
+        bits_per_sample = 32;
+    }
 
 	spin_lock_irqsave(&prtd->lock, flags);
 	if (atomic_read(&prtd->error)) {

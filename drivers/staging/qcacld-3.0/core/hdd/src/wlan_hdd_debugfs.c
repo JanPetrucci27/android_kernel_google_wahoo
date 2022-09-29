@@ -34,7 +34,7 @@
  * wlan_wcnss/pattern_gen to configure periodic TX patterns.
  */
 
-#ifdef WLAN_OPEN_SOURCE
+#ifdef WLAN_DEBUG
 #include <wlan_hdd_includes.h>
 #include <wlan_hdd_debugfs.h>
 #include <wlan_hdd_wowl.h>
@@ -936,4 +936,4 @@ void hdd_debugfs_exit(hdd_adapter_t *adapter)
 	wlan_hdd_deinit_power_stats_debugfs(adapter);
 	debugfs_remove_recursive(adapter->debugfs_phy);
 }
-#endif /* #ifdef WLAN_OPEN_SOURCE */
+#endif /* #ifdef WLAN_DEBUG */

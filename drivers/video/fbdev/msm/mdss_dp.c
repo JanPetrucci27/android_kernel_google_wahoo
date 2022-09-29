@@ -3106,7 +3106,7 @@ static int mdss_dp_event_thread(void *data)
 	ev_data = (struct mdss_dp_event_data *)data;
 
 	while (!kthread_should_stop()) {
-		wait_event(ev_data->event_q,
+		wait_event_interruptible(ev_data->event_q,
 			(ev_data->pndx != ev_data->gndx) ||
 			kthread_should_stop());
 		spin_lock_irqsave(&ev_data->event_lock, flag);
@@ -3265,7 +3265,7 @@ static int mdss_dp_event_setup(struct mdss_dp_drv_pdata *dp)
 	init_waitqueue_head(&dp->dp_event.event_q);
 	spin_lock_init(&dp->dp_event.event_lock);
 
-	dp->ev_thread = kthread_run(mdss_dp_event_thread,
+	dp->ev_thread = kthread_run_perf_critical(cpu_perf_mask, mdss_dp_event_thread,
 		(void *)&dp->dp_event, "mdss_dp_event");
 	if (IS_ERR(dp->ev_thread)) {
 		pr_err("unable to start event thread\n");

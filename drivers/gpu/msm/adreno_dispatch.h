@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2017, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2008-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -75,12 +75,14 @@ struct adreno_dispatcher_drawqueue {
  * @fault: Non-zero if a fault was detected.
  * @pending: Priority list of contexts waiting to submit drawobjs
  * @plist_lock: Spin lock to protect the pending queue
- * @work: work_struct to put the dispatcher in a work queue
  * @kobj: kobject for the dispatcher directory in the device sysfs node
  * @idle_gate: Gate to wait on for dispatcher to idle
  * @disp_preempt_fair_sched: If set then dispatcher will try to be fair to
  * starving RB's by scheduling them in and enforcing a minimum time slice
  * for every RB that is scheduled to run on the device
+ * @thread: Kthread for the command dispatcher
+ * @cmd_waitq: Waitqueue for the command dispatcher
+ * @send_cmds: Atomic boolean indicating that commands should be dispatched
  */
 struct adreno_dispatcher {
 	struct mutex mutex;
@@ -91,10 +93,12 @@ struct adreno_dispatcher {
 	atomic_t fault;
 	struct plist_head pending;
 	spinlock_t plist_lock;
-	struct kthread_work work;
 	struct kobject kobj;
 	struct completion idle_gate;
 	unsigned int disp_preempt_fair_sched;
+	struct task_struct *thread;
+	wait_queue_head_t cmd_waitq;
+	atomic_t send_cmds;
 };
 
 enum adreno_dispatcher_flags {
@@ -103,6 +107,9 @@ enum adreno_dispatcher_flags {
 };
 
 void adreno_dispatcher_start(struct kgsl_device *device);
+void adreno_dispatcher_halt(struct kgsl_device *device);
+void adreno_dispatcher_unhalt(struct kgsl_device *device);
+
 int adreno_dispatcher_init(struct adreno_device *adreno_dev);
 void adreno_dispatcher_close(struct adreno_device *adreno_dev);
 int adreno_dispatcher_idle(struct adreno_device *adreno_dev);

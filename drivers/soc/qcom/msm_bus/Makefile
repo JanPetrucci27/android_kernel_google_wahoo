@@ -10,8 +10,6 @@ obj-$(CONFIG_OF) += msm_bus_of_adhoc.o
 obj-$(CONFIG_DEBUG_BUS_VOTER) += msm_bus_dbg_voter.o
 obj-$(CONFIG_CORESIGHT) +=  msm_buspm_coresight_adhoc.o
 
-obj-$(CONFIG_DEBUG_FS) += msm_bus_dbg.o
-
 # TODO: remove me b/62058353
 subdir-ccflags-y += \
 	-Wno-self-assign \

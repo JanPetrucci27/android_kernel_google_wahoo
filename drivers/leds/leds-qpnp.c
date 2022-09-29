@@ -1992,7 +1992,7 @@ static void qpnp_led_turn_off_delayed(struct work_struct *work)
 static void qpnp_led_turn_off(struct qpnp_led_data *led)
 {
 	INIT_DELAYED_WORK(&led->dwork, qpnp_led_turn_off_delayed);
-	schedule_delayed_work(&led->dwork,
+	queue_delayed_work(system_power_efficient_wq, &led->dwork,
 		msecs_to_jiffies(led->turn_off_delay_ms));
 }
 
@@ -2846,7 +2846,7 @@ static ssize_t rgb_start_store(struct device *dev,
 		case QPNP_ID_RGB_RED:
 		case QPNP_ID_RGB_GREEN:
 		case QPNP_ID_RGB_BLUE:
-			pr_info("qpnp_led.%s: b:%02x on:%d off:%d\n",
+			pr_debug("qpnp_led.%s: b:%02x on:%d off:%d\n",
 				led_array[i].cdev.name,
 				led_array[i].cdev.brightness,
 				led_array[i].rgb_cfg->on_ms,

@@ -26,54 +26,64 @@
 #endif
 
 #define __LL_SC_ATOMIC(op)	__LL_SC_CALL(atomic_##op)
-
-static inline void atomic_andnot(int i, atomic_t *v)
-{
-	register int w0 asm ("w0") = i;
-	register atomic_t *x1 asm ("x1") = v;
-
-	asm volatile(ARM64_LSE_ATOMIC_INSN(__LL_SC_ATOMIC(andnot),
-	"	stclr	%w[i], %[v]\n")
-	: [i] "+r" (w0), [v] "+Q" (v->counter)
-	: "r" (x1)
-	: __LL_SC_CLOBBERS);
+#define ATOMIC_OP(op, asm_op)						\
+static inline void atomic_##op(int i, atomic_t *v)			\
+{									\
+	register int w0 asm ("w0") = i;					\
+	register atomic_t *x1 asm ("x1") = v;				\
+									\
+	asm volatile(ARM64_LSE_ATOMIC_INSN(				\
+	/* LL/SC */							\
+	__LL_SC_ATOMIC(op)						\
+	__nops(1),							\
+	/* LSE atomics */						\
+"	prfm	pstl1strm, %[v]\n"					\
+"	" #asm_op "	%w[i], %[v]\n")					\
+	: [i] "+r" (w0), [v] "+Q" (v->counter)				\
+	: "r" (x1)							\
+	: __LL_SC_CLOBBERS);						\
 }
 
-static inline void atomic_or(int i, atomic_t *v)
-{
-	register int w0 asm ("w0") = i;
-	register atomic_t *x1 asm ("x1") = v;
+ATOMIC_OP(andnot, stclr)
+ATOMIC_OP(or, stset)
+ATOMIC_OP(xor, steor)
+ATOMIC_OP(add, stadd)
 
-	asm volatile(ARM64_LSE_ATOMIC_INSN(__LL_SC_ATOMIC(or),
-	"	stset	%w[i], %[v]\n")
-	: [i] "+r" (w0), [v] "+Q" (v->counter)
-	: "r" (x1)
-	: __LL_SC_CLOBBERS);
+#undef ATOMIC_OP
+
+#define ATOMIC_FETCH_OP(name, mb, op, asm_op, cl...)			\
+static inline int atomic_fetch_##op##name(int i, atomic_t *v)		\
+{									\
+	register int w0 asm ("w0") = i;					\
+	register atomic_t *x1 asm ("x1") = v;				\
+									\
+	asm volatile(ARM64_LSE_ATOMIC_INSN(				\
+	/* LL/SC */							\
+	__LL_SC_ATOMIC(fetch_##op##name)				\
+	__nops(1),							\
+	/* LSE atomics */						\
+"	prfm	pstl1strm, %[v]\n"					\
+"	" #asm_op #mb "	%w[i], %w[i], %[v]")				\
+	: [i] "+r" (w0), [v] "+Q" (v->counter)				\
+	: "r" (x1)							\
+	: __LL_SC_CLOBBERS, ##cl);					\
+									\
+	return w0;							\
 }
 
-static inline void atomic_xor(int i, atomic_t *v)
-{
-	register int w0 asm ("w0") = i;
-	register atomic_t *x1 asm ("x1") = v;
+#define ATOMIC_FETCH_OPS(op, asm_op)					\
+	ATOMIC_FETCH_OP(_relaxed,   , op, asm_op)			\
+	ATOMIC_FETCH_OP(_acquire,  a, op, asm_op, "memory")		\
+	ATOMIC_FETCH_OP(_release,  l, op, asm_op, "memory")		\
+	ATOMIC_FETCH_OP(        , al, op, asm_op, "memory")
 
-	asm volatile(ARM64_LSE_ATOMIC_INSN(__LL_SC_ATOMIC(xor),
-	"	steor	%w[i], %[v]\n")
-	: [i] "+r" (w0), [v] "+Q" (v->counter)
-	: "r" (x1)
-	: __LL_SC_CLOBBERS);
-}
+ATOMIC_FETCH_OPS(andnot, ldclr)
+ATOMIC_FETCH_OPS(or, ldset)
+ATOMIC_FETCH_OPS(xor, ldeor)
+ATOMIC_FETCH_OPS(add, ldadd)
 
-static inline void atomic_add(int i, atomic_t *v)
-{
-	register int w0 asm ("w0") = i;
-	register atomic_t *x1 asm ("x1") = v;
-
-	asm volatile(ARM64_LSE_ATOMIC_INSN(__LL_SC_ATOMIC(add),
-	"	stadd	%w[i], %[v]\n")
-	: [i] "+r" (w0), [v] "+Q" (v->counter)
-	: "r" (x1)
-	: __LL_SC_CLOBBERS);
-}
+#undef ATOMIC_FETCH_OP
+#undef ATOMIC_FETCH_OPS
 
 #define ATOMIC_OP_ADD_RETURN(name, mb, cl...)				\
 static inline int atomic_add_return##name(int i, atomic_t *v)		\
@@ -83,9 +93,10 @@ static inline int atomic_add_return##name(int i, atomic_t *v)		\
 									\
 	asm volatile(ARM64_LSE_ATOMIC_INSN(				\
 	/* LL/SC */							\
-	"	nop\n"							\
-	__LL_SC_ATOMIC(add_return##name),				\
+	__LL_SC_ATOMIC(add_return##name)				\
+	__nops(2),							\
 	/* LSE atomics */						\
+	"	prfm	pstl1strm, %[v]\n"				\
 	"	ldadd" #mb "	%w[i], w30, %[v]\n"			\
 	"	add	%w[i], %w[i], w30")				\
 	: [i] "+r" (w0), [v] "+Q" (v->counter)				\
@@ -109,15 +120,44 @@ static inline void atomic_and(int i, atomic_t *v)
 
 	asm volatile(ARM64_LSE_ATOMIC_INSN(
 	/* LL/SC */
-	"	nop\n"
-	__LL_SC_ATOMIC(and),
+	__LL_SC_ATOMIC(and)
+	__nops(2),
 	/* LSE atomics */
+	"	prfm	pstl1strm, %[v]\n"
 	"	mvn	%w[i], %w[i]\n"
 	"	stclr	%w[i], %[v]")
 	: [i] "+&r" (w0), [v] "+Q" (v->counter)
 	: "r" (x1)
 	: __LL_SC_CLOBBERS);
 }
+
+#define ATOMIC_FETCH_OP_AND(name, mb, cl...)				\
+static inline int atomic_fetch_and##name(int i, atomic_t *v)		\
+{									\
+	register int w0 asm ("w0") = i;					\
+	register atomic_t *x1 asm ("x1") = v;				\
+									\
+	asm volatile(ARM64_LSE_ATOMIC_INSN(				\
+	/* LL/SC */							\
+	__LL_SC_ATOMIC(fetch_and##name)					\
+	__nops(2),							\
+	/* LSE atomics */						\
+	"	prfm	pstl1strm, %[v]\n"				\
+	"	mvn	%w[i], %w[i]\n"					\
+	"	ldclr" #mb "	%w[i], %w[i], %[v]")			\
+	: [i] "+&r" (w0), [v] "+Q" (v->counter)				\
+	: "r" (x1)							\
+	: __LL_SC_CLOBBERS, ##cl);					\
+									\
+	return w0;							\
+}
+
+ATOMIC_FETCH_OP_AND(_relaxed,   )
+ATOMIC_FETCH_OP_AND(_acquire,  a, "memory")
+ATOMIC_FETCH_OP_AND(_release,  l, "memory")
+ATOMIC_FETCH_OP_AND(        , al, "memory")
+
+#undef ATOMIC_FETCH_OP_AND
 
 static inline void atomic_sub(int i, atomic_t *v)
 {
@@ -126,9 +166,10 @@ static inline void atomic_sub(int i, atomic_t *v)
 
 	asm volatile(ARM64_LSE_ATOMIC_INSN(
 	/* LL/SC */
-	"	nop\n"
-	__LL_SC_ATOMIC(sub),
+	__LL_SC_ATOMIC(sub)
+	__nops(2),
 	/* LSE atomics */
+	"	prfm	pstl1strm, %[v]\n"
 	"	neg	%w[i], %w[i]\n"
 	"	stadd	%w[i], %[v]")
 	: [i] "+&r" (w0), [v] "+Q" (v->counter)
@@ -144,10 +185,10 @@ static inline int atomic_sub_return##name(int i, atomic_t *v)		\
 									\
 	asm volatile(ARM64_LSE_ATOMIC_INSN(				\
 	/* LL/SC */							\
-	"	nop\n"							\
 	__LL_SC_ATOMIC(sub_return##name)				\
-	"	nop",							\
+	__nops(3),							\
 	/* LSE atomics */						\
+	"	prfm	pstl1strm, %[v]\n"				\
 	"	neg	%w[i], %w[i]\n"					\
 	"	ldadd" #mb "	%w[i], w30, %[v]\n"			\
 	"	add	%w[i], %w[i], w30")				\
@@ -164,57 +205,95 @@ ATOMIC_OP_SUB_RETURN(_release,  l, "memory")
 ATOMIC_OP_SUB_RETURN(        , al, "memory")
 
 #undef ATOMIC_OP_SUB_RETURN
+
+#define ATOMIC_FETCH_OP_SUB(name, mb, cl...)				\
+static inline int atomic_fetch_sub##name(int i, atomic_t *v)		\
+{									\
+	register int w0 asm ("w0") = i;					\
+	register atomic_t *x1 asm ("x1") = v;				\
+									\
+	asm volatile(ARM64_LSE_ATOMIC_INSN(				\
+	/* LL/SC */							\
+	__LL_SC_ATOMIC(fetch_sub##name)					\
+	__nops(2),							\
+	/* LSE atomics */						\
+	"	prfm	pstl1strm, %[v]\n"				\
+	"	neg	%w[i], %w[i]\n"					\
+	"	ldadd" #mb "	%w[i], %w[i], %[v]")			\
+	: [i] "+&r" (w0), [v] "+Q" (v->counter)				\
+	: "r" (x1)							\
+	: __LL_SC_CLOBBERS, ##cl);					\
+									\
+	return w0;							\
+}
+
+ATOMIC_FETCH_OP_SUB(_relaxed,   )
+ATOMIC_FETCH_OP_SUB(_acquire,  a, "memory")
+ATOMIC_FETCH_OP_SUB(_release,  l, "memory")
+ATOMIC_FETCH_OP_SUB(        , al, "memory")
+
+#undef ATOMIC_FETCH_OP_SUB
 #undef __LL_SC_ATOMIC
 
 #define __LL_SC_ATOMIC64(op)	__LL_SC_CALL(atomic64_##op)
-
-static inline void atomic64_andnot(long i, atomic64_t *v)
-{
-	register long x0 asm ("x0") = i;
-	register atomic64_t *x1 asm ("x1") = v;
-
-	asm volatile(ARM64_LSE_ATOMIC_INSN(__LL_SC_ATOMIC64(andnot),
-	"	stclr	%[i], %[v]\n")
-	: [i] "+r" (x0), [v] "+Q" (v->counter)
-	: "r" (x1)
-	: __LL_SC_CLOBBERS);
+#define ATOMIC64_OP(op, asm_op)						\
+static inline void atomic64_##op(long i, atomic64_t *v)			\
+{									\
+	register long x0 asm ("x0") = i;				\
+	register atomic64_t *x1 asm ("x1") = v;				\
+									\
+	asm volatile(ARM64_LSE_ATOMIC_INSN(				\
+	/* LL/SC */							\
+	__LL_SC_ATOMIC64(op)						\
+	__nops(1),							\
+	/* LSE atomics */						\
+"	prfm	pstl1strm, %[v]\n"					\
+"	" #asm_op "	%[i], %[v]\n")					\
+	: [i] "+r" (x0), [v] "+Q" (v->counter)				\
+	: "r" (x1)							\
+	: __LL_SC_CLOBBERS);						\
 }
 
-static inline void atomic64_or(long i, atomic64_t *v)
-{
-	register long x0 asm ("x0") = i;
-	register atomic64_t *x1 asm ("x1") = v;
+ATOMIC64_OP(andnot, stclr)
+ATOMIC64_OP(or, stset)
+ATOMIC64_OP(xor, steor)
+ATOMIC64_OP(add, stadd)
 
-	asm volatile(ARM64_LSE_ATOMIC_INSN(__LL_SC_ATOMIC64(or),
-	"	stset	%[i], %[v]\n")
-	: [i] "+r" (x0), [v] "+Q" (v->counter)
-	: "r" (x1)
-	: __LL_SC_CLOBBERS);
+#undef ATOMIC64_OP
+
+#define ATOMIC64_FETCH_OP(name, mb, op, asm_op, cl...)			\
+static inline long atomic64_fetch_##op##name(long i, atomic64_t *v)	\
+{									\
+	register long x0 asm ("x0") = i;				\
+	register atomic64_t *x1 asm ("x1") = v;				\
+									\
+	asm volatile(ARM64_LSE_ATOMIC_INSN(				\
+	/* LL/SC */							\
+	__LL_SC_ATOMIC64(fetch_##op##name)				\
+	__nops(1),							\
+	/* LSE atomics */						\
+"	prfm	pstl1strm, %[v]\n"					\
+"	" #asm_op #mb "	%[i], %[i], %[v]")				\
+	: [i] "+r" (x0), [v] "+Q" (v->counter)				\
+	: "r" (x1)							\
+	: __LL_SC_CLOBBERS, ##cl);					\
+									\
+	return x0;							\
 }
 
-static inline void atomic64_xor(long i, atomic64_t *v)
-{
-	register long x0 asm ("x0") = i;
-	register atomic64_t *x1 asm ("x1") = v;
+#define ATOMIC64_FETCH_OPS(op, asm_op)					\
+	ATOMIC64_FETCH_OP(_relaxed,   , op, asm_op)			\
+	ATOMIC64_FETCH_OP(_acquire,  a, op, asm_op, "memory")		\
+	ATOMIC64_FETCH_OP(_release,  l, op, asm_op, "memory")		\
+	ATOMIC64_FETCH_OP(        , al, op, asm_op, "memory")
 
-	asm volatile(ARM64_LSE_ATOMIC_INSN(__LL_SC_ATOMIC64(xor),
-	"	steor	%[i], %[v]\n")
-	: [i] "+r" (x0), [v] "+Q" (v->counter)
-	: "r" (x1)
-	: __LL_SC_CLOBBERS);
-}
+ATOMIC64_FETCH_OPS(andnot, ldclr)
+ATOMIC64_FETCH_OPS(or, ldset)
+ATOMIC64_FETCH_OPS(xor, ldeor)
+ATOMIC64_FETCH_OPS(add, ldadd)
 
-static inline void atomic64_add(long i, atomic64_t *v)
-{
-	register long x0 asm ("x0") = i;
-	register atomic64_t *x1 asm ("x1") = v;
-
-	asm volatile(ARM64_LSE_ATOMIC_INSN(__LL_SC_ATOMIC64(add),
-	"	stadd	%[i], %[v]\n")
-	: [i] "+r" (x0), [v] "+Q" (v->counter)
-	: "r" (x1)
-	: __LL_SC_CLOBBERS);
-}
+#undef ATOMIC64_FETCH_OP
+#undef ATOMIC64_FETCH_OPS
 
 #define ATOMIC64_OP_ADD_RETURN(name, mb, cl...)				\
 static inline long atomic64_add_return##name(long i, atomic64_t *v)	\
@@ -224,9 +303,10 @@ static inline long atomic64_add_return##name(long i, atomic64_t *v)	\
 									\
 	asm volatile(ARM64_LSE_ATOMIC_INSN(				\
 	/* LL/SC */							\
-	"	nop\n"							\
-	__LL_SC_ATOMIC64(add_return##name),				\
+	__LL_SC_ATOMIC64(add_return##name)				\
+	__nops(2),							\
 	/* LSE atomics */						\
+	"	prfm	pstl1strm, %[v]\n"				\
 	"	ldadd" #mb "	%[i], x30, %[v]\n"			\
 	"	add	%[i], %[i], x30")				\
 	: [i] "+r" (x0), [v] "+Q" (v->counter)				\
@@ -250,15 +330,44 @@ static inline void atomic64_and(long i, atomic64_t *v)
 
 	asm volatile(ARM64_LSE_ATOMIC_INSN(
 	/* LL/SC */
-	"	nop\n"
-	__LL_SC_ATOMIC64(and),
+	__LL_SC_ATOMIC64(and)
+	__nops(2),
 	/* LSE atomics */
+	"	prfm	pstl1strm, %[v]\n"
 	"	mvn	%[i], %[i]\n"
 	"	stclr	%[i], %[v]")
 	: [i] "+&r" (x0), [v] "+Q" (v->counter)
 	: "r" (x1)
 	: __LL_SC_CLOBBERS);
 }
+
+#define ATOMIC64_FETCH_OP_AND(name, mb, cl...)				\
+static inline long atomic64_fetch_and##name(long i, atomic64_t *v)	\
+{									\
+	register long x0 asm ("w0") = i;				\
+	register atomic64_t *x1 asm ("x1") = v;				\
+									\
+	asm volatile(ARM64_LSE_ATOMIC_INSN(				\
+	/* LL/SC */							\
+	__LL_SC_ATOMIC64(fetch_and##name)				\
+	__nops(2),							\
+	/* LSE atomics */						\
+	"	prfm	pstl1strm, %[v]\n"				\
+	"	mvn	%[i], %[i]\n"					\
+	"	ldclr" #mb "	%[i], %[i], %[v]")			\
+	: [i] "+&r" (x0), [v] "+Q" (v->counter)				\
+	: "r" (x1)							\
+	: __LL_SC_CLOBBERS, ##cl);					\
+									\
+	return x0;							\
+}
+
+ATOMIC64_FETCH_OP_AND(_relaxed,   )
+ATOMIC64_FETCH_OP_AND(_acquire,  a, "memory")
+ATOMIC64_FETCH_OP_AND(_release,  l, "memory")
+ATOMIC64_FETCH_OP_AND(        , al, "memory")
+
+#undef ATOMIC64_FETCH_OP_AND
 
 static inline void atomic64_sub(long i, atomic64_t *v)
 {
@@ -267,9 +376,10 @@ static inline void atomic64_sub(long i, atomic64_t *v)
 
 	asm volatile(ARM64_LSE_ATOMIC_INSN(
 	/* LL/SC */
-	"	nop\n"
-	__LL_SC_ATOMIC64(sub),
+	__LL_SC_ATOMIC64(sub)
+	__nops(2),
 	/* LSE atomics */
+	"	prfm	pstl1strm, %[v]\n"
 	"	neg	%[i], %[i]\n"
 	"	stadd	%[i], %[v]")
 	: [i] "+&r" (x0), [v] "+Q" (v->counter)
@@ -285,10 +395,10 @@ static inline long atomic64_sub_return##name(long i, atomic64_t *v)	\
 									\
 	asm volatile(ARM64_LSE_ATOMIC_INSN(				\
 	/* LL/SC */							\
-	"	nop\n"							\
 	__LL_SC_ATOMIC64(sub_return##name)				\
-	"	nop",							\
+	__nops(3),							\
 	/* LSE atomics */						\
+	"	prfm	pstl1strm, %[v]\n"				\
 	"	neg	%[i], %[i]\n"					\
 	"	ldadd" #mb "	%[i], x30, %[v]\n"			\
 	"	add	%[i], %[i], x30")				\
@@ -306,20 +416,44 @@ ATOMIC64_OP_SUB_RETURN(        , al, "memory")
 
 #undef ATOMIC64_OP_SUB_RETURN
 
+#define ATOMIC64_FETCH_OP_SUB(name, mb, cl...)				\
+static inline long atomic64_fetch_sub##name(long i, atomic64_t *v)	\
+{									\
+	register long x0 asm ("w0") = i;				\
+	register atomic64_t *x1 asm ("x1") = v;				\
+									\
+	asm volatile(ARM64_LSE_ATOMIC_INSN(				\
+	/* LL/SC */							\
+	__LL_SC_ATOMIC64(fetch_sub##name)				\
+	__nops(2),							\
+	/* LSE atomics */						\
+	"	prfm	pstl1strm, %[v]\n"				\
+	"	neg	%[i], %[i]\n"					\
+	"	ldadd" #mb "	%[i], %[i], %[v]")			\
+	: [i] "+&r" (x0), [v] "+Q" (v->counter)				\
+	: "r" (x1)							\
+	: __LL_SC_CLOBBERS, ##cl);					\
+									\
+	return x0;							\
+}
+
+ATOMIC64_FETCH_OP_SUB(_relaxed,   )
+ATOMIC64_FETCH_OP_SUB(_acquire,  a, "memory")
+ATOMIC64_FETCH_OP_SUB(_release,  l, "memory")
+ATOMIC64_FETCH_OP_SUB(        , al, "memory")
+
+#undef ATOMIC64_FETCH_OP_SUB
+
 static inline long atomic64_dec_if_positive(atomic64_t *v)
 {
 	register long x0 asm ("x0") = (long)v;
 
 	asm volatile(ARM64_LSE_ATOMIC_INSN(
 	/* LL/SC */
-	"	nop\n"
 	__LL_SC_ATOMIC64(dec_if_positive)
-	"	nop\n"
-	"	nop\n"
-	"	nop\n"
-	"	nop\n"
-	"	nop",
+	__nops(7),
 	/* LSE atomics */
+	"	prfm	pstl1strm, %[v]\n"
 	"1:	ldr	x30, %[v]\n"
 	"	subs	%[ret], x30, #1\n"
 	"	b.lt	2f\n"
@@ -339,23 +473,23 @@ static inline long atomic64_dec_if_positive(atomic64_t *v)
 
 #define __LL_SC_CMPXCHG(op)	__LL_SC_CALL(__cmpxchg_case_##op)
 
-#define __CMPXCHG_CASE(w, sz, name, mb, cl...)				\
-static inline unsigned long __cmpxchg_case_##name(volatile void *ptr,	\
-						  unsigned long old,	\
-						  unsigned long new)	\
+#define __CMPXCHG_CASE(w, sfx, name, sz, mb, cl...)			\
+static inline u##sz __cmpxchg_case_##name##sz(volatile void *ptr,	\
+					      unsigned long old,	\
+					      u##sz new)		\
 {									\
 	register unsigned long x0 asm ("x0") = (unsigned long)ptr;	\
 	register unsigned long x1 asm ("x1") = old;			\
-	register unsigned long x2 asm ("x2") = new;			\
+	register u##sz x2 asm ("x2") = new;				\
 									\
 	asm volatile(ARM64_LSE_ATOMIC_INSN(				\
 	/* LL/SC */							\
-	"	nop\n"							\
-		__LL_SC_CMPXCHG(name)					\
-	"	nop",							\
+	__LL_SC_CMPXCHG(name##sz)					\
+	__nops(3),							\
 	/* LSE atomics */						\
+	"	prfm	pstl1strm, %[v]\n"				\
 	"	mov	" #w "30, %" #w "[old]\n"			\
-	"	cas" #mb #sz "\t" #w "30, %" #w "[new], %[v]\n"		\
+	"	cas" #mb #sfx "\t" #w "30, %" #w "[new], %[v]\n"	\
 	"	mov	%" #w "[ret], " #w "30")			\
 	: [ret] "+r" (x0), [v] "+Q" (*(unsigned long *)ptr)		\
 	: [old] "r" (x1), [new] "r" (x2)				\
@@ -364,22 +498,22 @@ static inline unsigned long __cmpxchg_case_##name(volatile void *ptr,	\
 	return x0;							\
 }
 
-__CMPXCHG_CASE(w, b,     1,   )
-__CMPXCHG_CASE(w, h,     2,   )
-__CMPXCHG_CASE(w,  ,     4,   )
-__CMPXCHG_CASE(x,  ,     8,   )
-__CMPXCHG_CASE(w, b, acq_1,  a, "memory")
-__CMPXCHG_CASE(w, h, acq_2,  a, "memory")
-__CMPXCHG_CASE(w,  , acq_4,  a, "memory")
-__CMPXCHG_CASE(x,  , acq_8,  a, "memory")
-__CMPXCHG_CASE(w, b, rel_1,  l, "memory")
-__CMPXCHG_CASE(w, h, rel_2,  l, "memory")
-__CMPXCHG_CASE(w,  , rel_4,  l, "memory")
-__CMPXCHG_CASE(x,  , rel_8,  l, "memory")
-__CMPXCHG_CASE(w, b,  mb_1, al, "memory")
-__CMPXCHG_CASE(w, h,  mb_2, al, "memory")
-__CMPXCHG_CASE(w,  ,  mb_4, al, "memory")
-__CMPXCHG_CASE(x,  ,  mb_8, al, "memory")
+__CMPXCHG_CASE(w, b,     ,  8,   )
+__CMPXCHG_CASE(w, h,     , 16,   )
+__CMPXCHG_CASE(w,  ,     , 32,   )
+__CMPXCHG_CASE(x,  ,     , 64,   )
+__CMPXCHG_CASE(w, b, acq_,  8,  a, "memory")
+__CMPXCHG_CASE(w, h, acq_, 16,  a, "memory")
+__CMPXCHG_CASE(w,  , acq_, 32,  a, "memory")
+__CMPXCHG_CASE(x,  , acq_, 64,  a, "memory")
+__CMPXCHG_CASE(w, b, rel_,  8,  l, "memory")
+__CMPXCHG_CASE(w, h, rel_, 16,  l, "memory")
+__CMPXCHG_CASE(w,  , rel_, 32,  l, "memory")
+__CMPXCHG_CASE(x,  , rel_, 64,  l, "memory")
+__CMPXCHG_CASE(w, b,  mb_,  8, al, "memory")
+__CMPXCHG_CASE(w, h,  mb_, 16, al, "memory")
+__CMPXCHG_CASE(w,  ,  mb_, 32, al, "memory")
+__CMPXCHG_CASE(x,  ,  mb_, 64, al, "memory")
 
 #undef __LL_SC_CMPXCHG
 #undef __CMPXCHG_CASE
@@ -403,11 +537,10 @@ static inline long __cmpxchg_double##name(unsigned long old1,		\
 									\
 	asm volatile(ARM64_LSE_ATOMIC_INSN(				\
 	/* LL/SC */							\
-	"	nop\n"							\
-	"	nop\n"							\
-	"	nop\n"							\
-	__LL_SC_CMPXCHG_DBL(name),					\
+	__LL_SC_CMPXCHG_DBL(name)					\
+	__nops(4),							\
 	/* LSE atomics */						\
+	"	prfm	pstl1strm, %[v]\n"				\
 	"	casp" #mb "\t%[old1], %[old2], %[new1], %[new2], %[v]\n"\
 	"	eor	%[old1], %[old1], %[oldval1]\n"			\
 	"	eor	%[old2], %[old2], %[oldval2]\n"			\
@@ -426,5 +559,86 @@ __CMPXCHG_DBL(_mb, al, "memory")
 
 #undef __LL_SC_CMPXCHG_DBL
 #undef __CMPXCHG_DBL
+
+#define REFCOUNT_ADD_OP(op, pre, post)					\
+static inline int __refcount_##op(int i, atomic_t *r)			\
+{									\
+	register int w0 asm ("w0") = i;					\
+	register atomic_t *x1 asm ("x1") = r;				\
+									\
+	asm volatile(ARM64_LSE_ATOMIC_INSN(				\
+	/* LL/SC */							\
+	__LL_SC_CALL(__refcount_##op)					\
+	"	cmp	%w0, wzr\n"					\
+	__nops(1),							\
+	/* LSE atomics */						\
+	"	ldadd		%w[i], w30, %[cval]\n"			\
+	"	adds		%w[i], %w[i], w30\n"			\
+	REFCOUNT_PRE_CHECK_ ## pre (w30))				\
+	REFCOUNT_POST_CHECK_ ## post					\
+	: [i] "+r" (w0), [cval] "+Q" (r->counter)			\
+	: [counter] "r"(&r->counter), "r" (x1)				\
+	: __LL_SC_CLOBBERS, "cc");					\
+									\
+	return w0;							\
+}
+
+REFCOUNT_ADD_OP(add_lt, ZERO, NEG_OR_ZERO);
+
+#define REFCOUNT_SUB_OP(op, post)					\
+static inline int __refcount_##op(int i, atomic_t *r)			\
+{									\
+	register int w0 asm ("w0") = i;					\
+	register atomic_t *x1 asm ("x1") = r;				\
+									\
+	asm volatile(ARM64_LSE_ATOMIC_INSN(				\
+	/* LL/SC */							\
+	__LL_SC_CALL(__refcount_##op)					\
+	"	cmp	%w0, wzr\n"					\
+	__nops(1),							\
+	/* LSE atomics */						\
+	"	neg	%w[i], %w[i]\n"					\
+	"	ldaddl	%w[i], w30, %[cval]\n"				\
+	"	adds	%w[i], %w[i], w30\n")				\
+	REFCOUNT_POST_CHECK_ ## post					\
+	: [i] "+r" (w0), [cval] "+Q" (r->counter)			\
+	: [counter] "r" (&r->counter), "r" (x1)				\
+	: __LL_SC_CLOBBERS, "cc");					\
+									\
+	return w0;							\
+}
+
+REFCOUNT_SUB_OP(sub_lt, NEG);
+REFCOUNT_SUB_OP(sub_le, NEG_OR_ZERO);
+
+static inline int __refcount_add_not_zero(int i, atomic_t *r)
+{
+	register int result asm ("w0");
+	register atomic_t *x1 asm ("x1") = r;
+
+	asm volatile(ARM64_LSE_ATOMIC_INSN(
+	/* LL/SC */
+	"	mov	%w0, %w[i]\n"
+	__LL_SC_CALL(__refcount_add_not_zero)
+	"	cmp	%w0, wzr\n"
+	__nops(6),
+	/* LSE atomics */
+	"	ldr	%w0, %[cval]\n"
+	"1:	cmp	%w0, wzr\n"
+	"	b.eq	2f\n"
+	"	add	w30, %w0, %w[i]\n"
+	"	cas	%w0, w30, %[cval]\n"
+	"	sub	w30, w30, %w[i]\n"
+	"	cmp	%w0, w30\n"
+	"	b.ne	1b\n"
+	"	adds	%w0, w30, %w[i]\n"
+	"2:\n")
+	REFCOUNT_POST_CHECK_NEG
+	: "=&r" (result), [cval] "+Q" (r->counter)
+	: [counter] "r" (&r->counter), [i] "Ir" (i), "r" (x1)
+	: __LL_SC_CLOBBERS, "cc");
+
+	return result;
+}
 
 #endif	/* __ASM_ATOMIC_LSE_H */

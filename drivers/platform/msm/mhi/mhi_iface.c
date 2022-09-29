@@ -394,8 +394,11 @@ static int mhi_plat_probe(struct platform_device *pdev)
 	snprintf(node, sizeof(node),
 		 "mhi_%04x_%02u.%02u.%02u",
 		 core->dev_id, core->domain, core->bus, core->slot);
+#ifdef CONFIG_IPC_LOGGING
 	mhi_dev_ctxt->mhi_ipc_log =
 		ipc_log_context_create(MHI_IPC_LOG_PAGES, node, 0);
+#endif
+
 	if (!mhi_dev_ctxt->mhi_ipc_log)
 		pr_err("%s: Error creating ipc_log buffer\n", __func__);
 

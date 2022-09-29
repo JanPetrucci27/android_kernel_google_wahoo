@@ -35,6 +35,10 @@
  */
 #define PAGE_ALLOC_COSTLY_ORDER 3
 
+#ifdef CONFIG_MULTIPLE_KSWAPD
+#define MAX_KSWAPD_THREADS 4
+#endif
+
 enum {
 	MIGRATE_UNMOVABLE,
 	MIGRATE_MOVABLE,
@@ -693,6 +697,12 @@ typedef struct pglist_data {
 	wait_queue_head_t pfmemalloc_wait;
 	struct task_struct *kswapd;	/* Protected by
 					   mem_hotplug_begin/end() */
+#ifdef CONFIG_MULTIPLE_KSWAPD
+        /*
+         * Protected by mem_hotplug_begin/end()
+         */
+        struct task_struct *mkswapd[MAX_KSWAPD_THREADS];
+#endif
 	int kswapd_max_order;
 	enum zone_type classzone_idx;
 #ifdef CONFIG_COMPACTION
@@ -860,6 +870,12 @@ static inline int is_highmem(struct zone *zone)
 
 /* These two functions are used to setup the per zone pages min values */
 struct ctl_table;
+
+#ifdef CONFIG_MULTIPLE_KSWAPD
+int kswapd_threads_sysctl_handler(struct ctl_table *table, int write,
+				  void __user *buffer, size_t *length,
+				  loff_t *pos);
+#endif
 int min_free_kbytes_sysctl_handler(struct ctl_table *, int,
 					void __user *, size_t *, loff_t *);
 extern int sysctl_lowmem_reserve_ratio[MAX_NR_ZONES-1];

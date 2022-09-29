@@ -10,11 +10,6 @@
  * GNU General Public License for more details.
  */
 
-/*
- * IPC ROUTER GLINK XPRT module.
- */
-#define DEBUG
-
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/types.h>
@@ -27,7 +22,7 @@
 #include <soc/qcom/glink.h>
 #include <soc/qcom/subsystem_restart.h>
 
-static int ipc_router_glink_xprt_debug_mask;
+static int ipc_router_glink_xprt_debug_mask = 0;
 module_param_named(debug_mask, ipc_router_glink_xprt_debug_mask,
 		   int, S_IRUGO | S_IWUSR | S_IWGRP);
 
@@ -114,6 +109,8 @@ struct read_work {
 	void * (*pbuf_provider)(void *iovec, size_t offset, size_t *size);
 	struct work_struct work;
 };
+
+static struct kmem_cache *kmem_read_work_pool;
 
 static void glink_xprt_read_data(struct work_struct *work);
 static void glink_xprt_open_event(struct work_struct *work);
@@ -375,7 +372,7 @@ static void glink_xprt_read_data(struct work_struct *work)
 	release_pkt(pkt);
 out_read_data:
 	glink_rx_done(glink_xprtp->ch_hndl, rx_work->iovec, reuse_intent);
-	kfree(rx_work);
+	kmem_cache_free(kmem_read_work_pool, rx_work);
 	up_read(&glink_xprtp->ss_reset_rwlock);
 }
 
@@ -479,7 +476,7 @@ static void glink_xprt_notify_rxv(void *handle, const void *priv,
 		(struct ipc_router_glink_xprt *)priv;
 	struct read_work *rx_work;
 
-	rx_work = kmalloc(sizeof(*rx_work), GFP_ATOMIC);
+	rx_work = kmem_cache_alloc(kmem_read_work_pool, GFP_ATOMIC);
 	if (!rx_work) {
 		IPC_RTR_ERR("%s: couldn't allocate read_work\n", __func__);
 		glink_rx_done(glink_xprtp->ch_hndl, ptr, true);
@@ -498,8 +495,6 @@ static void glink_xprt_notify_rxv(void *handle, const void *priv,
 static void glink_xprt_notify_tx_done(void *handle, const void *priv,
 				      const void *pkt_priv, const void *ptr)
 {
-	struct ipc_router_glink_xprt *glink_xprtp =
-		(struct ipc_router_glink_xprt *)priv;
 	struct rr_packet *temp_pkt = (struct rr_packet *)ptr;
 
 	D("%s:%s: @ %p\n", __func__, glink_xprtp->ipc_rtr_xprt_name, ptr);
@@ -899,6 +894,8 @@ static struct platform_driver ipc_router_glink_xprt_driver = {
 static int __init ipc_router_glink_xprt_init(void)
 {
 	int rc;
+	
+	kmem_read_work_pool = KMEM_CACHE(read_work, SLAB_HWCACHE_ALIGN | SLAB_PANIC);
 
 	glink_xprt_wq = create_singlethread_workqueue("glink_xprt_wq");
 	if (IS_ERR_OR_NULL(glink_xprt_wq)) {

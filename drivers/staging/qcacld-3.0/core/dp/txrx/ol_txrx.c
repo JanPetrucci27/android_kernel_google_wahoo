@@ -4408,10 +4408,12 @@ ol_txrx_fw_stats_handler(ol_txrx_pdev_handle pdev,
 
 			if (status == HTT_DBG_STATS_STATUS_PARTIAL)
 				more = 1;
+#ifdef WLAN_DEBUG
 			if (req->base.print.verbose || req->base.print.concise)
 				/* provide the header along with the data */
 				htt_t2h_stats_print(stats_info_list,
 						    req->base.print.concise);
+#endif
 
 			switch (type) {
 			case HTT_DBG_STATS_WAL_PDEV_TXRX:

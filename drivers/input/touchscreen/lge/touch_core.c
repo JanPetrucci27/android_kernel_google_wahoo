@@ -198,6 +198,8 @@ irqreturn_t touch_irq_thread(int irq, void *dev_id)
 	int ret = 0;
 
 	TOUCH_TRACE();
+	/* prevent CPU from entering deep sleep */
+	pm_qos_update_request(&ts->pm_qos_req, 100);
 	mutex_lock(&ts->lock);
 
 	ts->intr_status = 0;
@@ -241,6 +243,7 @@ irqreturn_t touch_irq_thread(int irq, void *dev_id)
 	}
 
 	mutex_unlock(&ts->lock);
+	pm_qos_update_request(&ts->pm_qos_req, PM_QOS_DEFAULT_VALUE);
 
 	return IRQ_HANDLED;
 }
@@ -493,6 +496,16 @@ static int touch_init_pm(struct touch_core_data *ts)
 	return 0;
 }
 #elif defined(CONFIG_FB)
+static void touch_pm_worker(struct work_struct *work)
+{
+	struct touch_core_data *ts = container_of(work, typeof(*ts), pm_work);
+
+	if (ts->screen_off)
+		touch_suspend(ts->dev);
+	else
+		touch_resume(ts->dev);
+}
+
 static int touch_fb_notifier_callback(struct notifier_block *self,
 		unsigned long event, void *data)
 {
@@ -503,10 +516,9 @@ static int touch_fb_notifier_callback(struct notifier_block *self,
 	if (ev && ev->data && event == FB_EVENT_BLANK) {
 		int *blank = (int *)ev->data;
 
-		if (*blank == FB_BLANK_UNBLANK)
-			touch_resume(ts->dev);
-		else
-			touch_suspend(ts->dev);
+		flush_work(&ts->pm_work);
+		ts->screen_off = *blank != FB_BLANK_UNBLANK;
+		schedule_work(&ts->pm_work);
 	}
 
 	return 0;
@@ -515,7 +527,8 @@ static int touch_fb_notifier_callback(struct notifier_block *self,
 static int touch_init_pm(struct touch_core_data *ts)
 {
 	TOUCH_TRACE();
-
+	
+	INIT_WORK(&ts->pm_work, touch_pm_worker);
 	ts->fb_notif.notifier_call = touch_fb_notifier_callback;
 	return fb_register_client(&ts->fb_notif);
 }
@@ -753,10 +766,13 @@ static int touch_core_probe_normal(struct platform_device *pdev)
 		TOUCH_E("failed to register input device(ret:%d)\n", ret);
 		goto error_init_input;
 	}
-
-	ret = touch_request_irq(ts->irq, touch_irq_handler,
-			touch_irq_thread, ts->irqflags | IRQF_ONESHOT,
-			LGE_TOUCH_NAME, ts);
+	
+	pm_qos_add_request(&ts->pm_qos_req, PM_QOS_CPU_DMA_LATENCY,
+			   PM_QOS_DEFAULT_VALUE);
+	
+	ts->irqflags |= IRQF_ONESHOT | IRQF_PERF_CRITICAL;
+	ret = touch_request_irq(ts->irq, touch_irq_handler, touch_irq_thread,
+				ts->irqflags, LGE_TOUCH_NAME, ts);
 	if (ret) {
 		TOUCH_E("failed to request_thread_irq(irq:%d, ret:%d)\n",
 				ts->irq, ret);
@@ -779,6 +795,7 @@ static int touch_core_probe_normal(struct platform_device *pdev)
 	return 0;
 
 error_request_irq:
+	pm_qos_remove_request(&ts->pm_qos_req);
 error_init_input:
 error_init_work:
 	return ret;

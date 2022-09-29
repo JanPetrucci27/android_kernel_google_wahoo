@@ -1977,8 +1977,6 @@
 
 		/* PM QoS */
 		qcom,pm-qos-cpu-groups = <0x0F 0xF0>;
-		qcom,pm-qos-cpu-group-latency-us = <70 70>;
-		qcom,pm-qos-default-cpu = <0>;
 
 		resets = <&clock_gcc UFS_BCR>;
 		reset-names = "core_reset";
@@ -2985,7 +2983,7 @@
 		reg = <0x780000 0x1000>;
 		qcom,low-hyst-temp = <10>;
 		qcom,high-hyst-temp = <5>;
-		qcom,polling-interval = <50>;
+		qcom,polling-interval = <100>;
 
 		ea0: ea0 {
 			sensor = <&sensor_information1>;
@@ -3237,7 +3235,6 @@
 #include "msm8998-ion.dtsi"
 #include "msm8998-camera.dtsi"
 #include "msm8998-vidc.dtsi"
-#include "msm8998-coresight.dtsi"
 #include "msm8998-bus.dtsi"
 #include "msm8998-gpu.dtsi"
 #include "msm8998-pinctrl.dtsi"

@@ -201,6 +201,29 @@ void ftrace_likely_update(struct ftrace_branch_data *f, int val, int expect);
 # define unreachable() do { } while (1)
 #endif
 
+/*
+ * KENTRY - kernel entry point
+ * This can be used to annotate symbols (functions or data) that are used
+ * without their linker symbol being referenced explicitly. For example,
+ * interrupt vector handlers, or functions in the kernel image that are found
+ * programatically.
+ *
+ * Not required for symbols exported with EXPORT_SYMBOL, or initcalls. Those
+ * are handled in their own way (with KEEP() in linker scripts).
+ *
+ * KENTRY can be avoided if the symbols in question are marked as KEEP() in the
+ * linker script. For example an architecture could KEEP() its entire
+ * boot/exception vector code rather than annotate each function and data.
+ */
+#ifndef KENTRY
+# define KENTRY(sym)						\
+	extern typeof(sym) sym;					\
+	static const unsigned long __kentry_##sym		\
+	__used							\
+	__attribute__((section("___kentry" "+" #sym ), used))	\
+	= (unsigned long)&sym;
+#endif
+
 #ifndef RELOC_HIDE
 # define RELOC_HIDE(ptr, off)					\
   ({ unsigned long __ptr;					\
@@ -328,6 +351,23 @@ unsigned long read_word_at_a_time(const void *addr)
 	__u.__val;					\
 })
 
+/**
+ * smp_cond_acquire() - Spin wait for cond with ACQUIRE ordering
+ * @cond: boolean expression to wait for
+ *
+ * Equivalent to using smp_load_acquire() on the condition variable but employs
+ * the control dependency of the wait to reduce the barrier on many platforms.
+ *
+ * The control dependency provides a LOAD->STORE order, the additional RMB
+ * provides LOAD->LOAD order, together they provide LOAD->{LOAD,STORE} order,
+ * aka. ACQUIRE.
+ */
+#define smp_cond_acquire(cond)	do {		\
+	while (!(cond))				\
+		cpu_relax();			\
+	smp_rmb(); /* ctrl + rmb := acquire */	\
+} while (0)
+
 #endif /* __KERNEL__ */
 
 #endif /* __ASSEMBLY__ */
@@ -444,6 +484,10 @@ unsigned long read_word_at_a_time(const void *addr)
 
 #ifndef __visible
 #define __visible
+#endif
+
+#ifndef __norecordmcount
+#define __norecordmcount
 #endif
 
 /*

@@ -33821,7 +33821,10 @@ static struct hash_testvec bfin_crc_tv_template[] = {
 
 };
 
-static const struct comp_testvec lz4_comp_tv_template[] = {
+#define LZ4_COMP_TEST_VECTORS 1
+#define LZ4_DECOMP_TEST_VECTORS 1
+
+static struct comp_testvec lz4_comp_tv_template[] = {
 	{
 		.inlen	= 255,
 		.outlen	= 218,
@@ -33848,10 +33851,11 @@ static const struct comp_testvec lz4_comp_tv_template[] = {
 			  "\x65\x61\x63\x68\xa7\x00\x33\x52\x41\x4d\x38\x00\x83"
 			  "\x6c\x69\x6d\x69\x74\x73\x20\x6f\x3f\x00\x01\x85\x00"
 			  "\x90\x20\x73\x79\x73\x74\x65\x6d\x73\x2e",
+
 	},
 };
 
-static const struct comp_testvec lz4_decomp_tv_template[] = {
+static struct comp_testvec lz4_decomp_tv_template[] = {
 	{
 		.inlen	= 218,
 		.outlen	= 255,
@@ -33881,7 +33885,10 @@ static const struct comp_testvec lz4_decomp_tv_template[] = {
 	},
 };
 
-static const struct comp_testvec lz4hc_comp_tv_template[] = {
+#define LZ4HC_COMP_TEST_VECTORS 1
+#define LZ4HC_DECOMP_TEST_VECTORS 1
+
+static struct comp_testvec lz4hc_comp_tv_template[] = {
 	{
 		.inlen	= 255,
 		.outlen	= 216,
@@ -33908,10 +33915,11 @@ static const struct comp_testvec lz4hc_comp_tv_template[] = {
 			  "\x65\x61\x63\x68\xa7\x00\x33\x52\x41\x4d\x38\x00\x97"
 			  "\x6c\x69\x6d\x69\x74\x73\x20\x6f\x6e\x85\x00\x90\x20"
 			  "\x73\x79\x73\x74\x65\x6d\x73\x2e",
+
 	},
 };
 
-static const struct comp_testvec lz4hc_decomp_tv_template[] = {
+static struct comp_testvec lz4hc_decomp_tv_template[] = {
 	{
 		.inlen	= 216,
 		.outlen	= 255,

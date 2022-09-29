@@ -1136,7 +1136,7 @@ static void msm_chg_detect_work(struct work_struct *w)
 		return;
 	}
 
-	schedule_delayed_work(&motg->chg_work, delay);
+	queue_delayed_work(system_power_efficient_wq, &motg->chg_work, delay);
 }
 
 /*

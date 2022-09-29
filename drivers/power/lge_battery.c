@@ -16,6 +16,7 @@
 #include <linux/platform_device.h>
 #include <linux/power_supply.h>
 #include <linux/slab.h>
+#include <linux/wahoo_info.h>
 #include <linux/wakelock.h>
 
 #define BATT_DRV_NAME	"lge_battery"
@@ -156,7 +157,7 @@ static struct bm_batt_id_table valid_batt_id[BM_BATT_MAX] = {
 	{  44800,  67200,  2,  TOCAD_step_table},
 };
 
-static int debug_mask = ERROR | INTERRUPT | MISC | VERBOSE;
+static int debug_mask = ERROR | INTERRUPT | MISC;
 static int demo_mode;
 static int charge_stop_level = DEFAULT_CHARGE_STOP_LEVEL;
 static int charge_start_level = DEFAULT_CHARGE_START_LEVEL;
@@ -208,7 +209,7 @@ static int battery_power_supply_changed(void)
 	batt_psy = power_supply_get_by_name("battery");
 	if (!batt_psy) {
 		pr_bm(ERROR, "Couldn't get batt_psy\n");
-		return -ENODEV;
+		return -EPROBE_DEFER;
 	}
 
 	power_supply_changed(batt_psy);
@@ -813,7 +814,7 @@ static int lge_battery_suspend(struct device *dev)
 
 	if (!bm) {
 		pr_bm(ERROR, "There is no battery manager\n");
-		return -ENODEV;
+		return -EPROBE_DEFER;
 	}
 	cancel_delayed_work_sync(&bm->bm_watch);
 
@@ -826,7 +827,7 @@ static int lge_battery_resume(struct device *dev)
 
 	if (!bm) {
 		pr_bm(ERROR, "There is no battery manager\n");
-		return -ENODEV;
+		return -EPROBE_DEFER;
 	}
 	schedule_delayed_work(&bm->bm_watch, 0);
 
@@ -865,6 +866,9 @@ static struct platform_driver lge_battery_driver = {
 static int __init lge_battery_init(void)
 {
 	int ret;
+	
+	if (!is_google_taimen())
+		return -ENODEV;
 
 	ret = platform_device_register(&lge_battery_pdev);
 	if (ret < 0) {

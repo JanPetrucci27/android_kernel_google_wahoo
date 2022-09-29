@@ -329,26 +329,32 @@ static noinline
 bool rwsem_spin_on_owner(struct rw_semaphore *sem, struct task_struct *owner)
 {
 	long count;
+	int i = 0;
 
-	rcu_read_lock();
-	while (sem->owner == owner) {
+	while (true) {
+		bool on_cpu, same_owner;
+	
 		/*
-		 * Ensure we emit the owner->on_cpu, dereference _after_
-		 * checking sem->owner still matches owner, if that fails,
+		 * Ensure sem->owner still matches owner. If that fails,
 		 * owner might point to free()d memory, if it still matches,
 		 * the rcu_read_lock() ensures the memory stays valid.
 		 */
-		barrier();
+		rcu_read_lock();
+		same_owner = sem->owner == owner;
+		if (same_owner)
+			on_cpu = owner->on_cpu;
+		rcu_read_unlock();
+
+		if (!same_owner)
+			break;
 
 		/* abort spinning when need_resched or owner is not running */
-		if (!owner->on_cpu || need_resched()) {
-			rcu_read_unlock();
+		if (!on_cpu || need_resched())
 			return false;
-		}
 
-		cpu_relax_lowlatency();
+		if (i++ > 1000)
+			cpu_relax();
 	}
-	rcu_read_unlock();
 
 	if (READ_ONCE(sem->owner))
 		return true; /* new owner, continue spinning */
@@ -402,7 +408,7 @@ static bool rwsem_optimistic_spin(struct rw_semaphore *sem)
 		 * memory barriers as we'll eventually observe the right
 		 * values at the cost of a few extra spins.
 		 */
-		cpu_relax_lowlatency();
+		cpu_relax();
 	}
 	osq_unlock(&sem->osq);
 done:
@@ -433,12 +439,13 @@ static inline bool rwsem_has_spinner(struct rw_semaphore *sem)
 /*
  * Wait until we successfully acquire the write lock
  */
-__visible
-struct rw_semaphore __sched *rwsem_down_write_failed(struct rw_semaphore *sem)
+static inline struct rw_semaphore *
+__rwsem_down_write_failed_common(struct rw_semaphore *sem, int state)
 {
 	long count;
 	bool waiting = true; /* any queued threads before us */
 	struct rwsem_waiter waiter;
+	struct rw_semaphore *ret = sem;
 
 	/* undo write bias from down_write operation, stop active locking */
 	count = rwsem_atomic_update(-RWSEM_ACTIVE_WRITE_BIAS, sem);
@@ -478,7 +485,7 @@ struct rw_semaphore __sched *rwsem_down_write_failed(struct rw_semaphore *sem)
 		count = rwsem_atomic_update(RWSEM_WAITING_BIAS, sem);
 
 	/* wait until we successfully acquire the lock */
-	set_current_state(TASK_UNINTERRUPTIBLE);
+	set_current_state(state);
 	while (true) {
 		if (rwsem_try_write_lock(count, sem))
 			break;
@@ -486,20 +493,46 @@ struct rw_semaphore __sched *rwsem_down_write_failed(struct rw_semaphore *sem)
 
 		/* Block until there are no active lockers. */
 		do {
+			if (signal_pending_state(state, current))
+				goto out_nolock;
 			schedule();
-			set_current_state(TASK_UNINTERRUPTIBLE);
+			set_current_state(state);
 		} while ((count = sem->count) & RWSEM_ACTIVE_MASK);
 
 		raw_spin_lock_irq(&sem->wait_lock);
 	}
 	__set_current_state(TASK_RUNNING);
-
 	list_del(&waiter.list);
 	raw_spin_unlock_irq(&sem->wait_lock);
 
-	return sem;
+	return ret;
+
+out_nolock:
+	__set_current_state(TASK_RUNNING);
+	raw_spin_lock_irq(&sem->wait_lock);
+	list_del(&waiter.list);
+	if (list_empty(&sem->wait_list))
+		rwsem_atomic_update(-RWSEM_WAITING_BIAS, sem);
+	else
+		__rwsem_do_wake(sem, RWSEM_WAKE_ANY);
+	raw_spin_unlock_irq(&sem->wait_lock);
+
+	return ERR_PTR(-EINTR);
+}
+
+__visible struct rw_semaphore * __sched
+rwsem_down_write_failed(struct rw_semaphore *sem)
+{
+	return __rwsem_down_write_failed_common(sem, TASK_UNINTERRUPTIBLE);
 }
 EXPORT_SYMBOL(rwsem_down_write_failed);
+
+__visible struct rw_semaphore * __sched
+rwsem_down_write_failed_killable(struct rw_semaphore *sem)
+{
+	return __rwsem_down_write_failed_common(sem, TASK_KILLABLE);
+}
+EXPORT_SYMBOL(rwsem_down_write_failed_killable);
 
 /*
  * handle waking up a waiter on the semaphore

@@ -8,7 +8,6 @@
 #include <linux/notifier.h>
 #include <linux/miscdevice.h>
 #include <linux/device.h>
-#include <linux/workqueue.h>
 #include <linux/cpumask.h>
 #include <linux/interrupt.h>
 
@@ -53,8 +52,8 @@ enum pm_qos_req_type {
 };
 
 struct pm_qos_request {
+	unsigned long cpus_affine;
 	enum pm_qos_req_type type;
-	struct cpumask cpus_affine;
 #ifdef CONFIG_SMP
 	uint32_t irq;
 	/* Internal structure members */
@@ -62,7 +61,6 @@ struct pm_qos_request {
 #endif
 	struct plist_node node;
 	int pm_qos_class;
-	struct delayed_work work; /* for pm_qos_update_request_timeout */
 };
 
 struct pm_qos_flags_request {
@@ -143,8 +141,6 @@ void pm_qos_add_request(struct pm_qos_request *req, int pm_qos_class,
 			s32 value);
 void pm_qos_update_request(struct pm_qos_request *req,
 			   s32 new_value);
-void pm_qos_update_request_timeout(struct pm_qos_request *req,
-				   s32 new_value, unsigned long timeout_us);
 void pm_qos_remove_request(struct pm_qos_request *req);
 
 int pm_qos_request(int pm_qos_class);
@@ -193,6 +189,12 @@ static inline s32 dev_pm_qos_requested_resume_latency(struct device *dev)
 static inline s32 dev_pm_qos_requested_flags(struct device *dev)
 {
 	return dev->power.qos->flags_req->data.flr.flags;
+}
+
+static inline s32 dev_pm_qos_raw_read_value(struct device *dev)
+{
+	return IS_ERR_OR_NULL(dev->power.qos) ?
+		0 : pm_qos_read_value(&dev->power.qos->resume_latency);
 }
 #else
 static inline enum pm_qos_flags_status __dev_pm_qos_flags(struct device *dev,
@@ -258,6 +260,7 @@ static inline void dev_pm_qos_hide_latency_tolerance(struct device *dev) {}
 
 static inline s32 dev_pm_qos_requested_resume_latency(struct device *dev) { return 0; }
 static inline s32 dev_pm_qos_requested_flags(struct device *dev) { return 0; }
+static inline s32 dev_pm_qos_raw_read_value(struct device *dev) { return 0; }
 #endif
 
 #endif

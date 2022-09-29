@@ -212,6 +212,8 @@ struct bpf_array {
 
 #define MAX_TAIL_CALL_CNT 32
 
+struct bpf_prog *bpf_prog_get(u32 ufd);
+
 struct bpf_event_entry {
 	struct perf_event *event;
 	struct file *perf_file;

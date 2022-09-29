@@ -20,17 +20,15 @@
 #include <media/msm_vidc.h>
 #include "msm_vidc_resources.h"
 
-#define CONTAINS(__a, __sz, __t) ({\
-	int __rc = __t >= __a && \
-			__t < __a + __sz; \
-	__rc; \
-})
+#define CONTAINS(__a, __sz, __t) (\
+	(__t >= __a) && \
+	(__t < __a + __sz) \
+)
 
-#define OVERLAPS(__t, __tsz, __a, __asz) ({\
-	int __rc = __t <= __a && \
-			__t + __tsz >= __a + __asz; \
-	__rc; \
-})
+#define OVERLAPS(__t, __tsz, __a, __asz) (\
+	(__t <= __a) && \
+	(__t + __tsz >= __a + __asz) \
+)
 
 #define HAL_BUFFERFLAG_EOS              0x00000001
 #define HAL_BUFFERFLAG_STARTTIME        0x00000002
@@ -204,7 +202,7 @@ enum hal_property {
 	HAL_PARAM_VENC_H264_ENTROPY_CABAC_MODEL,
 	HAL_CONFIG_VENC_MAX_BITRATE,
 	HAL_PARAM_VENC_H264_VUI_TIMING_INFO,
-	HAL_PARAM_VENC_H264_GENERATE_AUDNAL,
+	HAL_PARAM_VENC_GENERATE_AUDNAL,
 	HAL_PARAM_VENC_MAX_NUM_B_FRAMES,
 	HAL_PARAM_BUFFER_ALLOC_MODE,
 	HAL_PARAM_VDEC_FRAME_ASSEMBLY,
@@ -246,6 +244,7 @@ enum hal_property {
 	HAL_PARAM_VENC_H264_TRANSFORM_8x8,
 	HAL_PARAM_VENC_VIDEO_SIGNAL_INFO,
 	HAL_PARAM_VENC_IFRAMESIZE_TYPE,
+	HAL_PARAM_VENC_SEND_OUTPUT_FOR_SKIPPED_FRAME
 };
 
 enum hal_domain {

@@ -81,7 +81,6 @@ struct sync_timeline_ops {
  * struct sync_timeline - sync object
  * @kref:		reference count on fence.
  * @ops:		ops that define the implementation of the sync_timeline
- * @name:		name of the sync_timeline. Useful for debugging
  * @destroyed:		set when sync_timeline is destroyed
  * @child_list_head:	list of children sync_pts for this sync_timeline
  * @child_list_lock:	lock protecting @child_list_head, destroyed, and
@@ -92,7 +91,6 @@ struct sync_timeline_ops {
 struct sync_timeline {
 	struct kref		kref;
 	const struct sync_timeline_ops	*ops;
-	char			name[64];
 
 	/* protected by child_list_lock */
 	bool			destroyed;
@@ -154,7 +152,9 @@ struct sync_fence_cb {
 struct sync_fence {
 	struct file		*file;
 	struct kref		kref;
+#ifdef CONFIG_SYNC_DEBUG
 	char			name[64];
+#endif
 #ifdef CONFIG_DEBUG_FS
 	struct list_head	sync_fence_list;
 #endif
@@ -203,7 +203,7 @@ static inline void sync_fence_waiter_init(struct sync_fence_waiter *waiter,
  * data to be kept after the generic sync_timeline struct.
  */
 struct sync_timeline *sync_timeline_create(const struct sync_timeline_ops *ops,
-					   int size, const char *name);
+					   int size);
 
 /**
  * sync_timeline_destroy() - destroys a sync object
@@ -297,6 +297,14 @@ void sync_fence_put(struct sync_fence *fence);
  * get_unused_fd_flags(O_CLOEXEC).
  */
 void sync_fence_install(struct sync_fence *fence, int fd);
+
+/**
+ * sync_fence_signaled() - checks if the fence has already signaled
+ * @fence:		fence to check
+ *
+ * Returns true if @fence has already signaled.
+ */
+bool sync_fence_signaled(struct sync_fence *fence);
 
 /**
  * sync_fence_wait_async() - registers and async wait on the fence

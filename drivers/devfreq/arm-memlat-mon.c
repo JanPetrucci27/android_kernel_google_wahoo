@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2016, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2016, 2018 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -31,6 +31,7 @@
 #include "governor.h"
 #include "governor_memlat.h"
 #include <linux/perf_event.h>
+#include <soc/qcom/scm.h>
 
 enum ev_index {
 	INST_IDX,
@@ -65,7 +66,7 @@ static unsigned long compute_freq(struct memlat_hwmon_data *hw_data,
 {
 	ktime_t ts;
 	unsigned int diff;
-	unsigned long freq = 0;
+	uint64_t freq = 0;
 
 	ts = ktime_get();
 	diff = ktime_to_us(ktime_sub(ts, hw_data->prev_ts));
@@ -85,13 +86,8 @@ static inline unsigned long read_event(struct event_data *event)
 	u64 total, enabled, running;
 
 	total = perf_event_read_value(event->pevent, &enabled, &running);
-	if (total >= event->prev_count)
-		ev_count = total - event->prev_count;
-	else
-		ev_count = (MAX_COUNT_LIM - event->prev_count) + total;
-
+	ev_count = total - event->prev_count;
 	event->prev_count = total;
-
 	return ev_count;
 }
 
@@ -122,6 +118,14 @@ static unsigned long get_cnt(struct memlat_hwmon *hw)
 	int cpu;
 	struct cpu_grp_info *cpu_grp = container_of(hw,
 					struct cpu_grp_info, hw);
+					
+	/*
+	 * Some of SCM call is very heavy(+20ms) so perf IPI could
+	 * be stuck on the CPU which contributes long latency.
+	 */
+	if (under_scm_call()) {
+		return 0;
+	}
 
 	for_each_cpu(cpu, &cpu_grp->cpus)
 		read_perf_counters(cpu, cpu_grp);
@@ -352,6 +356,7 @@ static struct platform_driver arm_memlat_mon_driver = {
 		.name = "arm-memlat-mon",
 		.of_match_table = match_table,
 		.owner = THIS_MODULE,
+		.suppress_bind_attrs = true,
 	},
 };
 

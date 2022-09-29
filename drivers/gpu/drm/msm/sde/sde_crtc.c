@@ -1339,7 +1339,7 @@ static int sde_crtc_atomic_set_property(struct drm_crtc *crtc,
 	struct sde_crtc_state *cstate;
 	int idx, ret = -EINVAL;
 
-	if (!crtc || !state || !property) {
+	if (unlikely(!crtc || !state || !property)) {
 		SDE_ERROR("invalid argument(s)\n");
 	} else {
 		sde_crtc = to_sde_crtc(crtc);

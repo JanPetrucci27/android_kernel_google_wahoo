@@ -105,12 +105,11 @@ static inline bool __chk_range_not_ok(unsigned long addr, unsigned long size, un
 })
 
 /*
- * The exception table consists of pairs of addresses relative to the
- * exception table enty itself: the first is the address of an
- * instruction that is allowed to fault, and the second is the address
- * at which the program should continue.  No registers are modified,
- * so it is entirely up to the continuation code to figure out what to
- * do.
+ * The exception table consists of triples of addresses relative to the
+ * exception table entry itself. The first address is of an instruction
+ * that is allowed to fault, the second is the target at which the program
+ * should continue. The third is a handler function to deal with the fault
+ * caused by the instruction in the first field.
  *
  * All the routines below use bits of fixup code that are out of line
  * with the main instruction path.  This means when everything is well,
@@ -119,13 +118,14 @@ static inline bool __chk_range_not_ok(unsigned long addr, unsigned long size, un
  */
 
 struct exception_table_entry {
-	int insn, fixup;
+	int insn, fixup, handler;
 };
 /* This is not the generic standard exception_table_entry format */
 #define ARCH_HAS_SORT_EXTABLE
 #define ARCH_HAS_SEARCH_EXTABLE
 
-extern int fixup_exception(struct pt_regs *regs);
+extern int fixup_exception(struct pt_regs *regs, int trapnr);
+extern bool ex_has_fault_handler(unsigned long ip);
 extern int early_fixup_exception(unsigned long *ip);
 
 /*
@@ -694,42 +694,13 @@ unsigned long __must_check _copy_from_user(void *to, const void __user *from,
 unsigned long __must_check _copy_to_user(void __user *to, const void *from,
 					 unsigned n);
 
-#ifdef CONFIG_DEBUG_STRICT_USER_COPY_CHECKS
-# define copy_user_diag __compiletime_error
-#else
-# define copy_user_diag __compiletime_warning
-#endif
+extern void __compiletime_error("usercopy buffer size is too small")
+__bad_copy_user(void);
 
-extern void copy_user_diag("copy_from_user() buffer size is too small")
-copy_from_user_overflow(void);
-extern void copy_user_diag("copy_to_user() buffer size is too small")
-copy_to_user_overflow(void) __asm__("copy_from_user_overflow");
-
-#undef copy_user_diag
-
-#ifdef CONFIG_DEBUG_STRICT_USER_COPY_CHECKS
-
-extern void
-__compiletime_warning("copy_from_user() buffer size is not provably correct")
-__copy_from_user_overflow(void) __asm__("copy_from_user_overflow");
-#define __copy_from_user_overflow(size, count) __copy_from_user_overflow()
-
-extern void
-__compiletime_warning("copy_to_user() buffer size is not provably correct")
-__copy_to_user_overflow(void) __asm__("copy_from_user_overflow");
-#define __copy_to_user_overflow(size, count) __copy_to_user_overflow()
-
-#else
-
-static inline void
-__copy_from_user_overflow(int size, unsigned long count)
+static inline void copy_user_overflow(int size, unsigned long count)
 {
 	WARN(1, "Buffer overflow detected (%d < %lu)!\n", size, count);
 }
-
-#define __copy_to_user_overflow __copy_from_user_overflow
-
-#endif
 
 static __always_inline unsigned long __must_check
 copy_from_user(void *to, const void __user *from, unsigned long n)
@@ -738,31 +709,13 @@ copy_from_user(void *to, const void __user *from, unsigned long n)
 
 	might_fault();
 
-	/*
-	 * While we would like to have the compiler do the checking for us
-	 * even in the non-constant size case, any false positives there are
-	 * a problem (especially when DEBUG_STRICT_USER_COPY_CHECKS, but even
-	 * without - the [hopefully] dangerous looking nature of the warning
-	 * would make people go look at the respecitive call sites over and
-	 * over again just to find that there's no problem).
-	 *
-	 * And there are cases where it's just not realistic for the compiler
-	 * to prove the count to be in range. For example when multiple call
-	 * sites of a helper function - perhaps in different source files -
-	 * all doing proper range checking, yet the helper function not doing
-	 * so again.
-	 *
-	 * Therefore limit the compile time checking to the constant size
-	 * case, and do only runtime checking for non-constant sizes.
-	 */
-
 	if (likely(sz < 0 || sz >= n)) {
 		check_object_size(to, n, false);
 		n = _copy_from_user(to, from, n);
-	} else if (__builtin_constant_p(n))
-		copy_from_user_overflow();
+	} else if (!__builtin_constant_p(n))
+		copy_user_overflow(sz, n);
 	else
-		__copy_from_user_overflow(sz, n);
+		__bad_copy_user();
 
 	return n;
 }
@@ -774,20 +727,16 @@ copy_to_user(void __user *to, const void *from, unsigned long n)
 
 	might_fault();
 
-	/* See the comment in copy_from_user() above. */
 	if (likely(sz < 0 || sz >= n)) {
 		check_object_size(from, n, true);
 		n = _copy_to_user(to, from, n);
-	} else if (__builtin_constant_p(n))
-		copy_to_user_overflow();
+	} else if (!__builtin_constant_p(n))
+		copy_user_overflow(sz, n);
 	else
-		__copy_to_user_overflow(sz, n);
+		__bad_copy_user();
 
 	return n;
 }
-
-#undef __copy_from_user_overflow
-#undef __copy_to_user_overflow
 
 /*
  * The "unsafe" user accesses aren't really "unsafe", but the naming

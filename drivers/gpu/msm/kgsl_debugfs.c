@@ -329,8 +329,9 @@ static int process_sparse_mem_print(struct seq_file *s, void *unused)
 {
 	struct kgsl_process_private *private = s->private;
 
-	seq_printf(s, "%5s %16s %16s %16s %16s\n",
-		   "v_id", "gpuaddr", "v_offset", "v_size", "p_offset");
+	seq_printf(s, "%16s %16s %16s %5s %8s %10s %16s %5s %16s\n",
+		   "gpuaddr", "useraddr", "size", "id", "flags", "type",
+		   "usage", "sglen", "mapsize");
 
 	spin_lock(&private->mem_lock);
 	idr_for_each(&private->mem_idr, print_sparse_mem_entry, s);
@@ -414,8 +415,6 @@ void kgsl_process_init_debugfs(struct kgsl_process_private *private)
 	 */
 
 	if (IS_ERR_OR_NULL(private->debug_root)) {
-		WARN((private->debug_root == NULL),
-			"Unable to create debugfs dir for %s\n", name);
 		private->debug_root = NULL;
 		return;
 	}

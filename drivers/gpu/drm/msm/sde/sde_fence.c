@@ -66,7 +66,7 @@ static int _sde_fence_create_fd(void *timeline, const char *name, uint32_t val)
 	struct sync_fence *fence;
 	signed int fd = -EINVAL;
 
-	if (!timeline) {
+	if (unlikely(!timeline)) {
 		SDE_ERROR("invalid timeline\n");
 		goto exit;
 	}
@@ -76,14 +76,14 @@ static int _sde_fence_create_fd(void *timeline, const char *name, uint32_t val)
 
 	/* create sync point */
 	sync_pt = sw_sync_pt_create(timeline, val);
-	if (sync_pt == NULL) {
+	if (unlikely(sync_pt == NULL)) {
 		SDE_ERROR("failed to create sync point, %s\n", name);
 		goto exit;
 	}
 
 	/* create fence */
 	fence = sync_fence_create(name, sync_pt);
-	if (fence == NULL) {
+	if (unlikely(fence == NULL)) {
 		sync_pt_free(sync_pt);
 		SDE_ERROR("couldn't create fence, %s\n", name);
 		goto exit;
@@ -91,7 +91,7 @@ static int _sde_fence_create_fd(void *timeline, const char *name, uint32_t val)
 
 	/* create fd */
 	fd = get_unused_fd_flags(0);
-	if (fd < 0) {
+	if (unlikely(fd < 0)) {
 		SDE_ERROR("failed to get_unused_fd_flags(), %s\n", name);
 		sync_fence_put(fence);
 		goto exit;
@@ -166,7 +166,7 @@ int sde_fence_create(struct sde_fence *fence, uint64_t *val, int offset)
 	uint32_t trigger_value;
 	int fd, rc = -EINVAL;
 
-	if (!fence || !fence->timeline || !val) {
+	if (unlikely(!fence || !fence->timeline || !val)) {
 		SDE_ERROR("invalid argument(s), fence %pK, pval %pK\n",
 				fence, val);
 	} else  {

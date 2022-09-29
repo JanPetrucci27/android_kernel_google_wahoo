@@ -136,6 +136,7 @@ struct scm_hdcp_req {
 };
 
 extern struct mutex scm_lmh_lock;
+extern bool under_scm_call(void);
 
 #else
 
@@ -231,6 +232,10 @@ static inline int scm_io_write(phys_addr_t address, u32 val)
 }
 
 inline bool scm_is_secure_device(void)
+{
+	return false;
+}
+extern bool under_scm_call(void)
 {
 	return false;
 }

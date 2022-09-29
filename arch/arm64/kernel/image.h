@@ -73,7 +73,7 @@
 
 #ifdef CONFIG_EFI
 
-__efistub_stext_offset = stext - _text;
+__efistub_stext_offset = ABSOLUTE(stext - _text);
 
 /*
  * Prevent the symbol aliases below from being emitted into the kallsyms

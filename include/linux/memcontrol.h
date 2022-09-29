@@ -396,16 +396,22 @@ static inline bool mem_cgroup_inactive_anon_is_low(struct lruvec *lruvec)
 	unsigned long inactive_ratio;
 	unsigned long inactive;
 	unsigned long active;
+#ifndef CONFIG_FIX_INACTIVE_RATIO
 	unsigned long gb;
+#endif
 
 	inactive = mem_cgroup_get_lru_size(lruvec, LRU_INACTIVE_ANON);
 	active = mem_cgroup_get_lru_size(lruvec, LRU_ACTIVE_ANON);
 
+#ifdef CONFIG_FIX_INACTIVE_RATIO
+	inactive_ratio = 1;
+#else
 	gb = (inactive + active) >> (30 - PAGE_SHIFT);
 	if (gb)
 		inactive_ratio = int_sqrt(10 * gb);
 	else
 		inactive_ratio = 1;
+#endif
 
 	return inactive * inactive_ratio < active;
 }
@@ -706,6 +712,10 @@ static inline void mem_cgroup_wb_stats(struct bdi_writeback *wb,
 				       unsigned long *pdirty,
 				       unsigned long *pwriteback)
 {
+	*pfilepages = 0;
+	*pheadroom = 0;
+	*pdirty = 0;
+	*pwriteback = 0;
 }
 
 #endif	/* CONFIG_CGROUP_WRITEBACK */

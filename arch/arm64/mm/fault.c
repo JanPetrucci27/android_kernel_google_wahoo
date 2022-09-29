@@ -366,6 +366,16 @@ static int __kprobes do_page_fault(unsigned long addr, unsigned int esr,
 		if (!search_exception_tables(regs->pc))
 			die("Accessing user space memory outside uaccess.h routines", regs, esr);
 	}
+	
+	/*
+	 * let's try a speculative page fault without grabbing the
+	 * mmap_sem.
+	 */
+	fault = handle_speculative_fault(mm, addr, mm_flags);
+	if (fault != VM_FAULT_RETRY) {
+		perf_sw_event(PERF_COUNT_SW_SPF, 1, regs, addr);
+		goto done;
+	}
 
 	/*
 	 * As per x86, we may deadlock here. However, since the kernel only
@@ -440,6 +450,8 @@ retry:
 		mm_event_end(MM_MIN_FAULT, event_ts);
 	}
 	up_read(&mm->mmap_sem);
+	
+done:
 
 	/*
 	 * Handle the "normal" case first - VM_FAULT_MAJOR / VM_FAULT_MINOR

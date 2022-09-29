@@ -103,7 +103,7 @@ static void rd_write(struct msm_rd_state *rd, const void *buf, int sz)
 		char *fptr = &fifo->buf[fifo->head];
 		int n;
 
-		wait_event(rd->fifo_event, circ_space(&rd->fifo) > 0 || !rd->open);
+		wait_event_interruptible(rd->fifo_event, circ_space(&rd->fifo) > 0 || !rd->open);
 		if (!rd->open)
 			return;
 

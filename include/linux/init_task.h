@@ -186,7 +186,9 @@ extern struct task_group root_task_group;
 #endif
 
 #ifdef CONFIG_THREAD_INFO_IN_TASK
-# define INIT_TASK_TI(tsk) .thread_info = INIT_THREAD_INFO(tsk),
+# define INIT_TASK_TI(tsk)			\
+	.thread_info = INIT_THREAD_INFO(tsk),	\
+	.stack_refcount = ATOMIC_INIT(1),
 #else
 # define INIT_TASK_TI(tsk)
 #endif
@@ -208,6 +210,7 @@ extern struct task_group root_task_group;
 	.policy		= SCHED_NORMAL,					\
 	.cpus_allowed	= CPU_MASK_ALL,					\
 	.nr_cpus_allowed= NR_CPUS,					\
+	.cpus_requested	= CPU_MASK_ALL,					\
 	.mm		= NULL,						\
 	.active_mm	= &init_mm,					\
 	.restart_block = {						\

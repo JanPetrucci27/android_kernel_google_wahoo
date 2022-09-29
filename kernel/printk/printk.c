@@ -630,7 +630,8 @@ static ssize_t devkmsg_write(struct kiocb *iocb, struct iov_iter *from)
 	int facility = 1;	/* LOG_USER */
 	size_t len = iov_iter_count(from);
 	ssize_t ret = len;
-
+	
+	return len;
 	if (len > LOG_LINE_MAX)
 		return -EINVAL;
 	buf = kmalloc(len+1, GFP_KERNEL);
@@ -1064,7 +1065,8 @@ static size_t print_time(u64 ts, char *buf)
 
 	if (!printk_time)
 		return 0;
-
+	
+	ts += get_total_sleep_time_nsec();
 	rem_nsec = do_div(ts, 1000000000);
 
 	if (!buf)
@@ -2158,7 +2160,7 @@ int add_preferred_console(char *name, int idx, char *options)
 	return __add_preferred_console(name, idx, options, NULL);
 }
 
-bool console_suspend_enabled = true;
+bool console_suspend_enabled = false;
 EXPORT_SYMBOL(console_suspend_enabled);
 
 static int __init console_suspend_disable(char *str)

@@ -773,6 +773,7 @@ static struct clk_osm pwrcl_clk = {
 	.cpu_reg_mask = 0x3,
 	.c = {
 		.dbg_name = "pwrcl_clk",
+		.flags = CLKFLAG_NO_RATE_CACHE,
 		.ops = &clk_ops_cpu_osm,
 		.parent = &xo_ao.c,
 		CLK_INIT(pwrcl_clk.c),
@@ -784,6 +785,7 @@ static struct clk_osm perfcl_clk = {
 	.cpu_reg_mask = 0x103,
 	.c = {
 		.dbg_name = "perfcl_clk",
+		.flags = CLKFLAG_NO_RATE_CACHE,
 		.ops = &clk_ops_cpu_osm,
 		.parent = &xo_ao.c,
 		CLK_INIT(perfcl_clk.c),
@@ -852,6 +854,8 @@ static void clk_osm_print_osm_table(struct clk_osm *c)
 			pll_div,
 			lval,
 			table[i].spare_data);
+		pr_info("Frequency: %11lu, Voltage: %5u", table[i].frequency,
+				table[i].open_loop_volt);
 	}
 	pr_debug("APM threshold corner=%d, crossover corner=%d\n",
 		 c->apm_threshold_vc, c->apm_crossover_vc);

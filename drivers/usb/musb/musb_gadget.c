@@ -1127,7 +1127,7 @@ static int musb_gadget_enable(struct usb_ep *ep,
 			musb_ep->dma ? "dma, " : "",
 			musb_ep->packet_sz);
 
-	schedule_work(&musb->irq_work);
+	queue_delayed_work(system_power_efficient_wq, &musb->irq_work);
 
 fail:
 	spin_unlock_irqrestore(&musb->lock, flags);
@@ -1171,7 +1171,7 @@ static int musb_gadget_disable(struct usb_ep *ep)
 	/* abort all pending DMA and requests */
 	nuke(musb_ep, -ESHUTDOWN);
 
-	schedule_work(&musb->irq_work);
+	queue_delayed_work(system_power_efficient_wq, &musb->irq_work);
 
 	spin_unlock_irqrestore(&(musb->lock), flags);
 

@@ -156,7 +156,6 @@ int kgsl_add_fence_event(struct kgsl_device *device,
 	struct sync_pt *pt;
 	struct sync_fence *fence = NULL;
 	int ret = -EINVAL;
-	char fence_name[sizeof(fence->name)] = {};
 	unsigned int cur;
 
 	priv.fence_fd = -1;
@@ -178,13 +177,8 @@ int kgsl_add_fence_event(struct kgsl_device *device,
 		ret = -ENOMEM;
 		goto out;
 	}
-	snprintf(fence_name, sizeof(fence_name),
-		"%s-pid-%d-ctx-%d-ts-%d",
-		device->name, current->group_leader->pid,
-		context_id, timestamp);
 
-
-	fence = sync_fence_create(fence_name, pt);
+	fence = sync_fence_create("", pt);
 	if (fence == NULL) {
 		/* only destroy pt when not added to fence */
 		kgsl_sync_pt_destroy(pt);
@@ -321,18 +315,8 @@ int kgsl_sync_timeline_create(struct kgsl_context *context)
 {
 	struct kgsl_sync_timeline *ktimeline;
 
-	/* Generate a name which includes the thread name, thread id, process
-	 * name, process id, and context id. This makes it possible to
-	 * identify the context of a timeline in the sync dump. */
-	char ktimeline_name[sizeof(context->timeline->name)] = {};
-	snprintf(ktimeline_name, sizeof(ktimeline_name),
-		"%s_%.15s(%d)-%.15s(%d)-%d",
-		context->device->name,
-		current->group_leader->comm, current->group_leader->pid,
-		current->comm, current->pid, context->id);
-
 	context->timeline = sync_timeline_create(&kgsl_sync_timeline_ops,
-		(int) sizeof(struct kgsl_sync_timeline), ktimeline_name);
+		(int) sizeof(struct kgsl_sync_timeline));
 	if (context->timeline == NULL)
 		return -EINVAL;
 
@@ -384,6 +368,11 @@ struct kgsl_sync_fence_waiter *kgsl_sync_fence_async_wait(int fd,
 	fence = sync_fence_fdget(fd);
 	if (fence == NULL)
 		return ERR_PTR(-EINVAL);
+	
+	if (sync_fence_signaled(fence)) {
+		sync_fence_put(fence);
+		return NULL;
+	}
 
 	/* create the waiter */
 	kwaiter = kzalloc(sizeof(*kwaiter), GFP_ATOMIC);
@@ -396,7 +385,9 @@ struct kgsl_sync_fence_waiter *kgsl_sync_fence_async_wait(int fd,
 	kwaiter->priv = priv;
 	kwaiter->func = func;
 
+#ifdef CONFIG_SYNC_DEBUG
 	strlcpy(kwaiter->name, fence->name, sizeof(kwaiter->name));
+#endif
 
 	sync_fence_waiter_init((struct sync_fence_waiter *) kwaiter,
 		kgsl_sync_callback);

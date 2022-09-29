@@ -524,6 +524,9 @@ static int pm8xxx_rtc_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "Request IRQ failed (%d)\n", rc);
 		return rc;
 	}
+	
+	if (of_property_read_bool(pdev->dev.of_node, "disable-alarm-wakeup"))
+		device_set_wakeup_capable(&pdev->dev, false);
 
 	dev_dbg(&pdev->dev, "Probe success !!\n");
 

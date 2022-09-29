@@ -28,6 +28,7 @@
 #include <linux/debugfs.h>
 #include <linux/workqueue.h>
 #include <linux/wait.h>
+#include <linux/irq_work.h>
 
 #include <linux/usb/ch9.h>
 #include <linux/usb/gadget.h>
@@ -980,6 +981,7 @@ struct dwc3 {
 
 	void (*notify_event)(struct dwc3 *, unsigned, unsigned);
 	struct work_struct	wakeup_work;
+	struct irq_work		wakeup_irq_work;
 
 	unsigned		delayed_status:1;
 	unsigned		ep0_bounced:1;

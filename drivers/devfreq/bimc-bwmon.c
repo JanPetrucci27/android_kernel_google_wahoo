@@ -65,7 +65,7 @@ struct bwmon {
 	void __iomem *base;
 	void __iomem *global_base;
 	unsigned int mport;
-	unsigned int irq;
+	int irq;
 	const struct bwmon_spec *spec;
 	struct device *dev;
 	struct bw_hwmon hw;
@@ -669,6 +669,7 @@ static struct platform_driver bimc_bwmon_driver = {
 		.name = "bimc-bwmon",
 		.of_match_table = match_table,
 		.owner = THIS_MODULE,
+		.suppress_bind_attrs = true,
 	},
 };
 

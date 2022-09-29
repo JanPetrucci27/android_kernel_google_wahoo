@@ -135,12 +135,6 @@ enabled and functional in the driver:
 					i.e. if bit N is set, then cpuN is a part of the cpu group. So basically,
 					a cpu group corelated to a cpu cluster.
 					A PM QoS request object is maintained for each cpu-group.
-- qcom,pm-qos-cpu-group-latency-us:	array of values used for PM QoS voting, one for each cpu-group defined.
-					the number of values must match the number of values defined in
-					qcom,pm-qos-cpu-mask property.
-- qcom,pm-qos-default-cpu:		PM QoS voting is based on the cpu associated with each IO request by the block layer.
-					This defined the default cpu used for PM QoS voting in case a specific cpu value is not available.
-
 - qcom,vddp-ref-clk-supply	 : reference clock to ufs device. Controlled by the host driver.
 - qcom,vddp-ref-clk-max-microamp : specifies max. load that can be drawn for
 				   ref-clk supply.
@@ -189,6 +183,4 @@ Example:
 					"MAX";
 
 		qcom,pm-qos-cpu-groups = <0x03 0x0C>; /* group0: cpu0, cpu1, group1: cpu2, cpu3 */
-		qcom,pm-qos-cpu-group-latency-us = <200 300>; /* group0: 200us, group1: 300us */
-		qcom,pm-qos-default-cpu = <0>;
 	};

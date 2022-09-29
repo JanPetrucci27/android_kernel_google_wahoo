@@ -987,7 +987,7 @@ static void mdss_dsi_phy_power_off(
 
 	pinfo = &ctrl->panel_data.panel_info;
 
-	if ((ctrl->shared_data->phy_rev != DSI_PHY_REV_20) ||
+	if (!(ctrl->shared_data->phy_rev >= DSI_PHY_REV_20) ||
 		!pinfo->allow_phy_power_off) {
 		pr_debug("%s: ctrl%d phy rev:%d panel support for phy off:%d\n",
 			__func__, ctrl->ndx, ctrl->shared_data->phy_rev,

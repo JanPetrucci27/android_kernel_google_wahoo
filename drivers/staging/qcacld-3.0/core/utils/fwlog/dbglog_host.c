@@ -40,9 +40,9 @@
 #include <linux/netlink.h>
 #include <linux/vmalloc.h>
 
-#ifdef WLAN_OPEN_SOURCE
+#ifdef WLAN_DEBUG
 #include <linux/debugfs.h>
-#endif /* WLAN_OPEN_SOURCE */
+#endif /* WLAN_DEBUG */
 #include "wmi_unified_priv.h"
 
 #ifdef CNSS_GENL
@@ -1552,7 +1552,7 @@ skip_args_processing:
 
 }
 
-#ifdef WLAN_OPEN_SOURCE
+#ifdef WLAN_DEBUG
 static int
 dbglog_debugfs_raw_data(wmi_unified_t wmi_handle, const uint8_t *buf,
 			A_UINT32 length, A_UINT32 dropped)
@@ -1597,7 +1597,7 @@ dbglog_debugfs_raw_data(wmi_unified_t wmi_handle, const uint8_t *buf,
 
 	return true;
 }
-#endif /* WLAN_OPEN_SOURCE */
+#endif /* WLAN_DEBUG */
 
 /**
  * nl_srv_bcast_fw_logs() - Wrapper func to send bcast msgs to FW logs mcast grp
@@ -1924,7 +1924,7 @@ static int diag_fw_handler(ol_scn_t scn, uint8_t *data, uint32_t datalen)
 		return send_diag_netlink_data((A_UINT8 *) datap,
 					      len, DIAG_TYPE_FW_MSG);
 	}
-#ifdef WLAN_OPEN_SOURCE
+#ifdef WLAN_DEBUG
 	if (dbglog_process_type == DBGLOG_PROCESS_POOL_RAW) {
 		if (!gprint_limiter) {
 			AR_DEBUG_PRINTF(ATH_DEBUG_ERR,
@@ -1933,7 +1933,7 @@ static int diag_fw_handler(ol_scn_t scn, uint8_t *data, uint32_t datalen)
 		}
 		return 0;
 	}
-#endif /* WLAN_OPEN_SOURCE */
+#endif /* WLAN_DEBUG */
 	if (!gprint_limiter) {
 		AR_DEBUG_PRINTF(ATH_DEBUG_ERR,
 				("NOT Supported only supports net link socket\n"));
@@ -2032,13 +2032,13 @@ int dbglog_parse_debug_logs(ol_scn_t scn, uint8_t *data, uint32_t datalen)
 						   (A_UINT8 *) buffer,
 						   len, dropped);
 	}
-#ifdef WLAN_OPEN_SOURCE
+#ifdef WLAN_DEBUG
 	if (dbglog_process_type == DBGLOG_PROCESS_POOL_RAW) {
 		return dbglog_debugfs_raw_data((wmi_unified_t) wma->wmi_handle,
 					       (A_UINT8 *) buffer, len,
 					       dropped);
 	}
-#endif /* WLAN_OPEN_SOURCE */
+#endif /* WLAN_DEBUG */
 
 	while ((count + 2) < length) {
 		timestamp = DBGLOG_GET_TIME_STAMP(buffer[count]);
@@ -4026,7 +4026,7 @@ dbglog_pcielp_print_handler(A_UINT32 mod_id,
 	return true;
 }
 
-#ifdef WLAN_OPEN_SOURCE
+#ifdef WLAN_DEBUG
 static int dbglog_block_open(struct inode *inode, struct file *file)
 {
 	struct fwdebug *fwlog = inode->i_private;
@@ -4155,7 +4155,7 @@ static void dbglog_debugfs_remove(wmi_unified_t wmi_handle)
 
 #endif /* End of WLAN_DEBUGFS */
 
-#endif /* WLAN_OPEN_SOURCE */
+#endif /* WLAN_DEBUG */
 
 /**
  * cnss_diag_handle_crash_inject() - API to handle crash inject command
@@ -4511,14 +4511,14 @@ int dbglog_init(wmi_unified_t wmi_handle)
 	if (res != 0)
 		return res;
 
-#ifdef WLAN_OPEN_SOURCE
+#ifdef WLAN_DEBUG
 	/* Initialize the fw debug log queue */
 	skb_queue_head_init(&wmi_handle->dbglog.fwlog_queue);
 	init_completion(&wmi_handle->dbglog.fwlog_completion);
 
 	/* Initialize debugfs */
 	dbglog_debugfs_init(wmi_handle);
-#endif /* WLAN_OPEN_SOURCE */
+#endif /* WLAN_DEBUG */
 
 	return res;
 }
@@ -4527,14 +4527,14 @@ int dbglog_deinit(wmi_unified_t wmi_handle)
 {
 	int res = 0;
 
-#ifdef WLAN_OPEN_SOURCE
+#ifdef WLAN_DEBUG
 	/* DeInitialize the fw debug log queue */
 	skb_queue_purge(&wmi_handle->dbglog.fwlog_queue);
 	complete(&wmi_handle->dbglog.fwlog_completion);
 
 	/* Deinitialize the debugfs */
 	dbglog_debugfs_remove(wmi_handle);
-#endif /* WLAN_OPEN_SOURCE */
+#endif /* WLAN_DEBUG */
 	tgt_assert_enable = 0;
 
 	res =

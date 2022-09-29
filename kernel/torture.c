@@ -70,6 +70,7 @@ static int *torture_runnable;
 static struct task_struct *onoff_task;
 static long onoff_holdoff;
 static long onoff_interval;
+static torture_ofl_func *onoff_f;
 static long n_offline_attempts;
 static long n_offline_successes;
 static unsigned long sum_offline;
@@ -178,13 +179,14 @@ torture_onoff(void *arg)
 /*
  * Initiate online-offline handling.
  */
-int torture_onoff_init(long ooholdoff, long oointerval)
+int torture_onoff_init(long ooholdoff, long oointerval, torture_ofl_func *f)
 {
 	int ret = 0;
 
 #ifdef CONFIG_HOTPLUG_CPU
 	onoff_holdoff = ooholdoff;
 	onoff_interval = oointerval;
+	onoff_f = f;
 	if (onoff_interval <= 0)
 		return 0;
 	ret = torture_create_kthread(torture_onoff, NULL, onoff_task);

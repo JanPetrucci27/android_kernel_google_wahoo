@@ -885,10 +885,16 @@ static void loop_unprepare_queue(struct loop_device *lo)
 	kthread_stop(lo->worker_task);
 }
 
+static int loop_kthread_worker_fn(void *worker_ptr)
+{
+	current->flags |= PF_LESS_THROTTLE;
+	return kthread_worker_fn(worker_ptr);
+}
+
 static int loop_prepare_queue(struct loop_device *lo)
 {
 	init_kthread_worker(&lo->worker);
-	lo->worker_task = kthread_run(kthread_worker_fn,
+	lo->worker_task = kthread_run_perf_critical(cpu_perf_mask, loop_kthread_worker_fn,
 			&lo->worker, "loop%d", lo->lo_number);
 	if (IS_ERR(lo->worker_task))
 		return -ENOMEM;
@@ -1863,6 +1869,8 @@ static int loop_add(struct loop_device **l, int i)
 	 * submitted to backing file is handled page by page.
 	 */
 	queue_flag_set_unlocked(QUEUE_FLAG_NOMERGES, lo->lo_queue);
+	
+	queue_flag_set_unlocked(QUEUE_FLAG_NONROT, lo->lo_queue);
 
 	disk = lo->lo_disk = alloc_disk(1 << part_shift);
 	if (!disk)

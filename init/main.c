@@ -82,6 +82,7 @@
 #include <linux/proc_ns.h>
 #include <linux/io.h>
 #include <linux/kaiser.h>
+#include <linux/jump_label.h>
 
 #include <asm/io.h>
 #include <asm/bugs.h>
@@ -493,6 +494,8 @@ static void __init mm_init(void)
 	kaiser_init();
 }
 
+void __init init_dma_buf_kmem_pool(void);
+
 asmlinkage __visible void __init start_kernel(void)
 {
 	char *command_line;
@@ -571,6 +574,14 @@ asmlinkage __visible void __init start_kernel(void)
 		 "Interrupts were enabled *very* early, fixing it\n"))
 		local_irq_disable();
 	idr_init_cache();
+	
+	/*
+	 * Allow workqueue creation and work item queueing/cancelling
+	 * early.  Work item execution depends on kthreads and starts after
+	 * workqueue_init().
+	 */
+	workqueue_init_early();
+	
 	rcu_init();
 
 	/* trace_printk() and trace points may be used after this */
@@ -658,12 +669,14 @@ asmlinkage __visible void __init start_kernel(void)
 	signals_init();
 	/* rootfs populating might need page-writeback */
 	page_writeback_init();
+	seq_file_init();
 	proc_root_init();
 	nsfs_init();
 	cpuset_init();
 	cgroup_init();
 	taskstats_init_early();
 	delayacct_init();
+	init_dma_buf_kmem_pool();
 
 	check_bugs();
 
@@ -1021,6 +1034,8 @@ static noinline void __init kernel_init_freeable(void)
 	cad_pid = get_pid(task_pid(current));
 
 	smp_prepare_cpus(setup_max_cpus);
+	
+	workqueue_init();
 
 	do_pre_smp_initcalls();
 	lockup_detector_init();

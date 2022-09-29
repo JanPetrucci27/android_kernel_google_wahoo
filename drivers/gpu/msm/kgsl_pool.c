@@ -37,11 +37,11 @@
  */
 struct kgsl_page_pool {
 	unsigned int pool_order;
-	int page_count;
+	atomic_t page_count;
 	unsigned int reserved_pages;
 	bool allocation_allowed;
 	spinlock_t list_lock;
-	struct list_head page_list;
+	struct llist_head page_list;
 };
 
 static struct kgsl_page_pool kgsl_pools[KGSL_MAX_POOLS];
@@ -65,53 +65,53 @@ _kgsl_get_pool_from_order(unsigned int order)
 
 /* Map the page into kernel and zero it out */
 static void
-_kgsl_pool_zero_page(struct page *p)
+_kgsl_pool_zero_page(struct page *p, unsigned int pool_order)
 {
-	void *addr = kmap_atomic(p);
+	int i;
 
-	memset(addr, 0, PAGE_SIZE);
-	dmac_flush_range(addr, addr + PAGE_SIZE);
-	kunmap_atomic(addr);
+	for (i = 0; i < (1 << pool_order); i++) {
+		struct page *page = nth_page(p, i);
+		void *addr = kmap_atomic(page);
+
+		memset(addr, 0, PAGE_SIZE);
+		dmac_flush_range(addr, addr + PAGE_SIZE);
+		kunmap_atomic(addr);
+	}
 }
 
 /* Add a page to specified pool */
 static void
 _kgsl_pool_add_page(struct kgsl_page_pool *pool, struct page *p)
 {
-	spin_lock(&pool->list_lock);
-	list_add_tail(&p->lru, &pool->page_list);
-	pool->page_count++;
-	spin_unlock(&pool->list_lock);
+	_kgsl_pool_zero_page(p, pool->pool_order);
+	llist_add((struct llist_node *)&p->lru, &pool->page_list);
+	atomic_inc(&pool->page_count);
 }
 
 /* Returns a page from specified pool */
 static struct page *
 _kgsl_pool_get_page(struct kgsl_page_pool *pool)
 {
+	struct llist_node *node;
 	struct page *p = NULL;
 
 	spin_lock(&pool->list_lock);
-	if (pool->page_count) {
-		p = list_first_entry(&pool->page_list, struct page, lru);
-		pool->page_count--;
-		list_del(&p->lru);
-	}
+	node = llist_del_first(&pool->page_list);
 	spin_unlock(&pool->list_lock);
+	
+	if (node) {
+		atomic_dec(&pool->page_count);
+		p = container_of((struct list_head *)node, typeof(*p), lru);
+	}
 
 	return p;
 }
 
 /* Returns the number of pages in specified pool */
 static int
-kgsl_pool_size(struct kgsl_page_pool *kgsl_pool)
+kgsl_pool_size(struct kgsl_page_pool *pool)
 {
-	int size;
-
-	spin_lock(&kgsl_pool->list_lock);
-	size = kgsl_pool->page_count * (1 << kgsl_pool->pool_order);
-	spin_unlock(&kgsl_pool->list_lock);
-
-	return size;
+	return atomic_read(&pool->page_count) * (1 << pool->pool_order);
 }
 
 /* Returns the number of pages in all kgsl page pools */
@@ -325,6 +325,7 @@ int kgsl_pool_alloc_page(int *page_size, struct page **pages,
 			} else
 				return -ENOMEM;
 		}
+		_kgsl_pool_zero_page(page, order);
 		goto done;
 	}
 
@@ -342,6 +343,7 @@ int kgsl_pool_alloc_page(int *page_size, struct page **pages,
 			page = kgsl_alloc_pages(kgsl_gfp_mask(order), order);
 			if (page == NULL)
 				return -ENOMEM;
+			_kgsl_pool_zero_page(page, order);
 			goto done;
 		}
 	}
@@ -368,12 +370,13 @@ int kgsl_pool_alloc_page(int *page_size, struct page **pages,
 			} else
 				return -ENOMEM;
 		}
+		
+		_kgsl_pool_zero_page(page, order);
 	}
 
 done:
 	for (j = 0; j < (*page_size >> PAGE_SHIFT); j++) {
 		p = nth_page(page, j);
-		_kgsl_pool_zero_page(p);
 		pages[pcount] = p;
 		pcount++;
 	}
@@ -408,6 +411,24 @@ void kgsl_pool_free_page(struct page *page)
 
 	/* Give back to system as not added to pool */
 	kgsl_free_pages(page, page_order);
+}
+
+/*
+ * Return true if the pool of specified page size is supported
+ * or no pools are supported otherwise return false.
+ */
+bool kgsl_pool_avaialable(int page_size)
+{
+	int i;
+
+	if (!kgsl_num_pools)
+		return true;
+
+	for (i = 0; i < kgsl_num_pools; i++)
+		if (ilog2(page_size >> PAGE_SHIFT) == kgsl_pools[i].pool_order)
+			return true;
+
+	return false;
 }
 
 static void kgsl_pool_reserve_pages(void)
@@ -481,7 +502,7 @@ static void kgsl_pool_config(unsigned int order, unsigned int reserved_pages,
 	kgsl_pools[kgsl_num_pools].reserved_pages = reserved_pages;
 	kgsl_pools[kgsl_num_pools].allocation_allowed = allocation_allowed;
 	spin_lock_init(&kgsl_pools[kgsl_num_pools].list_lock);
-	INIT_LIST_HEAD(&kgsl_pools[kgsl_num_pools].page_list);
+	init_llist_head(&kgsl_pools[kgsl_num_pools].page_list);
 	kgsl_num_pools++;
 }
 

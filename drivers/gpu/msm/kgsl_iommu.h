@@ -24,12 +24,17 @@
  * are mapped into all pagetables.
  */
 #define KGSL_IOMMU_GLOBAL_MEM_SIZE	SZ_8M
-#define KGSL_IOMMU_GLOBAL_MEM_BASE	0xf8000000
+#define KGSL_IOMMU_GLOBAL_MEM_BASE32	0xf8000000
+#define KGSL_IOMMU_GLOBAL_MEM_BASE64	0xfc000000
+
+#define KGSL_IOMMU_GLOBAL_MEM_BASE(__mmu)	\
+	(MMU_FEATURE(__mmu, KGSL_MMU_64BIT) ? \
+		KGSL_IOMMU_GLOBAL_MEM_BASE64 : KGSL_IOMMU_GLOBAL_MEM_BASE32)
 
 #define KGSL_IOMMU_SECURE_SIZE SZ_256M
-#define KGSL_IOMMU_SECURE_END KGSL_IOMMU_GLOBAL_MEM_BASE
-#define KGSL_IOMMU_SECURE_BASE	\
-	(KGSL_IOMMU_GLOBAL_MEM_BASE - KGSL_IOMMU_SECURE_SIZE)
+#define KGSL_IOMMU_SECURE_END(_mmu) KGSL_IOMMU_GLOBAL_MEM_BASE(_mmu)
+#define KGSL_IOMMU_SECURE_BASE(_mmu)	\
+	(KGSL_IOMMU_GLOBAL_MEM_BASE(_mmu) - KGSL_IOMMU_SECURE_SIZE)
 
 #define KGSL_IOMMU_SVM_BASE32		0x300000
 #define KGSL_IOMMU_SVM_END32		(0xC0000000 - SZ_16M)
@@ -120,6 +125,7 @@ struct kgsl_iommu_context {
  * @setstate: Scratch GPU memory for IOMMU operations
  * @clk_enable_count: The ref count of clock enable calls
  * @clks: Array of pointers to IOMMU clocks
+ * @vddcx_regulator: Handle to IOMMU regulator
  * @micro_mmu_ctrl: GPU register offset of this glob al register
  * @smmu_info: smmu info used in a5xx preemption
  * @protect: register protection settings for the iommu.
@@ -134,6 +140,7 @@ struct kgsl_iommu {
 	struct kgsl_memdesc setstate;
 	atomic_t clk_enable_count;
 	struct clk *clks[KGSL_IOMMU_MAX_CLKS];
+	struct regulator *vddcx_regulator;
 	unsigned int micro_mmu_ctrl;
 	struct kgsl_memdesc smmu_info;
 	unsigned int version;

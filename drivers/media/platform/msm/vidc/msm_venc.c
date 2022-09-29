@@ -861,14 +861,14 @@ static struct msm_vidc_ctrl msm_venc_ctrls[] = {
 		.step = 1,
 	},
 	{
-		.id = V4L2_CID_MPEG_VIDC_VIDEO_H264_AU_DELIMITER,
+		.id = V4L2_CID_MPEG_VIDC_VIDEO_AU_DELIMITER,
 		.name = "H264 AU Delimiter",
 		.type = V4L2_CTRL_TYPE_BOOLEAN,
-		.minimum = V4L2_MPEG_VIDC_VIDEO_H264_AU_DELIMITER_DISABLED,
-		.maximum = V4L2_MPEG_VIDC_VIDEO_H264_AU_DELIMITER_ENABLED,
+		.minimum = V4L2_MPEG_VIDC_VIDEO_AU_DELIMITER_DISABLED,
+		.maximum = V4L2_MPEG_VIDC_VIDEO_AU_DELIMITER_ENABLED,
 		.step = 1,
 		.default_value =
-			V4L2_MPEG_VIDC_VIDEO_H264_AU_DELIMITER_DISABLED,
+			V4L2_MPEG_VIDC_VIDEO_AU_DELIMITER_DISABLED,
 	},
 	{
 		.id = V4L2_CID_MPEG_VIDC_SET_PERF_LEVEL,
@@ -1423,7 +1423,16 @@ static struct msm_vidc_ctrl msm_venc_ctrls[] = {
 			(1 << V4L2_CID_MPEG_VIDC_VIDEO_IFRAME_SIZE_UNLIMITED)),
 		.qmenu = iframe_sizes,
 	},
-
+	{
+		.id = V4L2_CID_MPEG_VIDC_VIDEO_SEND_SKIPPED_FRAME,
+		.name = "Send encoder output buffer for skipped frames",
+		.type = V4L2_CTRL_TYPE_BOOLEAN,
+		.minimum = V4L2_MPEG_VIDC_VIDEO_SEND_SKIPPED_FRAME_DISABLE,
+		.maximum = V4L2_MPEG_VIDC_VIDEO_SEND_SKIPPED_FRAME_ENABLE,
+		.default_value =
+			V4L2_MPEG_VIDC_VIDEO_SEND_SKIPPED_FRAME_DISABLE,
+		.step = 1,
+	}
 };
 
 #define NUM_CTRLS ARRAY_SIZE(msm_venc_ctrls)
@@ -2495,7 +2504,10 @@ static int try_set_ctrl(struct msm_vidc_inst *inst, struct v4l2_ctrl *ctrl)
 	case V4L2_CID_MPEG_VIDEO_BITRATE_MODE:
 	{
 		int final_mode = 0;
-		struct v4l2_ctrl update_ctrl = {.id = 0};
+		struct v4l2_ctrl update_ctrl;
+
+		update_ctrl.id = 0;
+		update_ctrl.val = 0;
 
 		/* V4L2_CID_MPEG_VIDEO_BITRATE_MODE and _RATE_CONTROL
 		 * manipulate the same thing.  If one control's state
@@ -3305,14 +3317,14 @@ static int try_set_ctrl(struct msm_vidc_inst *inst, struct v4l2_ctrl *ctrl)
 		pdata = &vui_timing_info;
 		break;
 	}
-	case V4L2_CID_MPEG_VIDC_VIDEO_H264_AU_DELIMITER:
-		property_id = HAL_PARAM_VENC_H264_GENERATE_AUDNAL;
+	case V4L2_CID_MPEG_VIDC_VIDEO_AU_DELIMITER:
+		property_id = HAL_PARAM_VENC_GENERATE_AUDNAL;
 
 		switch (ctrl->val) {
-		case V4L2_MPEG_VIDC_VIDEO_H264_AU_DELIMITER_DISABLED:
+		case V4L2_MPEG_VIDC_VIDEO_AU_DELIMITER_DISABLED:
 			enable.enable = 0;
 			break;
-		case V4L2_MPEG_VIDC_VIDEO_H264_AU_DELIMITER_ENABLED:
+		case V4L2_MPEG_VIDC_VIDEO_AU_DELIMITER_ENABLED:
 			enable.enable = 1;
 			break;
 		default:
@@ -3511,6 +3523,48 @@ static int try_set_ctrl(struct msm_vidc_inst *inst, struct v4l2_ctrl *ctrl)
 		frameqp = ctrl->val;
 		pdata = &frameqp;
 		break;
+	case V4L2_CID_MPEG_VIDC_VIDEO_INITIAL_I_FRAME_QP:
+	{
+		rc = msm_venc_validate_qp_value(inst, ctrl);
+		if (rc) {
+			dprintk(VIDC_ERR, "Invalid Initial I QP\n");
+			break;
+		}
+		/*
+		 * Defer sending property from here, set_ext_ctrl
+		 * will send it based on the rc value.
+		 */
+		property_id = 0;
+		break;
+	}
+	case V4L2_CID_MPEG_VIDC_VIDEO_INITIAL_B_FRAME_QP:
+	{
+		rc = msm_venc_validate_qp_value(inst, ctrl);
+		if (rc) {
+			dprintk(VIDC_ERR, "Invalid Initial B QP\n");
+			break;
+		}
+		/*
+		 * Defer sending property from here, set_ext_ctrl
+		 * will send it based on the rc value.
+		 */
+		property_id = 0;
+		break;
+	}
+	case V4L2_CID_MPEG_VIDC_VIDEO_INITIAL_P_FRAME_QP:
+	{
+		rc = msm_venc_validate_qp_value(inst, ctrl);
+		if (rc) {
+			dprintk(VIDC_ERR, "Invalid Initial P QP\n");
+			break;
+		}
+		/*
+		 * Defer sending property from here, set_ext_ctrl
+		 * will send it based on the rc value.
+		 */
+		property_id = 0;
+		break;
+	}
 	case V4L2_CID_MPEG_VIDC_VIDEO_VQZIP_SEI:
 		property_id = HAL_PARAM_VENC_VQZIP_SEI;
 		enable.enable = ctrl->val;
@@ -3658,6 +3712,25 @@ static int try_set_ctrl(struct msm_vidc_inst *inst, struct v4l2_ctrl *ctrl)
 				ctrl->val);
 		pdata = &iframesize_type;
 		break;
+	case V4L2_CID_MPEG_VIDC_VIDEO_SEND_SKIPPED_FRAME:
+		property_id = HAL_PARAM_VENC_SEND_OUTPUT_FOR_SKIPPED_FRAME;
+		switch (ctrl->val) {
+		case V4L2_MPEG_VIDC_VIDEO_SEND_SKIPPED_FRAME_ENABLE:
+			enable.enable = 1;
+			break;
+		case V4L2_MPEG_VIDC_VIDEO_SEND_SKIPPED_FRAME_DISABLE:
+			enable.enable = 0;
+			break;
+		default:
+			dprintk(VIDC_ERR,
+				"Invalid send skipped frames control value %d\n",
+				ctrl->val);
+			rc = -ENOTSUPP;
+			break;
+		}
+		pdata = &enable;
+		break;
+		
 	default:
 		dprintk(VIDC_ERR, "Unsupported index: %x\n", ctrl->id);
 		rc = -ENOTSUPP;
@@ -3745,7 +3818,7 @@ static int try_set_ext_ctrl(struct msm_vidc_inst *inst,
 	struct hal_aspect_ratio sar;
 	struct hal_bitrate bitrate;
 	struct hal_frame_size blur_res;
-	struct v4l2_ctrl *temp_ctrl;
+	struct v4l2_control temp_ctrl;
 
 	if (!inst || !inst->core || !inst->core->device || !ctrl) {
 		dprintk(VIDC_ERR, "%s invalid parameters\n", __func__);
@@ -3812,12 +3885,15 @@ static int try_set_ext_ctrl(struct msm_vidc_inst *inst,
 			/* Sanity check for the QP boundaries as we are using
 			 * same control to set Initial QP for all the codecs
 			 */
-			temp_ctrl->id =
+			temp_ctrl.id =
 				V4L2_CID_MPEG_VIDC_VIDEO_INITIAL_I_FRAME_QP;
-			temp_ctrl->val = control[i].value;
-			rc = msm_venc_validate_qp_value(inst, temp_ctrl);
+			temp_ctrl.value = control[i].value;
+
+			rc = msm_comm_s_ctrl(inst, &temp_ctrl);
 			if (rc) {
-				dprintk(VIDC_ERR, "Invalid Initial I QP\n");
+				dprintk(VIDC_ERR,
+					"%s Failed setting Initial I Frame QP : %d\n",
+					__func__, rc);
 				break;
 			}
 			quant.qpi = control[i].value;
@@ -3825,12 +3901,14 @@ static int try_set_ext_ctrl(struct msm_vidc_inst *inst,
 			pdata = &quant;
 			break;
 		case V4L2_CID_MPEG_VIDC_VIDEO_INITIAL_P_FRAME_QP:
-			temp_ctrl->id =
+			temp_ctrl.id =
 				V4L2_CID_MPEG_VIDC_VIDEO_INITIAL_P_FRAME_QP;
-			temp_ctrl->val = control[i].value;
-			rc = msm_venc_validate_qp_value(inst, temp_ctrl);
+			temp_ctrl.value = control[i].value;
+			rc = msm_comm_s_ctrl(inst, &temp_ctrl);
 			if (rc) {
-				dprintk(VIDC_ERR, "Invalid Initial P QP\n");
+				dprintk(VIDC_ERR,
+					"%s Failed setting Initial P Frame QP : %d\n",
+					__func__, rc);
 				break;
 			}
 			quant.qpp = control[i].value;
@@ -3838,12 +3916,14 @@ static int try_set_ext_ctrl(struct msm_vidc_inst *inst,
 			pdata = &quant;
 			break;
 		case V4L2_CID_MPEG_VIDC_VIDEO_INITIAL_B_FRAME_QP:
-			temp_ctrl->id =
+			temp_ctrl.id =
 				V4L2_CID_MPEG_VIDC_VIDEO_INITIAL_B_FRAME_QP;
-			temp_ctrl->val = control[i].value;
-			rc = msm_venc_validate_qp_value(inst, temp_ctrl);
+			temp_ctrl.value = control[i].value;
+			rc = msm_comm_s_ctrl(inst, &temp_ctrl);
 			if (rc) {
-				dprintk(VIDC_ERR, "Invalid Initial B QP\n");
+				dprintk(VIDC_ERR,
+					"%s Failed setting Initial B Frame QP : %d\n",
+					__func__, rc);
 				break;
 			}
 			quant.qpb = control[i].value;

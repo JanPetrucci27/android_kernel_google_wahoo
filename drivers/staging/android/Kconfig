@@ -89,6 +89,13 @@ config ONESHOT_SYNC_USER
 	depends on SYNC
 	help
 	  Provide a userspace API for creating oneshot sync objects.
+	  
+config SYNC_DEBUG
+	bool "Debug software synchronization"
+	default n
+	depends on SYNC
+	---help---
+	  This makes the sync driver keep track of fence names.
 
 config ANDROID_VSOC
 	tristate "Android Virtual SoC support"

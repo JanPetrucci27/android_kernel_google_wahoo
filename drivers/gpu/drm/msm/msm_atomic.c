@@ -26,7 +26,10 @@ struct msm_commit {
 	uint32_t fence;
 	struct msm_fence_cb fence_cb;
 	uint32_t crtc_mask;
-	struct kthread_work commit_work;
+	union {
+		struct kthread_work commit_work;
+		struct work_struct clean_work;
+	};
 };
 
 /* block until specified crtcs are no longer pending update, and
@@ -61,7 +64,6 @@ static void end_atomic(struct msm_drm_private *priv, uint32_t crtc_mask)
 
 static void commit_destroy(struct msm_commit *commit)
 {
-	end_atomic(commit->dev->dev_private, commit->crtc_mask);
 	kfree(commit);
 }
 
@@ -392,6 +394,16 @@ static void msm_atomic_helper_commit_modeset_enables(struct drm_device *dev,
 	}
 }
 
+static void complete_commit_cleanup(struct work_struct *work)
+{
+	struct msm_commit *c = container_of(work, typeof(*c), clean_work);
+	struct drm_atomic_state *state = c->state;
+
+	drm_atomic_state_put(state);
+
+	commit_destroy(c);
+}
+
 /* The (potentially) asynchronous part of the commit.  At this point
  * nothing can fail short of armageddon.
  */
@@ -429,9 +441,7 @@ static void complete_commit(struct msm_commit *commit)
 
 	kms->funcs->complete_commit(kms, state);
 
-	drm_atomic_state_free(state);
-
-	commit_destroy(commit);
+	end_atomic(priv, commit->crtc_mask);
 }
 
 static void fence_cb(struct msm_fence_cb *cb)
@@ -443,16 +453,17 @@ static void fence_cb(struct msm_fence_cb *cb)
 
 static void _msm_drm_commit_work_cb(struct kthread_work *work)
 {
-	struct msm_commit *commit =  NULL;
+	struct msm_commit *c = container_of(work, typeof(*c), commit_work);
 
-	if (!work) {
-		DRM_ERROR("%s: Invalid commit work data!\n", __func__);
-		return;
+	complete_commit(c);
+	
+	if (c->nonblock) {
+		/* Offload the cleanup onto little CPUs (an unbound wq) */
+		INIT_WORK(&c->clean_work, complete_commit_cleanup);
+		queue_work(system_unbound_wq, &c->clean_work);
+	} else {
+		complete_commit_cleanup(&c->clean_work);
 	}
-
-	commit = container_of(work, struct msm_commit, commit_work);
-
-	complete_commit(commit);
 }
 
 static struct msm_commit *commit_init(struct drm_atomic_state *state)
@@ -645,7 +656,7 @@ int msm_atomic_commit(struct drm_device *dev,
 	msm_wait_fence(dev, commit->fence, &timeout, false);
 
 	complete_commit(commit);
-
+	complete_commit_cleanup(&commit->clean_work);
 	return 0;
 
 error:

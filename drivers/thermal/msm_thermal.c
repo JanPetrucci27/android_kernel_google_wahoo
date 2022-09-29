@@ -2335,6 +2335,7 @@ static ssize_t ocr_reg_mode_store(struct kobject *kobj,
 		pr_err("Invalid value %d for mode\n", val);
 		goto done_ocr_store;
 	}
+		goto done_ocr_store;
 
 	if (val != reg->mode) {
 		ret = request_optimum_current(reg, val);
@@ -2424,6 +2425,7 @@ static ssize_t psm_reg_mode_store(struct kobject *kobj,
 		pr_err("Invalid input %s for mode\n", buf);
 		goto done_psm_store;
 	}
+		goto done_psm_store;
 
 	if ((val != PMIC_PWM_MODE) && (val != PMIC_AUTO_MODE)) {
 		pr_err("Invalid number %d for mode\n", val);
@@ -3172,7 +3174,8 @@ static int __ref update_offline_cores(int val)
 
 	if (pend_hotplug_req && !in_suspend && !retry_in_progress) {
 		retry_in_progress = true;
-		schedule_delayed_work(&retry_hotplug_work,
+		queue_delayed_work(system_power_efficient_wq,
+			&retry_hotplug_work,
 			msecs_to_jiffies(HOTPLUG_RETRY_INTERVAL_MS));
 	}
 
@@ -3668,8 +3671,9 @@ static void check_temp(struct work_struct *work)
 
 reschedule:
 	if (polling_enabled)
-		schedule_delayed_work(&check_temp_work,
-				msecs_to_jiffies(msm_thermal_info.poll_ms));
+		queue_delayed_work(system_power_efficient_wq,
+			&check_temp_work,
+			msecs_to_jiffies(msm_thermal_info.poll_ms));
 }
 
 static int __ref msm_thermal_cpu_callback(struct notifier_block *nfb,
@@ -5008,6 +5012,7 @@ static ssize_t __ref store_cc_enabled(struct kobject *kobj,
 		pr_info("Core control enabled\n");
 		cpus_previously_online_update();
 		register_cpu_notifier(&msm_thermal_cpu_notifier);
+		goto done_store_cc;
 		/*
 		 * Re-evaluate thermal core condition, update current status
 		 * and set threshold for all cpus.
@@ -5062,6 +5067,7 @@ static ssize_t __ref store_cpus_offlined(struct kobject *kobj,
 		pr_err("Ignoring request; polling thread is enabled.\n");
 		goto done_cc;
 	}
+		goto done_cc;
 
 	pr_info("\"%s\"(PID:%i) request cpus offlined mask %d\n",
 		current->comm, current->pid, val);
@@ -7572,7 +7578,7 @@ int __init msm_thermal_device_init(void)
 {
 	return platform_driver_register(&msm_thermal_device_driver);
 }
-arch_initcall(msm_thermal_device_init);
+subsys_initcall(msm_thermal_device_init);
 
 int __init msm_thermal_late_init(void)
 {

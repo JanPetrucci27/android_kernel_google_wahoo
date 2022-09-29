@@ -634,80 +634,6 @@ static int arp_xmit_finish(struct net *net, struct sock *sk, struct sk_buff *skb
 	return dev_queue_xmit(skb);
 }
 
-static inline bool arp_check_log(const struct sk_buff *skb,
-				 struct ethhdr *eth, struct arphdr *arp,
-				 char *tip, char *dev_name)
-{
-	struct ether_arp_hdr {
-		/* Lifted from the comments in uapi/linux/if_arp.h. */
-		unsigned char		ar_sha[ETH_ALEN];
-		unsigned char		ar_sip[4];
-		unsigned char		ar_tha[ETH_ALEN];
-		unsigned char		ar_tip[4];
-	} __packed * arp_ether;
-	const struct net_device *dev = skb->dev;
-
-	if (skb_headlen(skb) < sizeof(*eth) + sizeof(*arp) + sizeof(*arp_ether))
-		return false;
-
-	if (!dev || !arp_hdr(skb))
-		return false;
-
-	arp_ether = (struct ether_arp_hdr *)(arp_hdr(skb) + 1);
-	memcpy(arp, arp_hdr(skb), sizeof(*arp));
-	if (arp->ar_hrd != htons(ARPHRD_ETHER) ||
-	    arp->ar_op != htons(ARPOP_REQUEST))
-		return false;
-
-	memcpy(eth, skb->data, sizeof(*eth));
-	if (ether_addr_equal(eth->h_dest, dev->broadcast))
-		return false;
-
-	memcpy(tip, arp_ether->ar_tip, 4);
-	memcpy(dev_name, dev->name, IFNAMSIZ);
-
-	return true;
-}
-
-static inline void arp_log(const struct ethhdr *eth,
-			   const struct arphdr *arp, const char *tip,
-			   const char *dev_name, int err)
-{
-	const char *msg, *type;
-
-	switch (htons(arp->ar_op)) {
-	case ARPOP_REQUEST:
-		type = "request";
-		break;
-	case ARPOP_REPLY:
-		type = "reply";
-		break;
-	default:
-		type = "???";
-		break;
-	}
-	msg = err ? "failed to send" : "sent";
-	pr_info("%s: %s ARP %s for %pI4 %pM %s err=%d\n",
-		__func__, msg, type, tip, eth->h_dest, dev_name, err);
-}
-
-static int arp_xmit_finish_log(struct net *net, struct sock *sk,
-			       struct sk_buff *skb)
-{
-	char dev_name[IFNAMSIZ];
-	struct ethhdr eth;
-	struct arphdr arp;
-	char tip[4];
-
-	bool log = arp_check_log(skb, &eth, &arp, tip, dev_name);
-	int err = arp_xmit_finish(net, sk, skb);
-
-	if (log)
-		arp_log(&eth, &arp, tip, dev_name, err);
-
-	return err;
-}
-
 /*
  *	Send an arp packet.
  */
@@ -716,7 +642,7 @@ void arp_xmit(struct sk_buff *skb)
 	/* Send it off, maybe filter it using firewalling first.  */
 	NF_HOOK(NFPROTO_ARP, NF_ARP_OUT,
 		dev_net(skb->dev), NULL, skb, NULL, skb->dev,
-		arp_xmit_finish_log);
+		arp_xmit_finish);
 }
 EXPORT_SYMBOL(arp_xmit);
 

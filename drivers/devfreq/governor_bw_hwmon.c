@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2016, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -48,9 +48,6 @@ struct hwmon_node {
 	unsigned int hyst_trigger_count;
 	unsigned int hyst_length;
 	unsigned int idle_mbps;
-	unsigned int low_power_ceil_mbps;
-	unsigned int low_power_io_percent;
-	unsigned int low_power_delay;
 	unsigned int mbps_zones[NUM_MBPS_ZONES];
 
 	unsigned long prev_ab;
@@ -65,7 +62,6 @@ struct hwmon_node {
 	unsigned long hyst_mbps;
 	unsigned long hyst_trig_win;
 	unsigned long hyst_en;
-	unsigned long above_low_power;
 	unsigned long prev_req;
 	unsigned int wake;
 	unsigned int down_cnt;
@@ -78,6 +74,7 @@ struct hwmon_node {
 	struct bw_hwmon *hw;
 	struct devfreq_governor *gov;
 	struct attribute_group *attr_grp;
+	struct mutex mon_lock;
 };
 
 #define UP_WAKE 1
@@ -89,6 +86,7 @@ static DEFINE_MUTEX(list_lock);
 
 static int use_cnt;
 static DEFINE_MUTEX(state_lock);
+static DEFINE_MUTEX(sync_lock);
 
 #define show_attr(name) \
 static ssize_t show_##name(struct device *dev,				\
@@ -173,7 +171,7 @@ static DEVICE_ATTR(__attr, 0644, show_list_##__attr, store_list_##__attr)
 #define MAX_MS	500U
 
 /* Returns MBps of read/writes for the sampling window. */
-static unsigned int bytes_to_mbps(long long bytes, unsigned int us)
+static unsigned long bytes_to_mbps(unsigned long long bytes, unsigned int us)
 {
 	bytes *= USEC_PER_SEC;
 	do_div(bytes, us);
@@ -315,7 +313,7 @@ static unsigned long get_bw_and_set_irq(struct hwmon_node *node,
 	unsigned long meas_mbps_zone;
 	unsigned long hist_lo_tol, hyst_lo_tol;
 	struct bw_hwmon *hw = node->hw;
-	unsigned int new_bw, io_percent;
+	unsigned int new_bw, io_percent = node->io_percent;
 	ktime_t ts;
 	unsigned int ms = 0;
 
@@ -350,17 +348,6 @@ static unsigned long get_bw_and_set_irq(struct hwmon_node *node,
 		if (node->hist_mem)
 			node->hist_mem--;
 	}
-
-	/* Keep track of whether we are in low power mode consistently. */
-	if (meas_mbps > node->low_power_ceil_mbps)
-		node->above_low_power = node->low_power_delay;
-	if (node->above_low_power)
-		node->above_low_power--;
-
-	if (node->above_low_power)
-		io_percent = node->io_percent;
-	else
-		io_percent = node->low_power_io_percent;
 
 	/*
 	 * The AB value that corresponds to the lowest mbps zone greater than
@@ -524,9 +511,12 @@ int update_bw_hwmon(struct bw_hwmon *hwmon)
 	if (!node)
 		return -ENODEV;
 
-	if (!node->mon_started)
+	mutex_lock(&node->mon_lock);
+	if (!node->mon_started) {
+		mutex_unlock(&node->mon_lock);
 		return -EBUSY;
-
+	}
+	
 	dev_dbg(df->dev.parent, "Got update request\n");
 	devfreq_monitor_stop(df);
 
@@ -538,7 +528,8 @@ int update_bw_hwmon(struct bw_hwmon *hwmon)
 	mutex_unlock(&df->lock);
 
 	devfreq_monitor_start(df);
-
+	
+	mutex_unlock(&node->mon_lock);
 	return 0;
 }
 
@@ -585,7 +576,9 @@ static void stop_monitor(struct devfreq *df, bool init)
 	struct hwmon_node *node = df->data;
 	struct bw_hwmon *hw = node->hw;
 
+	mutex_lock(&node->mon_lock);
 	node->mon_started = false;
+	mutex_unlock(&node->mon_lock);
 
 	if (init) {
 		devfreq_monitor_stop(df);
@@ -784,9 +777,6 @@ gov_attr(hist_memory, 0U, 90U);
 gov_attr(hyst_trigger_count, 0U, 90U);
 gov_attr(hyst_length, 0U, 90U);
 gov_attr(idle_mbps, 0U, 2000U);
-gov_attr(low_power_ceil_mbps, 0U, 2500U);
-gov_attr(low_power_io_percent, 1U, 100U);
-gov_attr(low_power_delay, 1U, 60U);
 gov_list_attr(mbps_zones, NUM_MBPS_ZONES, 0U, UINT_MAX);
 
 static struct attribute *dev_attr[] = {
@@ -803,9 +793,6 @@ static struct attribute *dev_attr[] = {
 	&dev_attr_hyst_trigger_count.attr,
 	&dev_attr_hyst_length.attr,
 	&dev_attr_idle_mbps.attr,
-	&dev_attr_low_power_ceil_mbps.attr,
-	&dev_attr_low_power_io_percent.attr,
-	&dev_attr_low_power_delay.attr,
 	&dev_attr_mbps_zones.attr,
 	&dev_attr_throttle_adj.attr,
 	NULL,
@@ -846,6 +833,7 @@ static int devfreq_bw_hwmon_ev_handler(struct devfreq *df,
 		break;
 
 	case DEVFREQ_GOV_INTERVAL:
+		mutex_lock(&sync_lock);
 		sample_ms = *(unsigned int *)data;
 		sample_ms = max(MIN_MS, sample_ms);
 		sample_ms = min(MAX_MS, sample_ms);
@@ -863,8 +851,10 @@ static int devfreq_bw_hwmon_ev_handler(struct devfreq *df,
 		if (ret) {
 			dev_err(df->dev.parent,
 				"Unable to resume HW monitor (%d)\n", ret);
+			mutex_unlock(&sync_lock);
 			return ret;
 		}
+		mutex_unlock(&sync_lock);
 		break;
 
 	case DEVFREQ_GOV_SUSPEND:
@@ -936,9 +926,6 @@ int register_bw_hwmon(struct device *dev, struct bw_hwmon *hwmon)
 	node->guard_band_mbps = 100;
 	node->decay_rate = 90;
 	node->io_percent = 16;
-	node->low_power_ceil_mbps = 0;
-	node->low_power_io_percent = 16;
-	node->low_power_delay = 60;
 	node->bw_step = 190;
 	node->sample_ms = 50;
 	node->up_scale = 0;
@@ -951,6 +938,8 @@ int register_bw_hwmon(struct device *dev, struct bw_hwmon *hwmon)
 	node->idle_mbps = 400;
 	node->mbps_zones[0] = 0;
 	node->hw = hwmon;
+	
+	mutex_init(&node->mon_lock);
 
 	mutex_lock(&list_lock);
 	list_add_tail(&node->list, &hwmon_list);

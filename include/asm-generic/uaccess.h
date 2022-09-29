@@ -73,69 +73,6 @@ struct exception_table_entry
 extern unsigned long search_exception_table(unsigned long);
 
 /*
- * architectures with an MMU should override these two
- */
-#ifndef __copy_from_user
-static inline __must_check long __copy_from_user(void *to,
-		const void __user * from, unsigned long n)
-{
-	if (__builtin_constant_p(n)) {
-		switch(n) {
-		case 1:
-			*(u8 *)to = *(u8 __force *)from;
-			return 0;
-		case 2:
-			*(u16 *)to = *(u16 __force *)from;
-			return 0;
-		case 4:
-			*(u32 *)to = *(u32 __force *)from;
-			return 0;
-#ifdef CONFIG_64BIT
-		case 8:
-			*(u64 *)to = *(u64 __force *)from;
-			return 0;
-#endif
-		default:
-			break;
-		}
-	}
-
-	memcpy(to, (const void __force *)from, n);
-	return 0;
-}
-#endif
-
-#ifndef __copy_to_user
-static inline __must_check long __copy_to_user(void __user *to,
-		const void *from, unsigned long n)
-{
-	if (__builtin_constant_p(n)) {
-		switch(n) {
-		case 1:
-			*(u8 __force *)to = *(u8 *)from;
-			return 0;
-		case 2:
-			*(u16 __force *)to = *(u16 *)from;
-			return 0;
-		case 4:
-			*(u32 __force *)to = *(u32 *)from;
-			return 0;
-#ifdef CONFIG_64BIT
-		case 8:
-			*(u64 __force *)to = *(u64 *)from;
-			return 0;
-#endif
-		default:
-			break;
-		}
-	}
-
-	memcpy((void __force *)to, from, n);
-	return 0;
-}
-#endif
-
-/*
  * These are the main single-value transfer routines.  They automatically
  * use the right size if we just have the right pointer type.
  * This version just falls back to copy_{from,to}_user, which should
@@ -174,7 +111,7 @@ static inline __must_check long __copy_to_user(void __user *to,
 
 static inline int __put_user_fn(size_t size, void __user *ptr, void *x)
 {
-	size = __copy_to_user(ptr, x, size);
+	size = raw_copy_to_user(ptr, x, size);
 	return size ? -EFAULT : size;
 }
 
@@ -236,7 +173,7 @@ extern int __put_user_bad(void) __attribute__((noreturn));
 #ifndef __get_user_fn
 static inline int __get_user_fn(size_t size, const void __user *ptr, void *x)
 {
-	size_t n = __copy_from_user(x, ptr, size);
+	size_t n = raw_copy_to_user(x, ptr, size);
 	if (unlikely(n)) {
 		memset(x + (size - n), 0, n);
 		return -EFAULT;
@@ -249,36 +186,6 @@ static inline int __get_user_fn(size_t size, const void __user *ptr, void *x)
 #endif
 
 extern int __get_user_bad(void) __attribute__((noreturn));
-
-#ifndef __copy_from_user_inatomic
-#define __copy_from_user_inatomic __copy_from_user
-#endif
-
-#ifndef __copy_to_user_inatomic
-#define __copy_to_user_inatomic __copy_to_user
-#endif
-
-static inline long copy_from_user(void *to,
-		const void __user * from, unsigned long n)
-{
-	unsigned long res = n;
-	might_fault();
-	if (likely(access_ok(VERIFY_READ, from, n)))
-		res = __copy_from_user(to, from, n);
-	if (unlikely(res))
-		memset(to + (n - res), 0, res);
-	return res;
-}
-
-static inline long copy_to_user(void __user *to,
-		const void *from, unsigned long n)
-{
-	might_fault();
-	if (access_ok(VERIFY_WRITE, to, n))
-		return __copy_to_user(to, from, n);
-	else
-		return n;
-}
 
 /*
  * Copy a null terminated string from userspace.

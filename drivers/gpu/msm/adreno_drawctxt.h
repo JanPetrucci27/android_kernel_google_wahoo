@@ -1,4 +1,4 @@
-/* Copyright (c) 2002,2007-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2002,2007-2018, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -19,7 +19,6 @@ struct adreno_context_type {
 };
 
 #define ADRENO_CONTEXT_DRAWQUEUE_SIZE 128
-#define SUBMIT_RETIRE_TICKS_SIZE 7
 
 struct kgsl_device;
 struct adreno_device;
@@ -40,16 +39,13 @@ struct kgsl_context;
  * @pending: Priority list node for the dispatcher list of pending contexts
  * @wq: Workqueue structure for contexts to sleep pending room in the queue
  * @waiting: Workqueue structure for contexts waiting for a timestamp or event
+ * @timeout: Workqueue structure for contexts waiting to invalidate
  * @queued: Number of commands queued in the drawqueue
  * @fault_policy: GFT fault policy set in _skip_cmd();
  * @debug_root: debugfs entry for this context.
  * @queued_timestamp: The last timestamp that was queued on this context
  * @rb: The ringbuffer in which this context submits commands.
  * @submitted_timestamp: The last timestamp that was submitted for this context
- * @submit_retire_ticks: Array to hold command obj execution times from submit
- *                       to retire
- * @ticks_index: The index into submit_retire_ticks[] where the new delta will
- *		 be written.
  * @active_node: Linkage for nodes in active_list
  * @active_time: Time when this context last seen
  */
@@ -68,6 +64,7 @@ struct adreno_context {
 	struct plist_node pending;
 	wait_queue_head_t wq;
 	wait_queue_head_t waiting;
+	wait_queue_head_t timeout;
 
 	int queued;
 	unsigned int fault_policy;
@@ -75,8 +72,6 @@ struct adreno_context {
 	unsigned int queued_timestamp;
 	struct adreno_ringbuffer *rb;
 	unsigned int submitted_timestamp;
-	uint64_t submit_retire_ticks[SUBMIT_RETIRE_TICKS_SIZE];
-	int ticks_index;
 
 	struct list_head active_node;
 	unsigned long active_time;
@@ -135,5 +130,18 @@ void adreno_drawctxt_invalidate(struct kgsl_device *device,
 
 void adreno_drawctxt_dump(struct kgsl_device *device,
 		struct kgsl_context *context);
+
+static struct adreno_context_type ctxt_type_table[] = {KGSL_CONTEXT_TYPES};
+
+static inline const char *get_api_type_str(unsigned int type)
+{
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(ctxt_type_table); i++) {
+		if (ctxt_type_table[i].type == type)
+			return ctxt_type_table[i].str;
+	}
+	return "UNKNOWN";
+}
 
 #endif  /* __ADRENO_DRAWCTXT_H */

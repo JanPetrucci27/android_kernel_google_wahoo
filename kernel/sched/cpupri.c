@@ -63,8 +63,9 @@ drop_nopreempt_cpus(struct cpumask *lowest_mask)
 	while (cpu < nr_cpu_ids) {
 		/* unlocked access */
 		struct task_struct *task = READ_ONCE(cpu_rq(cpu)->curr);
-		if (task_may_not_preempt(task, cpu))
+		if (task_may_not_preempt(task, cpu)) {
 			cpumask_clear_cpu(cpu, lowest_mask);
+		}
 		cpu = cpumask_next(cpu, lowest_mask);
 	}
 }
@@ -275,4 +276,15 @@ void cpupri_cleanup(struct cpupri *cp)
 	kfree(cp->cpu_to_pri);
 	for (i = 0; i < CPUPRI_NR_PRIORITIES; i++)
 		free_cpumask_var(cp->pri_to_cpu[i].mask);
+}
+
+/*
+ * cpupri_check_rt - check if CPU has a RT task
+ * should be called from rcu-sched read section.
+ */
+bool cpupri_check_rt(void)
+{
+	int cpu = raw_smp_processor_id();
+
+	return cpu_rq(cpu)->rd->cpupri.cpu_to_pri[cpu] > CPUPRI_NORMAL;
 }

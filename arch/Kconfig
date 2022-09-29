@@ -216,6 +216,9 @@ config GENERIC_SMP_IDLE_THREAD
 
 config GENERIC_IDLE_POLL_SETUP
        bool
+	   
+config ARCH_HAS_SET_MEMORY
+	bool
 
 # Select if arch init_task initializer is different to init/init_task.c
 config ARCH_INIT_TASK
@@ -289,6 +292,9 @@ config HAVE_PERF_USER_STACK_DUMP
 	  architectures.
 
 config HAVE_ARCH_JUMP_LABEL
+	bool
+	
+config HAVE_ARCH_JUMP_LABEL_RELATIVE
 	bool
 
 config HAVE_RCU_TABLE_FREE
@@ -423,6 +429,53 @@ config CC_STACKPROTECTOR_STRONG
 
 endchoice
 
+config LTO
+	def_bool n
+
+config ARCH_SUPPORTS_LTO_CLANG
+	bool
+	help
+	  An architecture should select this option if it supports:
+	  - compiling with clang,
+	  - compiling inline assembly with clang's integrated assembler,
+	  - and linking with LLD.
+
+choice
+	prompt "Link-Time Optimization (LTO) (EXPERIMENTAL)"
+	default LTO_NONE
+	help
+	  This option turns on Link-Time Optimization (LTO).
+
+config LTO_NONE
+	bool "None"
+
+config LTO_CLANG
+	bool "Use clang Link Time Optimization (LTO) (EXPERIMENTAL)"
+	depends on ARCH_SUPPORTS_LTO_CLANG
+	depends on !FTRACE_MCOUNT_RECORD || HAVE_C_RECORDMCOUNT
+	depends on !KASAN
+	select LTO
+	help
+          This option enables clang's Link Time Optimization (LTO), which allows
+          the compiler to optimize the kernel globally at link time. If you
+          enable this option, the compiler generates LLVM IR instead of object
+          files, and the actual compilation from IR occurs at the LTO link step,
+          which may take several minutes.
+
+          If you select this option, you must compile the kernel with clang and
+	  LLD.
+
+endchoice
+
+config POLLY_CLANG
+	bool "Enable LLVM's polyhedral loop optimizer (Polly) (EXPERIMENTAL)"
+	default y
+	help
+	  This option enables LLVM's polyhedral loop optimizer. Polly is able
+	  to optimize various loops throughout the kernel for maximum cache
+	  locality. This requires an LLVM toolchain explicitly compiled with
+	  Polly support.
+
 config HAVE_ARCH_WITHIN_STACK_FRAMES
 	bool
 	help
@@ -464,6 +517,11 @@ config HAVE_IRQ_TIME_ACCOUNTING
 	  Archs need to ensure they use a high enough resolution clock to
 	  support irq time accounting and then call enable_sched_clock_irqtime().
 
+config HAVE_MOVE_PMD
+	bool
+	help
+	  Archs that select this are able to move page tables at the PMD level.
+
 config HAVE_ARCH_TRANSPARENT_HUGEPAGE
 	bool
 
@@ -491,12 +549,6 @@ config MODULES_USE_ELF_REL
 	help
 	  Modules only use ELF REL relocations.  Modules with ELF RELA
 	  relocations will give an error.
-
-config HAVE_UNDERSCORE_SYMBOL_PREFIX
-	bool
-	help
-	  Some architectures generate an _ in front of C symbols; things like
-	  module loading and assembly files need to know about this.
 
 config HAVE_IRQ_EXIT_ON_IRQ_STACK
 	bool
@@ -645,5 +697,36 @@ config OLD_SIGACTION
 
 config COMPAT_OLD_SIGACTION
 	bool
+	
+config ARCH_HAS_REFCOUNT_FULL
+	bool
+	select ARCH_HAS_REFCOUNT
+	help
+	  An architecture selects this when the optimized refcount_t
+	  implementation it provides covers all the cases that
+	  CONFIG_REFCOUNT_FULL covers as well, in which case it makes no
+	  sense to even offer CONFIG_REFCOUNT_FULL as a user selectable
+	  option.
+
+config ARCH_HAS_REFCOUNT
+	bool
+	help
+	  An architecture selects this when it has implemented refcount_t
+	  using open coded assembly primitives that provide an optimized
+	  refcount_t implementation, possibly at the expense of some full
+	  refcount state checks of CONFIG_REFCOUNT_FULL=y.
+
+	  The refcount overflow check behavior, however, must be retained.
+	  Catching overflows is the primary security concern for protecting
+	  against bugs in reference counts.
+
+config REFCOUNT_FULL
+	bool "Perform full reference count validation at the expense of speed" if !ARCH_HAS_REFCOUNT_FULL
+	help
+	  Enabling this switches the refcounting infrastructure from a fast
+	  unchecked atomic_t implementation to a fully state checked
+	  implementation, which can be (slightly) slower but provides protections
+	  against various use-after-free conditions that can be used in
+	  security flaw exploits.
 
 source "kernel/gcov/Kconfig"

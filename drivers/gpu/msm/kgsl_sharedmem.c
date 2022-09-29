@@ -28,7 +28,6 @@
 #include "kgsl_device.h"
 #include "kgsl_log.h"
 #include "kgsl_mmu.h"
-#include "kgsl_pool.h"
 
 /*
  * The user can set this from debugfs to force failed memory allocations to
@@ -99,6 +98,75 @@ struct mem_entry_stats {
 
 static void kgsl_cma_unlock_secure(struct kgsl_memdesc *memdesc);
 
+static ssize_t
+imported_mem_show(struct kgsl_process_private *priv,
+				int type, char *buf)
+{
+	struct kgsl_mem_entry *entry;
+	uint64_t imported_mem = 0;
+	int id = 0;
+
+	spin_lock(&priv->mem_lock);
+	for (entry = idr_get_next(&priv->mem_idr, &id); entry;
+		id++, entry = idr_get_next(&priv->mem_idr, &id)) {
+
+		int egl_surface_count = 0, egl_image_count = 0;
+		struct kgsl_memdesc *m;
+
+		if (kgsl_mem_entry_get(entry) == 0)
+			continue;
+		spin_unlock(&priv->mem_lock);
+
+		m = &entry->memdesc;
+		if (kgsl_memdesc_usermem_type(m) == KGSL_MEM_ENTRY_ION) {
+			kgsl_get_egl_counts(entry, &egl_surface_count,
+					&egl_image_count);
+
+			if (kgsl_memdesc_get_memtype(m) ==
+						KGSL_MEMTYPE_EGL_SURFACE)
+				imported_mem += m->size;
+			else if (egl_surface_count == 0) {
+				uint64_t size = m->size;
+
+				do_div(size, (egl_image_count ?
+							egl_image_count : 1));
+				imported_mem += size;
+			}
+		}
+
+		kgsl_mem_entry_put(entry);
+		spin_lock(&priv->mem_lock);
+	}
+	spin_unlock(&priv->mem_lock);
+
+	return scnprintf(buf, PAGE_SIZE, "%llu\n", imported_mem);
+}
+
+static ssize_t
+gpumem_mapped_show(struct kgsl_process_private *priv,
+				int type, char *buf)
+{
+	return scnprintf(buf, PAGE_SIZE, "%llu\n",
+			priv->gpumem_mapped);
+}
+
+static ssize_t
+gpumem_unmapped_show(struct kgsl_process_private *priv, int type, char *buf)
+{
+	if (priv->gpumem_mapped > priv->stats[type].cur)
+		return -EIO;
+
+	return scnprintf(buf, PAGE_SIZE, "%llu\n",
+			priv->stats[type].cur - priv->gpumem_mapped);
+}
+
+static struct kgsl_mem_entry_attribute debug_memstats[] = {
+	__MEM_ENTRY_ATTR(0, imported_mem, imported_mem_show),
+	__MEM_ENTRY_ATTR(0, gpumem_mapped, gpumem_mapped_show),
+	__MEM_ENTRY_ATTR(KGSL_MEM_ENTRY_KERNEL, gpumem_unmapped,
+				gpumem_unmapped_show),
+};
+
 /**
  * Show the current amount of memory allocated for the given memtype
  */
@@ -128,12 +196,10 @@ static ssize_t mem_entry_sysfs_show(struct kobject *kobj,
 	ssize_t ret;
 
 	/*
-	 * 1. sysfs_remove_file waits for reads to complete before the node
-	 *    is deleted.
-	 * 2. kgsl_process_init_sysfs takes a refcount to the process_private,
-	 *    which is put at the end of kgsl_process_uninit_sysfs.
-	 * These two conditions imply that priv will not be freed until this
-	 * function completes, and no further locking is needed.
+	 * kgsl_process_init_sysfs takes a refcount to the process_private,
+	 * which is put when the kobj is released. This implies that priv will
+	 * not be freed until this function completes, and no further locking
+	 * is needed.
 	 */
 	priv = kobj ? container_of(kobj, struct kgsl_process_private, kobj) :
 			NULL;
@@ -146,12 +212,22 @@ static ssize_t mem_entry_sysfs_show(struct kobject *kobj,
 	return ret;
 }
 
+static void mem_entry_release(struct kobject *kobj)
+{
+	struct kgsl_process_private *priv;
+
+	priv = container_of(kobj, struct kgsl_process_private, kobj);
+	/* Put the refcount we got in kgsl_process_init_sysfs */
+	kgsl_process_private_put(priv);
+}
+
 static const struct sysfs_ops mem_entry_sysfs_ops = {
 	.show = mem_entry_sysfs_show,
 };
 
 static struct kobj_type ktype_mem_entry = {
 	.sysfs_ops = &mem_entry_sysfs_ops,
+	.release = &mem_entry_release,
 };
 
 static struct mem_entry_stats mem_stats[] = {
@@ -174,8 +250,6 @@ kgsl_process_uninit_sysfs(struct kgsl_process_private *private)
 	}
 
 	kobject_put(&private->kobj);
-	/* Put the refcount we got in kgsl_process_init_sysfs */
-	kgsl_process_private_put(private);
 }
 
 /**
@@ -215,6 +289,13 @@ void kgsl_process_init_sysfs(struct kgsl_device *device,
 			&mem_stats[i].max_attr.attr))
 			WARN(1, "Couldn't create sysfs file '%s'\n",
 				mem_stats[i].max_attr.attr.name);
+	}
+
+	for (i = 0; i < ARRAY_SIZE(debug_memstats); i++) {
+		if (sysfs_create_file(&private->kobj,
+			&debug_memstats[i].attr))
+			WARN(1, "Couldn't create sysfs file '%s'\n",
+				debug_memstats[i].attr.name);
 
 	}
 }
@@ -367,6 +448,8 @@ static int kgsl_page_alloc_vmfault(struct kgsl_memdesc *memdesc,
 
 		get_page(page);
 		vmf->page = page;
+		
+		memdesc->mapsize += PAGE_SIZE;
 
 		return 0;
 	}
@@ -422,7 +505,8 @@ static void kgsl_page_alloc_free(struct kgsl_memdesc *memdesc)
 
 		atomic_long_sub(memdesc->size, &kgsl_driver.stats.secure);
 	} else {
-		atomic_long_sub(memdesc->size, &kgsl_driver.stats.page_alloc);
+		atomic_long_add(memdesc->size,
+			&kgsl_driver.stats.page_free_pending);
 	}
 
 	if (memdesc->priv & KGSL_MEMDESC_TZ_LOCKED) {
@@ -439,6 +523,12 @@ static void kgsl_page_alloc_free(struct kgsl_memdesc *memdesc)
 		kgsl_pool_free_pages(memdesc->pages, memdesc->page_count);
 	else
 		kgsl_pool_free_sgt(memdesc->sgt);
+	
+	if (!(memdesc->priv & KGSL_MEMDESC_TZ_LOCKED)) {
+		atomic_long_sub(memdesc->size, &kgsl_driver.stats.page_alloc);
+		atomic_long_sub(memdesc->size,
+			&kgsl_driver.stats.page_free_pending);
+	}
 
 }
 
@@ -496,6 +586,8 @@ static int kgsl_contiguous_vmfault(struct kgsl_memdesc *memdesc,
 		return VM_FAULT_OOM;
 	else if (ret == -EFAULT)
 		return VM_FAULT_SIGBUS;
+	
+	memdesc->mapsize += PAGE_SIZE;
 
 	return VM_FAULT_NOPAGE;
 }
@@ -729,6 +821,8 @@ kgsl_sharedmem_page_alloc_user(struct kgsl_memdesc *memdesc,
 	 * are allocated by kgsl. This helps with improving the vm fault
 	 * routine by finding the faulted page in constant time.
 	 */
+	if (!(memdesc->flags & KGSL_MEMFLAGS_SECURE))
+		atomic_long_add(size, &kgsl_driver.stats.page_alloc_pending);
 
 	memdesc->pages = kgsl_malloc(len_alloc * sizeof(struct page *));
 
@@ -831,6 +925,9 @@ kgsl_sharedmem_page_alloc_user(struct kgsl_memdesc *memdesc,
 		&kgsl_driver.stats.page_alloc_max);
 
 done:
+	if (!(memdesc->flags & KGSL_MEMFLAGS_SECURE))
+		atomic_long_sub(size, &kgsl_driver.stats.page_alloc_pending);
+	
 	if (ret) {
 		if (memdesc->pages) {
 			unsigned int count = 1;
@@ -1029,7 +1126,7 @@ void kgsl_get_memory_usage(char *name, size_t name_size, uint64_t memflags)
 	else if (type < ARRAY_SIZE(memtype_str) && memtype_str[type] != NULL)
 		strlcpy(name, memtype_str[type], name_size);
 	else
-		snprintf(name, name_size, "unknown(%3d)", type);
+		snprintf(name, name_size, "VK/others(%3d)", type);
 }
 EXPORT_SYMBOL(kgsl_get_memory_usage);
 

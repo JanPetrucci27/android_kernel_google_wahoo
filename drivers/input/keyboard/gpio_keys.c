@@ -490,7 +490,7 @@ static irqreturn_t gpio_keys_gpio_isr(int irq, void *dev_id)
 			bdata->button->gpio);
 	} else {
 		bdata->bouncing_flag = DEBOUNCE_UNSTABLE_IRQ;
-		KEY_LOGI("%s: key %x-%x, (%d) update debounce mode\n",
+		KEY_LOGD("%s: key %x-%x, (%d) update debounce mode\n",
 			__func__, type, bdata->button->code,
 			bdata->button->gpio);
 	}

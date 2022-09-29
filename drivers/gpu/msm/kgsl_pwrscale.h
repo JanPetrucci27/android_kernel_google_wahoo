@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2010-2019, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -25,29 +25,13 @@
 #define KGSL_PWREVENT_STATE	0
 #define KGSL_PWREVENT_GPU_FREQ	1
 #define KGSL_PWREVENT_BUS_FREQ	2
-#define KGSL_PWREVENT_POPP	3
-#define KGSL_PWREVENT_MAX	4
+#define KGSL_PWREVENT_MAX	3
 
 /**
  * Amount of time running at a level to be considered
  * "stable" in msec
  */
 #define STABLE_TIME	150
-
-/* Amount of idle time needed to re-set stability in usec */
-#define POPP_RESET_TIME	1000000
-
-/* Number of POPP levels */
-#define POPP_MAX	4
-
-/* POPP state bits */
-#define POPP_ON		BIT(0)
-#define POPP_PUSH	BIT(1)
-
-struct kgsl_popp {
-	int gpu_x;
-	int ddr_y;
-};
 
 struct kgsl_power_stats {
 	u64 busy_time;
@@ -71,6 +55,7 @@ struct kgsl_pwr_history {
 /**
  * struct kgsl_pwrscale - Power scaling settings for a KGSL device
  * @devfreqptr - Pointer to the devfreq device
+ * @bus_devfreq - Pointer to the bus devfreq device
  * @gpu_profile - GPU profile data for the devfreq device
  * @bus_profile - Bus specific data for the bus devfreq device
  * @freq_table - GPU frequencies for the DCVS algorithm
@@ -79,8 +64,7 @@ struct kgsl_pwr_history {
  * @enabled - Whether or not power scaling is enabled
  * @time - Last submitted sample timestamp
  * @on_time - Timestamp when gpu busy begins
- * @freq_change_time - Timestamp of last freq change or popp update
- * @nh - Notifier for the partner devfreq bus device
+ * @freq_change_time - Timestamp of last freq change
  * @devfreq_wq - Main devfreq workqueue
  * @devfreq_suspend_ws - Pass device suspension to devfreq
  * @devfreq_resume_ws - Pass device resume to devfreq
@@ -88,11 +72,10 @@ struct kgsl_pwr_history {
  * @next_governor_call - Timestamp after which the governor may be notified of
  * a new sample
  * @history - History of power events with timestamps and durations
- * @popp_level - Current level of POPP mitigation
- * @popp_state - Control state for POPP, on/off, recently pushed, etc
  */
 struct kgsl_pwrscale {
 	struct devfreq *devfreqptr;
+	struct devfreq *bus_devfreq;
 	struct msm_adreno_extended_profile gpu_profile;
 	struct msm_busmon_extended_profile bus_profile;
 	unsigned int freq_table[KGSL_MAX_PWRLEVELS];
@@ -102,15 +85,12 @@ struct kgsl_pwrscale {
 	ktime_t time;
 	s64 on_time;
 	s64 freq_change_time;
-	struct srcu_notifier_head nh;
 	struct workqueue_struct *devfreq_wq;
 	struct work_struct devfreq_suspend_ws;
 	struct work_struct devfreq_resume_ws;
 	struct work_struct devfreq_notify_ws;
 	ktime_t next_governor_call;
 	struct kgsl_pwr_history history[KGSL_PWREVENT_MAX];
-	int popp_level;
-	unsigned long popp_state;
 };
 
 int kgsl_pwrscale_init(struct device *dev, const char *governor);
@@ -136,9 +116,6 @@ int kgsl_busmon_target(struct device *dev, unsigned long *freq, u32 flags);
 int kgsl_busmon_get_dev_status(struct device *, struct devfreq_dev_status *);
 int kgsl_busmon_get_cur_freq(struct device *dev, unsigned long *freq);
 
-bool kgsl_popp_check(struct kgsl_device *device);
-
-
 #define KGSL_PWRSCALE_INIT(_priv_data) { \
 	.enabled = true, \
 	.gpu_profile = { \
@@ -158,6 +135,5 @@ bool kgsl_popp_check(struct kgsl_device *device);
 	.history[KGSL_PWREVENT_STATE].size = 20, \
 	.history[KGSL_PWREVENT_GPU_FREQ].size = 3, \
 	.history[KGSL_PWREVENT_BUS_FREQ].size = 5, \
-	.history[KGSL_PWREVENT_POPP].size = 5, \
 	}
 #endif

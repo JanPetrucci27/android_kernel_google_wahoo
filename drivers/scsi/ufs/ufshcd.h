@@ -57,6 +57,7 @@
 #include <linux/completion.h>
 #include <linux/regulator/consumer.h>
 #include <linux/reset.h>
+#include <linux/pm_qos.h>
 #include "unipro.h"
 
 #include <asm/irq.h>
@@ -368,14 +369,6 @@ struct ufs_hba_crypto_variant_ops {
 };
 
 /**
-* struct ufs_hba_pm_qos_variant_ops - variant specific PM QoS callbacks
-*/
-struct ufs_hba_pm_qos_variant_ops {
-	void		(*req_start)(struct ufs_hba *, struct request *);
-	void		(*req_end)(struct ufs_hba *, struct request *, bool);
-};
-
-/**
  * struct ufs_hba_variant - variant specific parameters
  * @name: variant name
  */
@@ -384,7 +377,6 @@ struct ufs_hba_variant {
 	const char				*name;
 	struct ufs_hba_variant_ops		*vops;
 	struct ufs_hba_crypto_variant_ops	*crypto_vops;
-	struct ufs_hba_pm_qos_variant_ops	*pm_qos_vops;
 };
 
 /* clock gating state  */
@@ -964,6 +956,15 @@ struct ufs_hba {
 	/* To monitor slow UFS I/O requests. */
 	u64 slowio_us;
 	u64 slowio_cnt;
+	
+	struct {
+		struct pm_qos_request req;
+		struct work_struct get_work;
+		struct work_struct put_work;
+		struct mutex lock;
+		atomic_t count;
+		bool active;
+	} pm_qos;
 };
 
 static inline void ufshcd_mark_shutdown_ongoing(struct ufs_hba *hba)
@@ -1361,7 +1362,7 @@ static inline void ufshcd_vops_remove_debugfs(struct ufs_hba *hba)
 		hba->var->vops->remove_debugfs(hba);
 }
 #else
-static inline void ufshcd_vops_add_debugfs(struct ufs_hba *hba, struct dentry *)
+static inline void ufshcd_vops_add_debugfs(struct ufs_hba *hba, struct dentry *root)
 {
 }
 
@@ -1417,21 +1418,6 @@ static inline int ufshcd_vops_crypto_engine_get_status(struct ufs_hba *hba,
 		return hba->var->crypto_vops->crypto_engine_get_status(hba,
 			status);
 	return 0;
-}
-
-static inline void ufshcd_vops_pm_qos_req_start(struct ufs_hba *hba,
-		struct request *req)
-{
-	if (hba->var && hba->var->pm_qos_vops &&
-		hba->var->pm_qos_vops->req_start)
-		hba->var->pm_qos_vops->req_start(hba, req);
-}
-
-static inline void ufshcd_vops_pm_qos_req_end(struct ufs_hba *hba,
-		struct request *req, bool lock)
-{
-	if (hba->var && hba->var->pm_qos_vops && hba->var->pm_qos_vops->req_end)
-		hba->var->pm_qos_vops->req_end(hba, req, lock);
 }
 
 #define UFSHCD_MIN_SLOWIO_US		(1000)     /* 1 ms */

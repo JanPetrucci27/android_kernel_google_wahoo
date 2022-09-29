@@ -971,7 +971,7 @@ b_host:
 	}
 #endif
 
-	schedule_work(&musb->irq_work);
+	queue_delayed_work(system_power_efficient_wq, &musb->irq_work);
 
 	return handled;
 }
@@ -2515,7 +2515,7 @@ static int musb_resume(struct device *dev)
 		musb->port1_status = 0;
 	if (musb->need_finish_resume) {
 		musb->need_finish_resume = 0;
-		schedule_delayed_work(&musb->finish_resume_work,
+		queue_delayed_work(system_power_efficient_wq, &musb->finish_resume_work,
 				      msecs_to_jiffies(USB_RESUME_TIMEOUT));
 	}
 
@@ -2562,7 +2562,7 @@ static int musb_runtime_resume(struct device *dev)
 
 	if (musb->need_finish_resume) {
 		musb->need_finish_resume = 0;
-		schedule_delayed_work(&musb->finish_resume_work,
+		queue_delayed_work(system_power_efficient_wq, (&musb->finish_resume_work,
 				msecs_to_jiffies(USB_RESUME_TIMEOUT));
 	}
 

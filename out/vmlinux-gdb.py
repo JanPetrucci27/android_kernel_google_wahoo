@@ -1,0 +1,1 @@
+/home/user/kernel/scripts/gdb/vmlinux-gdb.py

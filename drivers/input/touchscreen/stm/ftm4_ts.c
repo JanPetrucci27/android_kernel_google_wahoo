@@ -50,6 +50,7 @@
 #include <linux/regulator/consumer.h>
 #include <linux/of_gpio.h>
 #include <linux/of_irq.h>
+#include <linux/i2c/i2c-msm-v2.h>
 
 #ifdef CONFIG_TRUSTONIC_TRUSTED_UI
 #include <linux/trustedui.h>
@@ -96,6 +97,8 @@ static int fts_suspend(struct i2c_client *client, pm_message_t mesg);
 static int fts_resume(struct i2c_client *client);
 
 #if defined(CONFIG_FB)
+static void touch_resume_worker(struct work_struct *work);
+static void touch_suspend_worker(struct work_struct *work);
 static int touch_fb_notifier_callback(struct notifier_block *self,
 		unsigned long event, void *data);
 #endif
@@ -1345,7 +1348,8 @@ static irqreturn_t fts_interrupt_handler(int irq, void *handle)
 	unsigned short evtcount = 0;
 
 	/* prevent CPU from entering deep sleep */
-	pm_qos_update_request(&info->pm_qos_req, 100);
+	pm_qos_update_request(&info->pm_touch_req, 100);
+	pm_qos_update_request(&info->pm_i2c_req, 100);
 	evtcount = 0;
 
 	fts_read_reg(info, &regAdd[0], 3, (unsigned char *)&evtcount, 2);
@@ -1361,7 +1365,8 @@ static irqreturn_t fts_interrupt_handler(int irq, void *handle)
 				  FTS_EVENT_SIZE * evtcount);
 		fts_event_handler_type_b(info, info->data, evtcount);
 	}
-	pm_qos_update_request(&info->pm_qos_req, PM_QOS_DEFAULT_VALUE);
+	pm_qos_update_request(&info->pm_i2c_req, PM_QOS_DEFAULT_VALUE);
+	pm_qos_update_request(&info->pm_touch_req, PM_QOS_DEFAULT_VALUE);
 	return IRQ_HANDLED;
 }
 
@@ -1818,6 +1823,7 @@ static int fts_probe(struct i2c_client *client, const struct i2c_device_id *idp)
 	struct fts_ts_info *info = NULL;
 	static char fts_ts_phys[64] = { 0 };
 	struct power_supply_config psy_cfg = {};
+	struct i2c_msm_ctrl *ctrl;
 	int i = 0;
 
 /*
@@ -1946,7 +1952,21 @@ static int fts_probe(struct i2c_client *client, const struct i2c_device_id *idp)
 				__func__, retval);
 		goto err_enable_irq;
 	}
+	
+	ctrl = client->dev.parent->driver_data;
+	irq_set_perf_affinity(ctrl->rsrcs.irq);
 
+	info->pm_i2c_req.type = PM_QOS_REQ_AFFINE_IRQ;
+	info->pm_i2c_req.irq = ctrl->rsrcs.irq;
+	pm_qos_add_request(&info->pm_i2c_req, PM_QOS_CPU_DMA_LATENCY,
+			   PM_QOS_DEFAULT_VALUE);
+
+	info->pm_touch_req.type = PM_QOS_REQ_AFFINE_IRQ;
+	info->pm_touch_req.irq = info->irq;
+	pm_qos_add_request(&info->pm_touch_req, PM_QOS_CPU_DMA_LATENCY,
+			   PM_QOS_DEFAULT_VALUE);
+	
+	info->board->irq_type |= IRQF_PERF_CRITICAL;
 	retval = request_threaded_irq(info->irq, fts_hard_interrupt_handler,
 			fts_interrupt_handler, info->board->irq_type,
 			FTS_TS_DRV_NAME, info);
@@ -1965,6 +1985,8 @@ static int fts_probe(struct i2c_client *client, const struct i2c_device_id *idp)
 #endif
 
 #ifdef CONFIG_FB
+	INIT_WORK(&info->resume_work, touch_resume_worker);
+	INIT_WORK(&info->suspend_work, touch_suspend_worker);
 	info->fb_notif.notifier_call = touch_fb_notifier_callback;
 	retval = fb_register_client(&info->fb_notif);
 	if (retval < 0) {
@@ -2113,9 +2135,6 @@ static int fts_input_open(struct input_dev *dev)
 		fts_command(info, FTS_CMD_HOVER_ON);
 	}
 
-	pm_qos_add_request(&info->pm_qos_req, PM_QOS_CPU_DMA_LATENCY,
-			PM_QOS_DEFAULT_VALUE);
-
 out:
 	return 0;
 }
@@ -2125,8 +2144,6 @@ static void fts_input_close(struct input_dev *dev)
 	struct fts_ts_info *info = input_get_drvdata(dev);
 
 	tsp_debug_info(&info->client->dev, "%s\n", __func__);
-
-	pm_qos_remove_request(&info->pm_qos_req);
 
 #ifdef USE_OPEN_DWORK
 	cancel_delayed_work(&info->open_work);
@@ -2502,6 +2519,22 @@ static int fts_resume(struct i2c_client *client)
 }
 
 #if defined(CONFIG_FB)
+static void touch_resume_worker(struct work_struct *work)
+{
+	struct fts_ts_info *info = container_of(work, typeof(*info),
+						resume_work);
+
+	fts_resume(info->client);
+}
+
+static void touch_suspend_worker(struct work_struct *work)
+{
+	struct fts_ts_info *info = container_of(work, typeof(*info),
+						suspend_work);
+
+	fts_suspend(info->client, PMSG_SUSPEND);
+}
+
 static int touch_fb_notifier_callback(struct notifier_block *self,
 		unsigned long event, void *data)
 {
@@ -2511,10 +2544,13 @@ static int touch_fb_notifier_callback(struct notifier_block *self,
 
 	if (ev && ev->data) {
 		int *blank = (int *)ev->data;
-		if (event == FB_EARLY_EVENT_BLANK && *blank != FB_BLANK_UNBLANK)
-			fts_suspend(info->client, PMSG_SUSPEND);
-		else if (event == FB_EVENT_BLANK && *blank == FB_BLANK_UNBLANK)
-			fts_resume(info->client);
+		if (event == FB_EARLY_EVENT_BLANK && *blank != FB_BLANK_UNBLANK) {
+			flush_work(&info->resume_work);
+			schedule_work(&info->suspend_work);
+		} else if (event == FB_EVENT_BLANK && *blank == FB_BLANK_UNBLANK) {
+			flush_work(&info->suspend_work);
+			schedule_work(&info->resume_work);
+		}
 	}
 
 	return 0;

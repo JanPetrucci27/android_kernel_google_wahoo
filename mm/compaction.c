@@ -767,14 +767,15 @@ isolate_migratepages_block(struct compact_control *cc, unsigned long low_pfn,
 
 		/*
 		 * Periodically drop the lock (if held) regardless of its
-		 * contention, to give chance to IRQs. Abort async compaction
-		 * if contended.
+		 * contention, to give chance to IRQs. Abort completely if
+		 * a fatal signal is pending.
 		 */
 		if (!(low_pfn % SWAP_CLUSTER_MAX)
 		    && compact_unlock_should_abort(&zone->lru_lock, flags,
-								&locked, cc))
-			break;
-
+								&locked, cc)) {
+			low_pfn = 0;
+			goto fatal_pending;
+		}
 		if (!pfn_valid_within(low_pfn))
 			continue;
 		nr_scanned++;
@@ -918,6 +919,7 @@ isolate_success:
 	trace_mm_compaction_isolate_migratepages(start_pfn, low_pfn,
 						nr_scanned, nr_isolated);
 
+fatal_pending:
 	count_compact_events(COMPACTMIGRATE_SCANNED, nr_scanned);
 	if (nr_isolated)
 		count_compact_events(COMPACTISOLATED, nr_isolated);
@@ -1163,7 +1165,7 @@ typedef enum {
  * Allow userspace to control policy on scanning the unevictable LRU for
  * compactable pages.
  */
-int sysctl_compact_unevictable_allowed __read_mostly = 1;
+int sysctl_compact_unevictable_allowed __read_mostly = 0;
 
 /*
  * Isolate all pages that can be migrated from the first suitable block,
@@ -1777,6 +1779,11 @@ static void compact_node(int nid)
 	__compact_pgdat(NODE_DATA(nid), &cc);
 }
 
+#ifdef CONFIG_ZSWAP
+extern void zswap_compact(void);
+#else
+static inline void zswap_compact(void) {}
+#endif
 /* Compact all nodes in the system */
 static void compact_nodes(void)
 {
@@ -1787,6 +1794,8 @@ static void compact_nodes(void)
 
 	for_each_online_node(nid)
 		compact_node(nid);
+	
+	zswap_compact();
 }
 
 /* The written value is actually unused, all memory is compacted */
@@ -2000,7 +2009,12 @@ int kcompactd_run(int nid)
 	if (pgdat->kcompactd)
 		return 0;
 
-	pgdat->kcompactd = kthread_run(kcompactd, pgdat, "kcompactd%d", nid);
+#ifdef CONFIG_MULTIPLE_KSWAPD
+	pgdat->kcompactd = kthread_run_perf_critical(cpu_lp_mask, kcompactd, pgdat, "kcompactd%d", nid);
+#else
+	pgdat->kcompactd = kthread_run_perf_critical(cpu_perf_mask, kcompactd, pgdat, "kcompactd%d", nid);
+#endif
+
 	if (IS_ERR(pgdat->kcompactd)) {
 		pr_err("Failed to start kcompactd on node %d\n", nid);
 		ret = PTR_ERR(pgdat->kcompactd);

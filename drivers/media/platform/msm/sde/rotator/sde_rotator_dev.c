@@ -453,7 +453,7 @@ static void sde_rotator_stop_streaming(struct vb2_queue *q)
 			atomic_read(&ctx->command_pending));
 	ctx->abort_pending = 1;
 	mutex_unlock(q->lock);
-	ret = wait_event_timeout(ctx->wait_queue,
+	ret = wait_event_interruptible_timeout(ctx->wait_queue,
 			(atomic_read(&ctx->command_pending) == 0),
 			msecs_to_jiffies(rot_dev->streamoff_timeout));
 	mutex_lock(q->lock);
@@ -2597,7 +2597,9 @@ static int sde_rotator_probe(struct platform_device *pdev)
 	rot_dev->debugfs_root = sde_rotator_create_debugfs(rot_dev);
 
 	SDEDEV_INFO(&pdev->dev, "SDE v4l2 rotator probe success\n");
-
+	
+	device_enable_async_suspend(&pdev->dev);
+	
 	return 0;
 error_video_register:
 	video_device_release(vdev);

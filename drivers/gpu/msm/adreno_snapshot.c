@@ -259,7 +259,9 @@ static void dump_all_ibs(struct kgsl_device *device,
 				ibsize = rbptr[index + 3];
 				index += 4;
 			}
-
+			
+			index = (index + 1) % KGSL_RB_DWORDS;
+			
 			/* Don't parse known global IBs */
 			if (iommu_is_setstate_addr(device, ibaddr, ibsize))
 				continue;
@@ -423,9 +425,8 @@ static void snapshot_rb_ibs(struct kgsl_device *device,
 
 			parse_ib(device, snapshot, snapshot->process,
 				ibaddr, ibsize);
-		}
-
-		index = (index + 1) % KGSL_RB_DWORDS;
+		} else
+			index = (index + 1) % KGSL_RB_DWORDS;
 	}
 
 }

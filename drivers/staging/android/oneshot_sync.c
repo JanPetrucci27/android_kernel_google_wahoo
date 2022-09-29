@@ -219,8 +219,7 @@ struct oneshot_sync_timeline *oneshot_timeline_create(const char *name)
 
 	timeline = (struct oneshot_sync_timeline *)
 			sync_timeline_create(&oneshot_timeline_ops,
-					     sizeof(*timeline),
-					     name);
+					     sizeof(*timeline));
 
 	if (timeline == NULL)
 		return NULL;

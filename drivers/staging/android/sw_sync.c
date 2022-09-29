@@ -115,8 +115,7 @@ struct sw_sync_timeline *sw_sync_timeline_create(const char *name)
 {
 	struct sw_sync_timeline *obj = (struct sw_sync_timeline *)
 		sync_timeline_create(&sw_sync_timeline_ops,
-				     sizeof(struct sw_sync_timeline),
-				     name);
+				     sizeof(struct sw_sync_timeline));
 
 	return obj;
 }
