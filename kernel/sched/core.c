@@ -2704,17 +2704,17 @@ static struct rq *finish_task_switch(struct task_struct *prev)
 		INIT_WORK(&mm->async_put_work, mmdrop_async_free);
 		queue_work(system_unbound_wq, &mm->async_put_work);
 	}
-	if (unlikely(prev_state == TASK_DEAD)) {
-		if (prev->sched_class->task_dead)
-			prev->sched_class->task_dead(prev);
+	if (unlikely(prev_state  == TASK_DEAD)) {
+			if (prev->sched_class->task_dead)
+				prev->sched_class->task_dead(prev);
 
-		/*
-		 * Remove function-return probe instances associated with this
-		 * task and put them back on the free list.
-		 */
-		kprobe_flush_task(prev);
+			/*
+			 * Remove function-return probe instances associated with this
+			 * task and put them back on the free list.
+			 */
+			kprobe_flush_task(prev);
 		
-		finish_task_switch_dead(prev);
+			finish_task_switch_dead(prev);
 	}
 
 	tick_nohz_task_switch();
@@ -3371,23 +3371,8 @@ static void __sched notrace __schedule(bool preempt)
 
 void __noreturn do_task_dead(void)
 {
-	/*
-	 * The setting of TASK_RUNNING by try_to_wake_up() may be delayed
-	 * when the following two conditions become true.
-	 *   - There is race condition of mmap_sem (It is acquired by
-	 *     exit_mm()), and
-	 *   - SMI occurs before setting TASK_RUNINNG.
-	 *     (or hypervisor of virtual machine switches to other guest)
-	 *  As a result, we may become TASK_RUNNING after becoming TASK_DEAD
-	 *
-	 * To avoid it, we have to wait for releasing tsk->pi_lock which
-	 * is held by try_to_wake_up()
-	 */
-	smp_mb();
-	raw_spin_unlock_wait(&current->pi_lock);
-
 	/* causes final put_task_struct in finish_task_switch(). */
-	__set_current_state(TASK_DEAD);
+	set_special_state(TASK_DEAD);
 	current->flags |= PF_NOFREEZE;	/* tell freezer to ignore us */
 	__schedule(false);
 	BUG();
@@ -6808,7 +6793,22 @@ static void init_sched_groups_capacity(int cpu, struct sched_domain *sd)
 	WARN_ON(!sg);
 
 	do {
+		int cpu, max_cpu = -1;
+		
 		sg->group_weight = cpumask_weight(sched_group_cpus(sg));
+		
+				if (!(sd->flags & SD_ASYM_PACKING))
+			goto next;
+
+		for_each_cpu(cpu, sched_group_cpus(sg)) {
+			if (max_cpu < 0)
+				max_cpu = cpu;
+			else if (sched_asym_prefer(cpu, max_cpu))
+				max_cpu = cpu;
+		}
+		sg->asym_prefer_cpu = max_cpu;
+
+next:		
 		sg = sg->next;
 	} while (sg != sd->groups);
 
@@ -8104,6 +8104,7 @@ void __init sched_init(void)
 			rq->cpu_load[j] = 0;
 
 		rq->last_load_update_tick = jiffies;
+		rq->last_blocked_load_update_tick = jiffies;
 
 #ifdef CONFIG_SMP
 		rq->sd = NULL;

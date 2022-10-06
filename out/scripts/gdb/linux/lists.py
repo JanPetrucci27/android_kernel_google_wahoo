@@ -1,1 +1,0 @@
-/home/user/kernel/scripts/gdb/linux/lists.py
