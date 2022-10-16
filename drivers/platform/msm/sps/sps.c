@@ -2085,7 +2085,10 @@ int sps_register_bam_device(const struct sps_bam_props *bam_props,
 {
 	struct sps_bam *bam = NULL;
 	void *virt_addr = NULL;
+	
+#ifdef CONFIG_IPC_LOGGING
 	char bam_name[MAX_MSG_LEN];
+#endif
 	u32 manage;
 	int ok;
 	int result;
@@ -2179,9 +2182,11 @@ int sps_register_bam_device(const struct sps_bam_props *bam_props,
 	if (virt_addr != NULL)
 		bam->props.virt_addr = virt_addr;
 
+#ifdef CONFIG_IPC_LOGGING
+
 	snprintf(bam_name, sizeof(bam_name), "sps_bam_%pa_0",
 					&bam->props.phys_addr);
-#ifdef CONFIG_IPC_LOGGING
+
 	bam->ipc_log0 = ipc_log_context_create(SPS_IPC_LOGPAGES,
 							bam_name, 0);
 	if (!bam->ipc_log0)
@@ -2324,8 +2329,10 @@ int sps_deregister_bam_device(unsigned long dev_handle)
 	mutex_lock(&bam->lock);
 	sps_bam_device_de_init(bam);
 	mutex_unlock(&bam->lock);
+#ifdef CONFIG_IPC_LOGGING
 	ipc_log_context_destroy(bam->ipc_log1);
 	ipc_log_context_destroy(bam->ipc_log2);
+#endif
 	if (bam->props.virt_size)
 		(void)iounmap(bam->props.virt_addr);
 

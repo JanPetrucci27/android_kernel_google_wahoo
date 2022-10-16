@@ -37,7 +37,7 @@
 #include <linux/fs.h>
 #include <linux/path.h>
 
-#include <asm/uaccess.h>
+#include <linux/uaccess.h>
 #include <asm/mmu_context.h>
 #include <asm/tlb.h>
 #include <asm/exec.h>

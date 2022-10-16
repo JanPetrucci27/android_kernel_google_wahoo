@@ -10662,6 +10662,22 @@ static inline bool nohz_kick_needed(struct rq *rq, bool only_update)
 			return true;
 	}
 	
+	if (unlikely(rq->nr_pinned_tasks > 0)) {
+		int delta = rq->nr_running - rq->nr_pinned_tasks;
+
+		/*
+		 * Check if it is possible to "unload" this CPU in case
+		 * of having pinned/affine tasks. Do not disturb idle
+		 * core if one of the below condition is true:
+		 *
+		 * - there is one pinned task and it is not "current"
+		 * - all tasks are pinned to this CPU
+		 */
+		if (delta < 2)
+			if (current->nr_cpus_allowed > 1 || !delta)
+				return false;
+	}
+	
 	/*
 	 * If energy aware is enabled, do idle load balance if runqueue has
 	 * at least 2 tasks and cpu is overutilized

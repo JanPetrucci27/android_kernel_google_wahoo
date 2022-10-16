@@ -63,7 +63,7 @@
 #include <net/ip_tunnels.h>
 #include <net/l3mdev.h>
 
-#include <asm/uaccess.h>
+#include <linux/uaccess.h>
 
 #ifdef CONFIG_SYSCTL
 #include <linux/sysctl.h>

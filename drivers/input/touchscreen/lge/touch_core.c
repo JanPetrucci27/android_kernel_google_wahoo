@@ -25,6 +25,7 @@
 #include <linux/delay.h>
 #include <linux/irq.h>
 #include <linux/input/lge_touch_notify.h>
+#include <linux/wahoo_info.h>
 
 /*
  *  Include to touch core Header File
@@ -855,6 +856,7 @@ static struct platform_driver touch_core_driver = {
 /*
 		.of_match_table = touch_match_ids,
 */
+		.probe_type = PROBE_PREFER_ASYNCHRONOUS,
 	},
 	.probe = touch_core_probe,
 	.remove = touch_core_remove,
@@ -872,6 +874,9 @@ static void touch_core_async_init(void *data, async_cookie_t cookie)
 
 static int __init touch_core_init(void)
 {
+	if (!is_google_taimen())
+		return -ENODEV;
+	
 	TOUCH_TRACE();
 	async_schedule(touch_core_async_init, NULL);
 	return 0;

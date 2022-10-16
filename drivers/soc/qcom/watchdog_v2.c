@@ -600,6 +600,9 @@ static void configure_bark_dump(struct msm_watchdog_data *wdog_dd)
 		int len;
 	} cmd_buf;
 	struct scm_desc desc = {0};
+	
+	if (!IS_ENABLED(CONFIG_QCOM_MEMORY_DUMP_V2))
+		return;
 
 	if (MSM_DUMP_MAJOR(msm_dump_table_version()) == 1) {
 		wdog_dd->scm_regsave = (void *)__get_free_page(GFP_KERNEL);

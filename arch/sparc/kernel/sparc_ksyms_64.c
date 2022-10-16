@@ -10,7 +10,7 @@
 #include <linux/bitops.h>
 
 #include <asm/cpudata.h>
-#include <asm/uaccess.h>
+#include <linux/uaccess.h>
 #include <asm/spitfire.h>
 #include <asm/oplib.h>
 #include <asm/hypervisor.h>

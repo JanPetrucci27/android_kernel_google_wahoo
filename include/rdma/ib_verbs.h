@@ -53,7 +53,7 @@
 
 #include <linux/atomic.h>
 #include <linux/mmu_notifier.h>
-#include <asm/uaccess.h>
+#include <linux/uaccess.h>
 
 extern struct workqueue_struct *ib_wq;
 

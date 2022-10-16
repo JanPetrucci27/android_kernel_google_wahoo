@@ -51,6 +51,7 @@
 #include <linux/of_gpio.h>
 #include <linux/of_irq.h>
 #include <linux/i2c/i2c-msm-v2.h>
+#include <linux/wahoo_info.h>
 
 #ifdef CONFIG_TRUSTONIC_TRUSTED_UI
 #include <linux/trustedui.h>
@@ -2588,6 +2589,7 @@ static struct i2c_driver fts_i2c_driver = {
 #ifdef CONFIG_PM
 		   .pm = &fts_dev_pm_ops,
 #endif
+			.probe_type = PROBE_PREFER_ASYNCHRONOUS,
 		   },
 	.probe = fts_probe,
 	.remove = fts_remove,
@@ -2601,6 +2603,9 @@ static struct i2c_driver fts_i2c_driver = {
 
 static int __init fts_driver_init(void)
 {
+	if (!is_google_taimen())
+		return -ENODEV;
+	
 	return i2c_add_driver(&fts_i2c_driver);
 }
 

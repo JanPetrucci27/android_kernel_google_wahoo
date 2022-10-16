@@ -329,7 +329,6 @@ static noinline
 bool rwsem_spin_on_owner(struct rw_semaphore *sem, struct task_struct *owner)
 {
 	long count;
-	int i = 0;
 
 	while (true) {
 		bool on_cpu, same_owner;
@@ -352,8 +351,7 @@ bool rwsem_spin_on_owner(struct rw_semaphore *sem, struct task_struct *owner)
 		if (!on_cpu || need_resched())
 			return false;
 
-		if (i++ > 1000)
-			cpu_relax();
+		cpu_relax();
 	}
 
 	if (READ_ONCE(sem->owner))

@@ -17,7 +17,7 @@
  */
 #include <linux/linkage.h>
 
-#include <asm/uaccess.h>
+#include <asm/asm-uaccess.h>
 
 	.text
 
@@ -29,6 +29,7 @@
  *
  * Alignment fixed up by hardware.
  */
+	.p2align 4
 ENTRY(__arch_clear_user)
 	uaccess_enable_not_uao x2, x3, x4
 	mov	x2, x1			// save the size for fixup return

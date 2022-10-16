@@ -43,6 +43,8 @@
 #include <linux/pinctrl/consumer.h>
 #include <linux/input/synaptics_dsx_v2_6.h>
 #include "synaptics_dsx_core.h"
+#include <linux/wahoo_info.h>
+
 #ifdef KERNEL_ABOVE_2_6_38
 #include <linux/input/mt.h>
 #endif
@@ -6380,6 +6382,7 @@ static struct platform_driver synaptics_rmi4_driver = {
 #ifdef CONFIG_PM
 		.pm = &synaptics_rmi4_dev_pm_ops,
 #endif
+		.probe_type = PROBE_PREFER_ASYNCHRONOUS,
 	},
 	.probe = synaptics_rmi4_probe,
 	.remove = synaptics_rmi4_remove,
@@ -6388,6 +6391,9 @@ static struct platform_driver synaptics_rmi4_driver = {
 static int __init synaptics_rmi4_init(void)
 {
 	int retval;
+	
+	if (!is_google_walleye())
+		return -ENODEV;
 
 	retval = synaptics_rmi4_bus_init_v26();
 	if (retval)
