@@ -14,7 +14,7 @@
 #include <linux/export.h>
 #include <linux/vmalloc.h>
 #include <asm/cacheflush.h>
-#include <asm/uaccess.h>
+#include <linux/uaccess.h>
 #include <linux/slab.h>
 #include <linux/kmemleak.h>
 #include <linux/highmem.h>

@@ -36,7 +36,7 @@
 #include <linux/sched/sysctl.h>
 #include <linux/printk.h>
 
-#include <asm/uaccess.h>
+#include <linux/uaccess.h>
 #include <asm/tlb.h>
 #include <asm/tlbflush.h>
 #include <asm/mmu_context.h>

@@ -26,7 +26,7 @@
 #include <linux/context_tracking.h>
 #include <asm/cacheflush.h>
 #include <asm/traps.h>
-#include <asm/uaccess.h>
+#include <linux/uaccess.h>
 #include <asm/unaligned.h>
 #include <arch/abi.h>
 #include <arch/spr_def.h>

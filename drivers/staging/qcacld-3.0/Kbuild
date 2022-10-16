@@ -42,7 +42,8 @@ WLAN_OPEN_SOURCE := 1
 ifeq ($(KERNEL_BUILD), 0)
 	# These are configurable via Kconfig for kernel-based builds
 	# Need to explicitly configure for Android-based builds
-
+	
+	DEVELOPER_DISABLE_BUILD_TIMESTAMP := y
 	ifneq ($(DEVELOPER_DISABLE_BUILD_TIMESTAMP),y)
 	ifneq ($(WLAN_DISABLE_BUILD_TAG),y)
 	CONFIG_BUILD_TAG := n
@@ -1923,7 +1924,6 @@ CDEFINES += -DWLAN_HDD_ADAPTER_MAGIC=$(WLAN_HDD_ADAPTER_MAGIC)
 endif
 
 ccflags-y += $(call cc-option, -g0)
-ccflags-y += $(call cc-option, -Os)
 
 # inject some build related information
 ifeq ($(CONFIG_BUILD_TAG), y)

@@ -7,7 +7,7 @@
 #include <linux/security.h>
 #include <linux/syscalls.h>
 #include <linux/user_namespace.h>
-#include <asm/uaccess.h>
+#include <linux/uaccess.h>
 
 struct group_info *groups_alloc(int gidsetsize)
 {

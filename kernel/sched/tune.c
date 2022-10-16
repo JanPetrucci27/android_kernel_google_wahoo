@@ -689,6 +689,9 @@ prefer_idle_write(struct cgroup_subsys_state *css, struct cftype *cft,
 	if (!strcmp(css->cgroup->kn->name, "camera-daemon"))
 		prefer_idle = 1;
 	
+	if (!strcmp(css->cgroup->kn->name, "foreground"))
+		prefer_idle = 1;
+	
 	if (!strcmp(css->cgroup->kn->name, "top-app"))
 		prefer_idle = 0;
 	

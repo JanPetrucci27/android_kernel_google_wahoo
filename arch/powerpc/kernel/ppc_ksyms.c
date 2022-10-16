@@ -5,7 +5,7 @@
 #include <asm/switch_to.h>
 #include <asm/cacheflush.h>
 #include <asm/epapr_hcalls.h>
-#include <asm/uaccess.h>
+#include <linux/uaccess.h>
 #ifdef CONFIG_PPC_BOOK3S_64
 #include <asm/book3s/64/kup-radix.h>
 #endif

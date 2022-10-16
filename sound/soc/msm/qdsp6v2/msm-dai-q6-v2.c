@@ -4826,6 +4826,7 @@ static struct platform_driver msm_dai_q6_dev = {
 		.name = "msm-dai-q6-dev",
 		.owner = THIS_MODULE,
 		.of_match_table = msm_dai_q6_dev_dt_match,
+		.probe_type = PROBE_FORCE_SYNCHRONOUS,
 	},
 };
 

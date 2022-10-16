@@ -624,6 +624,7 @@ static struct platform_driver fpc1020_driver = {
 		.name	= "fpc1020",
 		.owner	= THIS_MODULE,
 		.of_match_table = fpc1020_of_match,
+		.probe_type	= PROBE_FORCE_SYNCHRONOUS,
 	},
 	.probe	= fpc1020_probe,
 	.remove	= fpc1020_remove,

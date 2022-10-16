@@ -17,7 +17,7 @@
 #include <linux/string_helpers.h>
 #include <linux/pagemap.h>
 
-#include <asm/uaccess.h>
+#include <linux/uaccess.h>
 #include <asm/page.h>
 
 static struct kmem_cache *seq_file_cache __ro_after_init;
