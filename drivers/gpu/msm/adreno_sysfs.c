@@ -169,7 +169,7 @@ static int _preemption_store(struct adreno_device *adreno_dev,
 		unsigned int val)
 {
 	struct kgsl_device *device = KGSL_DEVICE(adreno_dev);
-		struct kgsl_context *context;
+	struct kgsl_context *context;
 	struct adreno_context *drawctxt;
 	int id;
 

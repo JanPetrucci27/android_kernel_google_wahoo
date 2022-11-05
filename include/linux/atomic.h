@@ -35,6 +35,9 @@
  * barriers on top of the relaxed variant. In the case where the relaxed
  * variant is already fully ordered, no additional barriers are needed.
  *
+ * If an architecture overrides __atomic_op_acquire() it will probably want
+ * to define smp_mb__after_spinlock().
+ *
  * Besides, if an arch has a special barrier for acquire/release, it could
  * implement its own __atomic_op_* and use the same framework for building
  * variants

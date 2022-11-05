@@ -25,10 +25,11 @@ static void check_preempt_curr_idle(struct rq *rq, struct task_struct *p, int fl
 }
 
 static struct task_struct *
-pick_next_task_idle(struct rq *rq, struct task_struct *prev)
+pick_next_task_idle(struct rq *rq, struct task_struct *prev, struct rq_flags *rf)
 {
 	put_prev_task(rq, prev);
-
+	
+    update_idle_core(rq);
 	schedstat_inc(rq, sched_goidle);
 	return rq->idle;
 }

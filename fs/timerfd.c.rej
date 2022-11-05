@@ -1,0 +1,10 @@
+diff a/fs/timerfd.c b/fs/timerfd.c	(rejected hunks)
+@@ -421,7 +421,7 @@ SYSCALL_DEFINE2(timerfd_create, int, clockid, int, flags)
+ 	else
+ 		hrtimer_init(&ctx->t.tmr, clockid, HRTIMER_MODE_ABS);
+ 
+-	ctx->moffs = ktime_mono_to_real((ktime_t){ .tv64 = 0 });
++	ctx->moffs = ktime_mono_to_real(0);
+ 
+ 	ufd = anon_inode_getfd("[timerfd]", &timerfd_fops, ctx,
+ 			       O_RDWR | (flags & TFD_SHARED_FCNTL_FLAGS));

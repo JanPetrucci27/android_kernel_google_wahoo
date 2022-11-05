@@ -19,6 +19,12 @@
 #define SCHED_FEAT_NEXT_BUDDY 1
 
 /*
+ * skip buddy i.e task called yield() is always skipped and the
+ * next entity is selected to run irrespective of the vruntime
+ */
+#define SCHED_FEAT_STRICT_SKIP_BUDDY 1
+
+/*
  * Prefer to schedule the task that ran last (when we did
  * wake-preempt) as that likely will touch the same data, increases
  * cache locality.
@@ -38,7 +44,6 @@
 
 #define SCHED_FEAT_HRTICK 0
 #define SCHED_FEAT_DOUBLE_TICK 0
-#define SCHED_FEAT_LB_BIAS 1
 
 /*
  * Decrement CPU capacity based on time not spent running tasks
@@ -50,6 +55,19 @@
  * using the scheduler IPI. Reduces rq->lock contention/bounces.
  */
 #define SCHED_FEAT_TTWU_QUEUE 0
+
+/*
+ * Issue a WARN when we do multiple update_rq_clock() calls
+ * in a single rq->lock section. Default disabled because the
+ * annotations are not complete.
+ */
+#define SCHED_FEAT_WARN_DOUBLE_CLOCK 0
+
+/*
+ * When doing wakeups, attempt to limit superfluous scans of the LLC domain.
+ */
+#define SCHED_FEAT_SIS_AVG_CPU 0
+#define SCHED_FEAT_SIS_PROP 1
 
 #ifdef HAVE_RT_PUSH_IPI
 /*
@@ -76,6 +94,10 @@
  */
 #define SCHED_FEAT_UTIL_EST 1
 #define SCHED_FEAT_UTIL_EST_FASTUP 1
+
+#define SCHED_FEAT_WA_IDLE 1
+#define SCHED_FEAT_WA_WEIGHT 1
+#define SCHED_FEAT_WA_BIAS 1
 
 /*
  * Energy aware scheduling. Use platform energy model to guide scheduling
@@ -119,3 +141,14 @@
  * If disabled, boosts will only bias tasks to higher-capacity CPUs.
  */
 #define SCHED_FEAT_SCHEDTUNE_BOOST_UTIL 0
+
+/*
+ * Apply schedtune boost hold to tasks of all sched classes.
+ * If enabled, schedtune will hold the boost applied to a CPU
+ * for 50ms regardless of task activation - if the task is
+ * still running 50ms later, the boost hold expires and schedtune
+ * boost will expire immediately the task stops.
+ * If disabled, this behaviour will only apply to tasks of the
+ * RT class.
+ */
+#define SCHED_FEAT_SCHEDTUNE_BOOST_HOLD_ALL 0
