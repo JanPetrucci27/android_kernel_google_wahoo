@@ -774,10 +774,10 @@ prefer_idle_write(struct cgroup_subsys_state *css, struct cftype *cft,
 		prefer_idle = 1;
 	
 	if (!strcmp(css->cgroup->kn->name, "foreground"))
-		prefer_idle = 1;
+		prefer_idle = 0;
 	
 	if (!strcmp(css->cgroup->kn->name, "top-app"))
-		prefer_idle = 0;
+		prefer_idle = 1;
 	
 	if (!strcmp(css->cgroup->kn->name, "rt"))
 		prefer_idle = 0;

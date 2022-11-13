@@ -1370,7 +1370,8 @@ static void mdss_mdp_cmd_pingpong_done(void *arg)
 		pr_err("%s: invalid ctx\n", __func__);
 		return;
 	}
-
+	
+	vsync_time = ktime_get();
 	mdss_mdp_ctl_perf_set_transaction_status(ctl,
 		PERF_HW_MDP_STATE, PERF_STATUS_DONE);
 

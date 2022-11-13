@@ -3003,8 +3003,6 @@ static int mdss_panel_parse_display_timings(struct device_node *np,
 		if (!pt)
 			return -ENOMEM;
 
-
-
 		/*
 		 * display timings node is not available, fallback to reading
 		 * timings directly from root node instead
