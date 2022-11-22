@@ -770,18 +770,6 @@ prefer_idle_write(struct cgroup_subsys_state *css, struct cftype *cft,
 {
 	struct schedtune *st = css_st(css);
 	
-	if (!strcmp(css->cgroup->kn->name, "camera-daemon"))
-		prefer_idle = 1;
-	
-	if (!strcmp(css->cgroup->kn->name, "foreground"))
-		prefer_idle = 0;
-	
-	if (!strcmp(css->cgroup->kn->name, "top-app"))
-		prefer_idle = 1;
-	
-	if (!strcmp(css->cgroup->kn->name, "rt"))
-		prefer_idle = 0;
-	
 	st->prefer_idle = !!prefer_idle;
 
 	return 0;
@@ -805,9 +793,6 @@ boost_write(struct cgroup_subsys_state *css, struct cftype *cft,
 
 	if (boost < -100 || boost > 100)
 		return -EINVAL;
-	
-	if (!strcmp(css->cgroup->kn->name, "top-app"))
-		boost = 1;
 	
 	boost_pct = boost;
 
@@ -836,16 +821,36 @@ boost_write(struct cgroup_subsys_state *css, struct cftype *cft,
 	return 0;
 }
 
+#ifdef CONFIG_STUNE_ASSIST
+static int boost_write_wrapper(struct cgroup_subsys_state *css,
+			       struct cftype *cft, s64 boost)
+{
+	if (task_is_booster(current))
+		return 0;
+
+	return boost_write(css, cft, boost);
+}
+
+static int prefer_idle_write_wrapper(struct cgroup_subsys_state *css,
+				     struct cftype *cft, u64 prefer_idle)
+{
+	if (task_is_booster(current))
+		return 0;
+
+	return prefer_idle_write(css, cft, prefer_idle);
+}
+#endif
+
 static struct cftype files[] = {
 	{
 		.name = "boost",
 		.read_s64 = boost_read,
-		.write_s64 = boost_write,
+		.write_s64 = boost_write_wrapper,
 	},
 	{
 		.name = "prefer_idle",
 		.read_u64 = prefer_idle_read,
-		.write_u64 = prefer_idle_write,
+		.write_u64 = prefer_idle_write_wrapper,
 	},
 	{ }	/* terminate */
 };
@@ -869,6 +874,38 @@ schedtune_boostgroup_init(struct schedtune *st, int idx)
 	st->idx = idx;
 }
 
+
+#ifdef CONFIG_STUNE_ASSIST
+struct st_data {
+	char *name;
+	int boost;
+	bool prefer_idle;
+};
+static void write_default_values(struct cgroup_subsys_state *css)
+{
+	static struct st_data st_targets[] = {
+		{ "audio-app",	0, 0 },
+		{ "background",	0, 0 },
+		{ "foreground",	0, 0 },
+		{ "rt",		0, 0 },
+		{ "top-app",	1, 1 },
+	};
+		int i;
+
+	for (i = 0; i < ARRAY_SIZE(st_targets); i++) {
+		struct st_data tgt = st_targets[i];
+
+		if (!strcmp(css->cgroup->kn->name, tgt.name)) {
+			pr_info("stune_assist: setting values for %s: boost=%d prefer_idle=%d\n",
+				tgt.name, tgt.boost, tgt.prefer_idle);
+
+			boost_write(css, NULL, tgt.boost);
+			prefer_idle_write(css, NULL, tgt.prefer_idle);
+		}
+	}
+}
+#endif
+
 static struct cgroup_subsys_state *
 schedtune_css_alloc(struct cgroup_subsys_state *parent_css)
 {
@@ -889,6 +926,9 @@ schedtune_css_alloc(struct cgroup_subsys_state *parent_css)
 		if (!allocated_group[idx])
 			break;
 		adj_filter_st_idx_write(&allocated_group[idx]->css);
+#ifdef CONFIG_STUNE_ASSIST
+		write_default_values(&allocated_group[idx]->css);
+#endif
 	}
 	if (idx == BOOSTGROUPS_COUNT) {
 		pr_err("Trying to create more than %d SchedTune boosting groups\n",
