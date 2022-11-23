@@ -355,7 +355,7 @@
 			
 			CPU_COST_0: core-cost0 {
 				busy-cost-data = <
-					472  223
+					527  364
 				>;
 				idle-cost-data = <
 					4 4 0 0
@@ -375,7 +375,7 @@
 			};
 			CLUSTER_COST_0: cluster-cost0 {
 				busy-cost-data = <
-					472  59
+					527  74
 				>;
 				idle-cost-data = <
 					31 31 31 0
