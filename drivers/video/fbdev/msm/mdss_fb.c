@@ -1773,7 +1773,8 @@ void mdss_fb_set_backlight(struct msm_fb_data_type *mfd, u32 bkl_lvl)
 			mdss_fb_scale_bl(mfd, &temp);
 #ifdef CONFIG_FB_MSM_MDSS_FLICKER_FREE
 		/* Update flicker free */
-		mdss_fb_update_flicker_free(mfd, temp);
+		if (mfd->op_enable == 0)
+			mdss_fb_update_flicker_free(mfd, temp);
 #endif
 		/*
 		 * Even though backlight has been scaled, want to show that
@@ -1822,7 +1823,8 @@ void mdss_fb_update_backlight(struct msm_fb_data_type *mfd)
 								&bl_notify);
 #ifdef CONFIG_FB_MSM_MDSS_FLICKER_FREE
 			/* Update flicker free */
-			mdss_fb_update_flicker_free(mfd, temp);
+			if (mfd->op_enable == 0)
+				mdss_fb_update_flicker_free(mfd, temp);
 #endif
 			if (bl_notify)
 				mdss_fb_bl_update_notify(mfd,

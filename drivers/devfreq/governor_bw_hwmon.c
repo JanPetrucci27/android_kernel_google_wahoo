@@ -13,6 +13,7 @@
 
 #define pr_fmt(fmt) "bw-hwmon: " fmt
 
+#include <linux/binfmts.h>
 #include <linux/kernel.h>
 #include <linux/sizes.h>
 #include <linux/module.h>
@@ -106,6 +107,10 @@ static ssize_t store_##name(struct device *dev,				\
 	struct hwmon_node *hw = df->data;				\
 	int ret;							\
 	unsigned int val;						\
+									\
+	if (task_is_booster(current))					\
+		return count;						\
+									\
 	ret = sscanf(buf, "%u", &val);					\
 	if (ret != 1)							\
 		return -EINVAL;						\
@@ -143,6 +148,9 @@ static ssize_t store_list_##name(struct device *dev,			\
 	struct hwmon_node *hw = df->data;				\
 	int ret;							\
 	unsigned int i = 0, val;					\
+									\
+	if (task_is_booster(current))					\
+		return count;						\
 									\
 	do {								\
 		ret = sscanf(buf, "%u", &val);				\
@@ -730,6 +738,9 @@ static ssize_t store_throttle_adj(struct device *dev,
 	struct hwmon_node *node = df->data;
 	int ret;
 	unsigned int val;
+	
+	if (task_is_booster(current))
+		return count;
 
 	if (!node->hw->set_throttle_adj)
 		return -ENOSYS;

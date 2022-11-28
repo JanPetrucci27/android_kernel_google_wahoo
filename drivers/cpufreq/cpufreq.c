@@ -17,6 +17,7 @@
 
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
+#include <linux/binfmts.h>
 #include <linux/cpu.h>
 #include <linux/cpufreq.h>
 #include <linux/delay.h>
@@ -795,6 +796,9 @@ static ssize_t store_##file_name					\
 {									\
 	int ret, temp;							\
 	struct cpufreq_policy new_policy;				\
+									\
+	if (task_is_booster(current))					\
+		return count;						\
 									\
 	if (&policy->object == &policy->min)				\
 		return count;						\

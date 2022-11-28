@@ -10,6 +10,7 @@
  * published by the Free Software Foundation.
  */
 
+#include <linux/binfmts.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/errno.h>
@@ -973,6 +974,9 @@ static ssize_t min_freq_store(struct device *dev, struct device_attribute *attr,
 	int ret;
 	unsigned long max;
 	
+	if (task_is_booster(current))
+		return count;
+	
 	/* Minfreq is managed by devfreq_boost */
 	if (df->is_boost_device)
 		return count;
@@ -1011,6 +1015,9 @@ static ssize_t max_freq_store(struct device *dev, struct device_attribute *attr,
 	unsigned long value;
 	int ret;
 	unsigned long min;
+	
+	if (task_is_booster(current))
+		return count;
 
 	ret = sscanf(buf, "%lu", &value);
 	if (ret != 1)

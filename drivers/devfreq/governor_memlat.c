@@ -13,6 +13,7 @@
 
 #define pr_fmt(fmt) "mem_lat: " fmt
 
+#include <linux/binfmts.h>
 #include <linux/kernel.h>
 #include <linux/sizes.h>
 #include <linux/module.h>
@@ -68,6 +69,10 @@ static ssize_t store_##name(struct device *dev,				\
 	struct memlat_node *hw = df->data;				\
 	int ret;							\
 	unsigned int val;						\
+									\
+	if (task_is_booster(current))					\
+		return count;						\
+									\
 	ret = kstrtouint(buf, 10, &val);				\
 	if (ret)							\
 		return ret;						\

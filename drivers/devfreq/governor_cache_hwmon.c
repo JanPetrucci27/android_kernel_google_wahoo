@@ -13,6 +13,7 @@
 
 #define pr_fmt(fmt) "cache-hwmon: " fmt
 
+#include <linux/binfmts.h>
 #include <linux/kernel.h>
 #include <linux/sizes.h>
 #include <linux/module.h>
@@ -76,6 +77,10 @@ static ssize_t store_##name(struct device *dev,				\
 	unsigned int val;						\
 	struct devfreq *df = to_devfreq(dev);				\
 	struct cache_hwmon_node *hw = df->data;				\
+									\
+	if (task_is_booster(current))					\
+		return count;						\
+									\
 	ret = sscanf(buf, "%u", &val);					\
 	if (ret != 1)							\
 		return -EINVAL;						\
