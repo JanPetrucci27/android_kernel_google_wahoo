@@ -3703,7 +3703,7 @@ void sdhci_msm_pm_qos_irq_init(struct sdhci_host *host)
 		set_affine_irq(msm_host, host);
 	else
 		atomic_set(&msm_host->pm_qos_irq.req.cpus_affine,
-			msm_host->pdata->pm_qos_data.irq_cpu);
+			*cpumask_bits(cpumask_of(msm_host->pdata->pm_qos_data.irq_cpu)));
 
 	INIT_DELAYED_WORK(&msm_host->pm_qos_irq.unvote_work,
 		sdhci_msm_pm_qos_irq_unvote_work);
@@ -3755,8 +3755,8 @@ static ssize_t sdhci_msm_pm_qos_group_show(struct device *dev,
 	for (i = 0; i < nr_groups; i++) {
 		group = &msm_host->pm_qos[i];
 		offset += snprintf(&buf[offset], PAGE_SIZE,
-			"Group #%d (mask=0x%d) PM QoS: enabled=%d, counter=%d, latency=%d\n",
-			i, atomic_read(&group->req.cpus_affine),
+			"Group #%d PM QoS: enabled=%d, counter=%d, latency=%d\n",
+			i,
 			msm_host->pm_qos_group_enable,
 			atomic_read(&group->counter),
 			group->latency);

@@ -636,7 +636,7 @@ static int msm_bus_dev_init_qos(struct device *dev, void *data)
 
 	MSM_BUS_DBG("Device = %d", node_dev->node_info->id);
 
-	if (node_dev->ap_owned) {
+	if (node_dev->ap_owned && node_dev->num_node_qos_clks) {
 		struct msm_bus_node_device_type *bus_node_info;
 
 		bus_node_info =

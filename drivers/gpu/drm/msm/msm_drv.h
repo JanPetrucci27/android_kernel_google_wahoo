@@ -346,6 +346,10 @@ struct msm_drm_private {
 
 	/* list of clients waiting for events */
 	struct list_head client_event_list;
+	
+	struct pm_qos_request pm_irq_req;
+	struct delayed_work pm_unreq_dwork;
+	atomic_t pm_req_set;
 };
 
 struct msm_format {

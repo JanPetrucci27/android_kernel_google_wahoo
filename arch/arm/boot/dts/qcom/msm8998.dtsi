@@ -34,7 +34,7 @@
 
 	chosen {
 		stdout-path = "serial0";
-		bootargs = "quiet rcupdate.rcu_expedited=1 noirqdebug nosoftlockup mce=ignore_ce cgroup_disable=pressure";
+		bootargs = "quiet rcupdate.rcu_expedited=1 noirqdebug nodebugmon nosoftlockup mce=ignore_ce";
 	};
 
 	cpus {
@@ -693,7 +693,7 @@
 
 	cpubw: qcom,cpubw {
 		compatible = "qcom,devbw";
-		governor = "performance";
+		governor = "bw_hwmon";
 		qcom,src-dst-ports = <1 512>;
 		qcom,active-only;
 		qcom,bw-tbl =

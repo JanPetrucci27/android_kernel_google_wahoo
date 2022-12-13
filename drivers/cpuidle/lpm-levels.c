@@ -96,10 +96,6 @@ module_param_named(
 	print_parsed_dt, print_parsed_dt, bool, S_IRUGO | S_IWUSR | S_IWGRP
 );
 
-static bool sleep_disabled;
-module_param_named(sleep_disabled,
-	sleep_disabled, bool, S_IRUGO | S_IWUSR | S_IWGRP);
-
 /**
  * msm_cpuidle_get_deep_idle_latency - Get deep idle latency value
  *
@@ -388,9 +384,6 @@ static int cpu_power_select(struct cpuidle_device *dev,
 	uint32_t lvl_latency_us = 0;
 	uint32_t next_wakeup_us = (uint32_t)sleep_us;
 	uint32_t *max_residency = get_per_cpu_max_residency(dev->cpu);
-
-	if ((sleep_disabled && !cpu_isolated(dev->cpu)) || sleep_us  < 0)
-		return 0;
 
 	idx_restrict = cpu->nlevels + 1;
 

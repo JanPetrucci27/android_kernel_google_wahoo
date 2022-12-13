@@ -19,6 +19,7 @@
 #include <asm/elf.h>
 #include <linux/uaccess.h>
 #include <asm/tlbflush.h>
+#include <misc/lyb_taskmmu.h>
 #include "internal.h"
 
 void task_mem(struct seq_file *m, struct mm_struct *mm)
@@ -396,6 +397,124 @@ static int is_stack(struct proc_maps_private *priv,
 	2;								\
 })
 
+#define print_vma_hex10_shrink(out, val, clz_fn) \
+({									\
+	const typeof(val) __val = val;					\
+	char *const __out = out;					\
+	size_t __len;							\
+									\
+	if (__val) {							\
+		__len = (sizeof(__val) * 8 - clz_fn(__val) + 3) / 4;	\
+		switch (__len) {					\
+		case 10:						\
+			__out[9] = hex_asc[(__val >>  0) & 0xf];	\
+			__out[8] = hex_asc[(__val >>  4) & 0xf];	\
+			__out[7] = hex_asc[(__val >>  8) & 0xf];	\
+			__out[6] = hex_asc[(__val >> 12) & 0xf];	\
+			__out[5] = hex_asc[(__val >> 16) & 0xf];	\
+			__out[4] = hex_asc[(__val >> 20) & 0xf];	\
+			__out[3] = hex_asc[(__val >> 24) & 0xf];	\
+			__out[2] = hex_asc[(__val >> 28) & 0xf];	\
+			__out[1] = hex_asc[(__val >> 32) & 0xf];	\
+			__out[0] = hex_asc[(__val >> 36) & 0xf];	\
+			break;						\
+		case 9:							\
+			__out[8] = hex_asc[(__val >>  0) & 0xf];	\
+			__out[7] = hex_asc[(__val >>  4) & 0xf];	\
+			__out[6] = hex_asc[(__val >>  8) & 0xf];	\
+			__out[5] = hex_asc[(__val >> 12) & 0xf];	\
+			__out[4] = hex_asc[(__val >> 16) & 0xf];	\
+			__out[3] = hex_asc[(__val >> 20) & 0xf];	\
+			__out[2] = hex_asc[(__val >> 24) & 0xf];	\
+			__out[1] = hex_asc[(__val >> 28) & 0xf];	\
+			__out[0] = hex_asc[(__val >> 32) & 0xf];	\
+			break;						\
+		case 8:							\
+			__out[7] = hex_asc[(__val >>  0) & 0xf];	\
+			__out[6] = hex_asc[(__val >>  4) & 0xf];	\
+			__out[5] = hex_asc[(__val >>  8) & 0xf];	\
+			__out[4] = hex_asc[(__val >> 12) & 0xf];	\
+			__out[3] = hex_asc[(__val >> 16) & 0xf];	\
+			__out[2] = hex_asc[(__val >> 20) & 0xf];	\
+			__out[1] = hex_asc[(__val >> 24) & 0xf];	\
+			__out[0] = hex_asc[(__val >> 28) & 0xf];	\
+			break;						\
+		case 7:							\
+			__out[6] = hex_asc[(__val >>  0) & 0xf];	\
+			__out[5] = hex_asc[(__val >>  4) & 0xf];	\
+			__out[4] = hex_asc[(__val >>  8) & 0xf];	\
+			__out[3] = hex_asc[(__val >> 12) & 0xf];	\
+			__out[2] = hex_asc[(__val >> 16) & 0xf];	\
+			__out[1] = hex_asc[(__val >> 20) & 0xf];	\
+			__out[0] = hex_asc[(__val >> 24) & 0xf];	\
+			break;						\
+		case 6:							\
+			__out[5] = hex_asc[(__val >>  0) & 0xf];	\
+			__out[4] = hex_asc[(__val >>  4) & 0xf];	\
+			__out[3] = hex_asc[(__val >>  8) & 0xf];	\
+			__out[2] = hex_asc[(__val >> 12) & 0xf];	\
+			__out[1] = hex_asc[(__val >> 16) & 0xf];	\
+			__out[0] = hex_asc[(__val >> 20) & 0xf];	\
+			break;						\
+		case 5:							\
+			__out[4] = hex_asc[(__val >>  0) & 0xf];	\
+			__out[3] = hex_asc[(__val >>  4) & 0xf];	\
+			__out[2] = hex_asc[(__val >>  8) & 0xf];	\
+			__out[1] = hex_asc[(__val >> 12) & 0xf];	\
+			__out[0] = hex_asc[(__val >> 16) & 0xf];	\
+			break;						\
+		case 4:							\
+			__out[3] = hex_asc[(__val >>  0) & 0xf];	\
+			__out[2] = hex_asc[(__val >>  4) & 0xf];	\
+			__out[1] = hex_asc[(__val >>  8) & 0xf];	\
+			__out[0] = hex_asc[(__val >> 12) & 0xf];	\
+			break;						\
+		case 3:							\
+			__out[2] = hex_asc[(__val >>  0) & 0xf];	\
+			__out[1] = hex_asc[(__val >>  4) & 0xf];	\
+			__out[0] = hex_asc[(__val >>  8) & 0xf];	\
+			break;						\
+		case 2:							\
+			__out[1] = hex_asc[(__val >>  0) & 0xf];	\
+			__out[0] = hex_asc[(__val >>  4) & 0xf];	\
+			break;						\
+		case 1:							\
+			__out[0] = hex_asc[(__val >>  0) & 0xf];	\
+			break;						\
+		}							\
+	} else {							\
+		__len = 1;						\
+		__out[0] = '0';						\
+	}								\
+									\
+	__len;								\
+})
+
+#define print_vma_hex2_shrink(out, val, clz_fn) \
+({									\
+	const typeof(val) __val = val;					\
+	char *const __out = out;					\
+	size_t __len;							\
+									\
+	if (__val) {							\
+		__len = (sizeof(__val) * 8 - clz_fn(__val) + 3) / 4;	\
+		switch (__len) {					\
+		case 2:							\
+			__out[1] = hex_asc[(__val >>  0) & 0xf];	\
+			__out[0] = hex_asc[(__val >>  4) & 0xf];	\
+			break;						\
+		case 1:							\
+			__out[0] = hex_asc[(__val >>  0) & 0xf];	\
+			break;						\
+		}							\
+	} else {							\
+		__len = 1;						\
+		__out[0] = '0';						\
+	}								\
+									\
+	__len;								\
+})
+
 static int show_vma_header_prefix(struct seq_file *m, unsigned long start,
 				  unsigned long end, vm_flags_t flags,
 				  unsigned long long pgoff, dev_t dev,
@@ -413,30 +532,67 @@ static int show_vma_header_prefix(struct seq_file *m, unsigned long start,
 	/* Supports printing up to 40 bits per virtual address */
 	BUILD_BUG_ON(CONFIG_ARM64_VA_BITS > 40);
 
-	len = print_vma_hex10(out, start, __builtin_clzl);
+	if (lyb_sultan_pid_shrink)
+	{
+		/* 
+		 * shrinks the PID map output to be as small as
+		 * possible by omitting non-significant leading zeros from
+		 * hex output.
+		 */
+		len = print_vma_hex10_shrink(out, start, __builtin_clzl);
 
-	out[len++] = '-';
+		out[len++] = '-';
 
-	len += print_vma_hex10(out + len, end, __builtin_clzl);
+		len += print_vma_hex10_shrink(out + len, end, __builtin_clzl);
 
-	out[len++] = ' ';
-	out[len++] = "-r"[!!(flags & VM_READ)];
-	out[len++] = "-w"[!!(flags & VM_WRITE)];
-	out[len++] = "-x"[!!(flags & VM_EXEC)];
-	out[len++] = "ps"[!!(flags & VM_MAYSHARE)];
-	out[len++] = ' ';
+		out[len++] = ' ';
+		out[len++] = "-r"[!!(flags & VM_READ)];
+		out[len++] = "-w"[!!(flags & VM_WRITE)];
+		out[len++] = "-x"[!!(flags & VM_EXEC)];
+		out[len++] = "ps"[!!(flags & VM_MAYSHARE)];
+		out[len++] = ' ';
 
-	len += print_vma_hex10(out + len, pgoff, __builtin_clzll);
+		len += print_vma_hex10_shrink(out + len, pgoff, __builtin_clzll);
 
-	out[len++] = ' ';
+		out[len++] = ' ';
+		
+		len += print_vma_hex2_shrink(out + len, MAJOR(dev), __builtin_clz);
 
-	len += print_vma_hex2(out + len, MAJOR(dev));
+		out[len++] = ':';
 
-	out[len++] = ':';
+		len += print_vma_hex2_shrink(out + len, MINOR(dev), __builtin_clz);
 
-	len += print_vma_hex2(out + len, MINOR(dev));
+		out[len++] = ' ';
+	} else {
+		/* 
+		 * retains insignificant leading zeros from printed hex values	
+		 * to maintain the current output format.
+		 */
+		len = print_vma_hex10(out, start, __builtin_clzl);
 
-	out[len++] = ' ';
+		out[len++] = '-';
+
+		len += print_vma_hex10(out + len, end, __builtin_clzl);
+
+		out[len++] = ' ';
+		out[len++] = "-r"[!!(flags & VM_READ)];
+		out[len++] = "-w"[!!(flags & VM_WRITE)];
+		out[len++] = "-x"[!!(flags & VM_EXEC)];
+		out[len++] = "ps"[!!(flags & VM_MAYSHARE)];
+		out[len++] = ' ';
+
+		len += print_vma_hex10(out + len, pgoff, __builtin_clzll);
+
+		out[len++] = ' ';
+
+		len += print_vma_hex2(out + len, MAJOR(dev));
+
+		out[len++] = ':';
+
+		len += print_vma_hex2(out + len, MINOR(dev));
+
+		out[len++] = ' ';
+	}
 
 	len += num_to_str(&out[len], 20, ino);
 
@@ -485,19 +641,16 @@ show_map_vma(struct seq_file *m, struct vm_area_struct *vma, int is_pid)
 		 * program uses newlines in its paths then it can kick rocks.
 		 */
 		if (size > 1) {
-			const int inlen = size - 1;
-			int outlen = inlen;
 			char *p;
 
-			p = d_path_outlen(&file->f_path, buf, &outlen);
+			p = d_path(&file->f_path, buf, size);
 			if (!IS_ERR(p)) {
 				size_t len;
 
-				if (outlen != inlen)
-					len = inlen - outlen - 1;
-				else
-					len = strlen(p);
-				memmove(buf, p, len);
+				/* Minus one to exclude the NUL character */
+				len = size - (p - buf) - 1;
+				if (likely(p > buf))
+					memmove(buf, p, len);
 				buf[len] = '\n';
 				seq_commit(m, len + 1);
 				return;
@@ -551,6 +704,51 @@ static int show_map(struct seq_file *m, void *v, int is_pid)
 	return 0;
 }
 
+static void *m_start_pid(struct seq_file *m, loff_t *ppos)
+{
+	struct vm_area_struct *vma = m_start(m, ppos);
+
+	/*
+	 * Android only cares about the stack mapping, so we can optimize this
+	 * to only return the stack mapping. Processes that have several
+	 * thousands of mappings waste a lot of time in here when Android only
+	 * cares about finding the stack mapping. Android does this in Bionic to
+	 * determine the size of a process' stack when pthreads are used.
+	 */
+	if (vma) {
+		struct mm_struct *mm = vma->vm_mm;
+		struct vm_area_struct *tmp;
+		struct proc_maps_private *priv = m->private;
+
+		/* Optimistically check if the cached stack mapping is valid */
+		tmp = READ_ONCE(mm->stack_vma);
+		if (tmp && is_stack(priv, tmp))
+			return tmp;
+
+		/* Look for the current stack mapping and update the cache */
+		tmp = vma;
+		do {
+			if (is_stack(priv, tmp)) {
+				WRITE_ONCE(mm->stack_vma, vma);
+				return tmp;
+			}
+			tmp = tmp->vm_next;
+		} while (tmp);
+	}
+
+	return NULL;
+}
+
+static void *m_next_pid(struct seq_file *m, void *v, loff_t *pos)
+{
+	struct proc_maps_private *priv = m->private;
+
+	/* Terminate since the stack mapping has been printed */
+	vma_stop(priv);
+	(*pos)++;
+	return NULL;
+}
+
 static int show_pid_map(struct seq_file *m, void *v)
 {
 	return show_map(m, v, 1);
@@ -568,6 +766,13 @@ static const struct seq_operations proc_pid_maps_op = {
 	.show	= show_pid_map
 };
 
+static const struct seq_operations proc_pid_maps_op_sultanpid = {
+	.start	= m_start_pid,
+	.next	= m_next_pid,
+	.stop	= m_stop,
+	.show	= show_pid_map
+};
+
 static const struct seq_operations proc_tid_maps_op = {
 	.start	= m_start,
 	.next	= m_next,
@@ -577,7 +782,9 @@ static const struct seq_operations proc_tid_maps_op = {
 
 static int pid_maps_open(struct inode *inode, struct file *file)
 {
-	return do_maps_open(inode, file, &proc_pid_maps_op);
+	if (lyb_sultan_pid)
+		return do_maps_open(inode, file, &proc_pid_maps_op_sultanpid);
+	else return do_maps_open(inode, file, &proc_pid_maps_op);
 }
 
 static int tid_maps_open(struct inode *inode, struct file *file)

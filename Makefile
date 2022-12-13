@@ -308,7 +308,7 @@ else
 HOSTCC	= gcc
 HOSTCXX	= g++
 endif
-HOSTCFLAGS   := -Wall -Wmissing-prototypes -Wstrict-prototypes -O3 -fomit-frame-pointer -std=gnu89
+HOSTCFLAGS   := -Wall -Wmissing-prototypes -Wstrict-prototypes -O3 -fomit-frame-pointer -std=gnu89 -pipe
 HOSTCXXFLAGS = -O3
 
 # Decide whether to build built-in, modular, or both.
@@ -678,6 +678,7 @@ endif
 ifeq ($(cc-name),clang)
 ifeq ($(ld-name),lld)
 KBUILD_CFLAGS	+= -fuse-ld=lld
+KBUILD_LDFLAGS += -O3
 ifdef CONFIG_LTO_CLANG
 LDFLAGS += --lto-O3
 endif

@@ -35,11 +35,15 @@
 
 static inline void set_ti_thread_flag(struct thread_info *ti, int flag)
 {
+	/* set_bit() with release semantics */
+	smp_mb__before_atomic();
 	set_bit(flag, (unsigned long *)&ti->flags);
 }
 
 static inline void clear_ti_thread_flag(struct thread_info *ti, int flag)
 {
+	/* clear_bit() with release semantics */
+	smp_mb__before_atomic();
 	clear_bit(flag, (unsigned long *)&ti->flags);
 }
 

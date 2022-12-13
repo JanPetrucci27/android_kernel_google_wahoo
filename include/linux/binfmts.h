@@ -134,6 +134,7 @@ static inline bool task_is_booster(struct task_struct *tsk)
 	       !strcmp(comm, "power@1.2-servic") ||
 	       !strcmp(comm, "power@1.3-servi") ||
 		   !strcmp(comm, "power@2.0-servic") ||
+		   !strcmp(comm, "power-service.") ||
 	       !strcmp(comm, "power-servic") ||
 	       !strcmp(comm, "perf@1.0-servic") ||
 		   !strcmp(comm, "perf@1.1-servic") ||

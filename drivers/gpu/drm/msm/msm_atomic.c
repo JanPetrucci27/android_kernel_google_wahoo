@@ -26,10 +26,7 @@ struct msm_commit {
 	uint32_t fence;
 	struct msm_fence_cb fence_cb;
 	uint32_t crtc_mask;
-	union {
-		struct kthread_work commit_work;
-		struct work_struct clean_work;
-	};
+	struct kthread_work commit_work;
 };
 
 /* block until specified crtcs are no longer pending update, and
@@ -394,16 +391,6 @@ static void msm_atomic_helper_commit_modeset_enables(struct drm_device *dev,
 	}
 }
 
-static void complete_commit_cleanup(struct work_struct *work)
-{
-	struct msm_commit *c = container_of(work, typeof(*c), clean_work);
-	struct drm_atomic_state *state = c->state;
-
-	drm_atomic_state_put(state);
-
-	commit_destroy(c);
-}
-
 /* The (potentially) asynchronous part of the commit.  At this point
  * nothing can fail short of armageddon.
  */
@@ -441,7 +428,9 @@ static void complete_commit(struct msm_commit *commit)
 
 	kms->funcs->complete_commit(kms, state);
 
-	end_atomic(priv, commit->crtc_mask);
+	drm_atomic_state_free(state);
+
+	commit_destroy(commit);
 }
 
 static void fence_cb(struct msm_fence_cb *cb)
@@ -453,17 +442,29 @@ static void fence_cb(struct msm_fence_cb *cb)
 
 static void _msm_drm_commit_work_cb(struct kthread_work *work)
 {
-	struct msm_commit *c = container_of(work, typeof(*c), commit_work);
-
-	complete_commit(c);
 	
-	if (c->nonblock) {
-		/* Offload the cleanup onto little CPUs (an unbound wq) */
-		INIT_WORK(&c->clean_work, complete_commit_cleanup);
-		queue_work(system_unbound_wq, &c->clean_work);
-	} else {
-		complete_commit_cleanup(&c->clean_work);
-	}
+	struct msm_commit *commit = container_of(work, typeof(*ccommit),
+						 commit_work);
+	
+	struct pm_qos_request req = {
+		.type = PM_QOS_REQ_AFFINE_CORES,
+		.cpus_affine = ATOMIC_INIT(BIT(raw_smp_processor_id()))
+	};
+
+        ktime_t start, end;
+        s64 duration;
+        start = ktime_get();
+        frame_stat_collector(0, COMMIT_START_TS);
+
+
+	/*
+	 * Optimistically assume the current task won't migrate to another CPU
+	 * and restrict the current CPU to shallow idle states so that it won't
+	 * take too long to resume after waiting for the prior commit to finish.
+	 */
+	pm_qos_add_request(&req, PM_QOS_CPU_DMA_LATENCY, 100);
+	complete_commit(commit);
+	pm_qos_remove_request(&req);
 }
 
 static struct msm_commit *commit_init(struct drm_atomic_state *state)
@@ -598,6 +599,11 @@ int msm_atomic_commit(struct drm_device *dev,
 	 * Wait for pending updates on any of the same crtc's and then
 	 * mark our set of crtc's as busy:
 	 */
+	 
+	if (!atomic_cmpxchg_acquire(&priv->pm_req_set, 1, 0))
+		pm_qos_update_request(&priv->pm_irq_req, 100);
+	mod_delayed_work(system_unbound_wq, &priv->pm_unreq_dwork, HZ / 10);
+	
 	ret = start_atomic(dev->dev_private, commit->crtc_mask);
 	if (ret) {
 		DRM_ERROR("start_atomic failed: %d\n", ret);
@@ -656,7 +662,7 @@ int msm_atomic_commit(struct drm_device *dev,
 	msm_wait_fence(dev, commit->fence, &timeout, false);
 
 	complete_commit(commit);
-	complete_commit_cleanup(&commit->clean_work);
+	
 	return 0;
 
 error:

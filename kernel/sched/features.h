@@ -3,7 +3,7 @@
  * them to run sooner, but does not allow tons of sleepers to
  * rip the spread apart.
  */
-#define SCHED_FEAT_GENTLE_FAIR_SLEEPERS 0
+#define SCHED_FEAT_GENTLE_FAIR_SLEEPERS 1
 
 /*
  * Place new tasks ahead so that they do not starve already running
@@ -54,7 +54,7 @@
  * Queue remote wakeups on the target CPU and process them
  * using the scheduler IPI. Reduces rq->lock contention/bounces.
  */
-#define SCHED_FEAT_TTWU_QUEUE 1
+#define SCHED_FEAT_TTWU_QUEUE 0
 
 /*
  * Issue a WARN when we do multiple update_rq_clock() calls
@@ -118,7 +118,7 @@
  *   the EAS path for wakeup task placement. Otherwise, put
  *   those tasks through the mainline slow path.
  */
-#define SCHED_FEAT_EAS_PREFER_IDLE 1
+#define SCHED_FEAT_EAS_PREFER_IDLE 0
 
 /*
  * Minimum capacity capping. Keep track of minimum capacity factor when
@@ -126,7 +126,7 @@
  * If enabled, this can be used to inform the scheduler about capacity
  * restrictions.
  */
-#define SCHED_FEAT_MIN_CAPACITY_CAPPING 0
+#define SCHED_FEAT_MIN_CAPACITY_CAPPING 1
 
 /*
  * Enforce the priority of candidates selected by find_best_target()

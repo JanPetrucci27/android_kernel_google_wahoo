@@ -1741,16 +1741,6 @@ ttwu_stat(struct task_struct *p, int cpu, int wake_flags)
 #endif /* CONFIG_SCHEDSTATS */
 }
 
-static inline void ttwu_activate(struct rq *rq, struct task_struct *p, int en_flags)
-{
-	activate_task(rq, p, en_flags);
-	p->on_rq = TASK_ON_RQ_QUEUED;
-
-	/* if a worker is waking up, notify workqueue */
-	if (p->flags & PF_WQ_WORKER)
-		wq_worker_waking_up(p, cpu_of(rq));
-}
-
 /*
  * Mark the task runnable and perform wakeup-preemption.
  */
@@ -1807,7 +1797,8 @@ ttwu_do_activate(struct rq *rq, struct task_struct *p, int wake_flags,
 		atomic_dec(&task_rq(p)->nr_iowait);
 	}
 
-	ttwu_activate(rq, p, en_flags);
+	activate_task(rq, p, en_flags);
+	p->on_rq = TASK_ON_RQ_QUEUED;
 	ttwu_do_wakeup(rq, p, wake_flags, rf);
 }
 
@@ -2322,64 +2313,6 @@ out:
 }
 
 /**
- * try_to_wake_up_local - try to wake up a local task with rq lock held
- * @p: the thread to be awakened
- *
- * Put @p on the run-queue if it's not already there. The caller must
- * ensure that this_rq() is locked, @p is bound to this_rq() and not
- * the current task.
- */
-static void try_to_wake_up_local(struct task_struct *p, struct rq_flags *rf)
-{
-	struct rq *rq = task_rq(p);
-
-	if (WARN_ON_ONCE(rq != this_rq()) ||
-	    WARN_ON_ONCE(p == current))
-		return;
-
-	lockdep_assert_held(&rq->lock);
-
-	if (!raw_spin_trylock(&p->pi_lock)) {
-		/*
-		 * This is OK, because current is on_cpu, which avoids it being
-		 * picked for load-balance and preemption/IRQs are still
-		 * disabled avoiding further scheduler activity on it and we've
-		 * not yet picked a replacement task.
-		 */
-		rq_unpin_lock(rq, rf);
-		raw_spin_unlock(&rq->lock);
-		raw_spin_lock(&p->pi_lock);
-		raw_spin_lock(&rq->lock);
-		rq_repin_lock(rq, rf);
-	}
-
-	if (!(p->state & TASK_NORMAL))
-		goto out;
-
-	trace_sched_waking(p);
-	p->waiting_time = cpu_clock(cpu_of(rq));
-
-	if (!task_on_rq_queued(p)) {
-#ifdef CONFIG_SCHED_WALT
-		u64 wallclock = walt_ktime_clock();
-
-		walt_update_task_ravg(rq->curr, rq, TASK_UPDATE, wallclock, 0);
-		walt_update_task_ravg(p, rq, TASK_WAKE, wallclock, 0);
-#endif
-		if (p->in_iowait) {
-			delayacct_blkio_end(p);
-			atomic_dec(&rq->nr_iowait);
-		}
-		ttwu_activate(rq, p, ENQUEUE_WAKEUP | ENQUEUE_NOCLOCK);
-	}
-
-	ttwu_do_wakeup(rq, p, 0, rf);
-	ttwu_stat(p, smp_processor_id(), 0);
-out:
-	raw_spin_unlock(&p->pi_lock);
-}
-
-/**
  * wake_up_process - Wake up a specific process
  * @p: The process to be woken up.
  *
@@ -2749,7 +2682,7 @@ void wake_up_new_task(struct task_struct *p)
 #endif
 	rq = __task_rq_lock(p, &rf);
 	update_rq_clock(rq);
-	post_init_entity_util_avg(&p->se);
+	post_init_entity_util_avg(p);
 
 	walt_mark_task_starting(p);
 	activate_task(rq, p, ENQUEUE_WAKEUP_NEW | ENQUEUE_NOCLOCK);
@@ -3685,19 +3618,6 @@ static void __sched notrace __schedule(bool preempt)
 				atomic_inc(&rq->nr_iowait);
 				delayacct_blkio_start();
 			}
-			
-			/*
-			 * If a worker went to sleep, notify and ask workqueue
-			 * whether it wants to wake up a task to maintain
-			 * concurrency.
-			 */
-			if (prev->flags & PF_WQ_WORKER) {
-				struct task_struct *to_wakeup;
-
-				to_wakeup = wq_worker_sleeping(prev);
-				if (to_wakeup)
-					try_to_wake_up_local(to_wakeup, &rf);
-			}
 		}
 		switch_count = &prev->nvcsw;
 	}
@@ -3771,12 +3691,33 @@ static inline void sched_submit_work(struct task_struct *tsk)
 {
 	if (!tsk->state || tsk_is_pi_blocked(tsk))
 		return;
+	
+		/*
+	 * If a worker went to sleep, notify and ask workqueue whether
+	 * it wants to wake up a task to maintain concurrency.
+	 * As this function is called inside the schedule() context,
+	 * we disable preemption to avoid it calling schedule() again
+	 * in the possible wakeup of a kworker and because wq_worker_sleeping()
+	 * requires it.
+	 */
+	if (tsk->flags & PF_WQ_WORKER) {
+		preempt_disable();
+		wq_worker_sleeping(tsk);
+		preempt_enable_no_resched();
+	}
+	
 	/*
 	 * If we are going to sleep and we have plugged IO queued,
 	 * make sure to submit it to avoid deadlocks.
 	 */
 	if (blk_needs_flush_plug(tsk))
 		blk_schedule_flush_plug(tsk);
+}
+
+static void sched_update_worker(struct task_struct *tsk)
+{
+	if (tsk->flags & PF_WQ_WORKER)
+		wq_worker_running(tsk);
 }
 
 asmlinkage __visible void __sched schedule(void)
@@ -3789,6 +3730,7 @@ asmlinkage __visible void __sched schedule(void)
 		__schedule(false);
 		sched_preempt_enable_no_resched();
 	} while (need_resched());
+	sched_update_worker(tsk);
 }
 EXPORT_SYMBOL(schedule);
 
@@ -5151,8 +5093,8 @@ int sysctl_sched_lib_name_handler(struct ctl_table *table, int write,
 		strlcpy(dup_sched_lib_name, sched_lib_name, LIB_PATH_LENGTH);
 		next = dup_sched_lib_name;
 		while ((curr = strsep(&next, ",")) != NULL) {
-			pos = kmalloc(sizeof(struct libname_node), GFP_KERNEL);
-			pos->name = kstrdup(curr, GFP_KERNEL);
+			pos = kmalloc(sizeof(struct libname_node), GFP_ATOMIC);
+			pos->name = kstrdup(curr, GFP_ATOMIC);
 			list_add_tail(&pos->list, &__sched_lib_name_list);
 		}
 		spin_unlock(&__sched_lib_name_lock);
