@@ -1,6 +1,7 @@
 /*
  * Functions related to sysfs handling
  */
+#include <linux/binfmts.h>
 #include <linux/kernel.h>
 #include <linux/slab.h>
 #include <linux/module.h>
@@ -90,25 +91,12 @@ queue_ra_store(struct request_queue *q, const char *page, size_t count)
 	if (ret < 0)
 		return ret;
 	
-	if (!strcmp(current->comm, "init"))
+	if (task_is_booster(current))
 		ra_kb = VM_MAX_READAHEAD;
 
 	q->backing_dev_info.ra_pages = ra_kb >> (PAGE_CACHE_SHIFT - 10);
 
 	return ret;
-}
-
-static ssize_t queue_show_iostats(struct request_queue *q, char *page)
-{
-	int bit;
-	bit = test_bit(QUEUE_FLAG_IO_STAT, &q->queue_flags);
-	return queue_var_show(0 ? !bit : bit, page);
-}
-
-static ssize_t
-queue_store_iostats(struct request_queue *q, const char *page, size_t count)
-{
-	return count;
 }
 
 static ssize_t queue_max_sectors_show(struct request_queue *q, char *page)
@@ -272,7 +260,7 @@ queue_store_##name(struct request_queue *q, const char *page, size_t count) \
 
 QUEUE_SYSFS_BIT_FNS(nonrot, NONROT, 1);
 QUEUE_SYSFS_BIT_FNS(random, ADD_RANDOM, 0);
-// QUEUE_SYSFS_BIT_FNS(iostats, IO_STAT, 0);
+QUEUE_SYSFS_BIT_FNS(iostats, IO_STAT, 0);
 #undef QUEUE_SYSFS_BIT_FNS
 
 static ssize_t queue_nomerges_show(struct request_queue *q, char *page)
@@ -479,7 +467,7 @@ static struct queue_sysfs_entry queue_rq_affinity_entry = {
 };
 
 static struct queue_sysfs_entry queue_iostats_entry = {
-	.attr = {.name = "iostats", .mode = S_IRUGO | S_IWUSR },
+	.attr = {.name = "iostats", .mode = S_IRUGO },
 	.show = queue_show_iostats,
 	.store = queue_store_iostats,
 };

@@ -2571,26 +2571,8 @@ cea_mode_alternate_clock(const struct drm_display_mode *cea_mode)
  * Return: The CEA Video ID (VIC) of the mode or 0 if it isn't a CEA-861
  * mode.
  */
-u8 drm_match_cea_mode(const struct drm_display_mode *to_match)
+inline u8 drm_match_cea_mode(const struct drm_display_mode *to_match)
 {
-	u8 mode;
-
-	if (!to_match->clock)
-		return 0;
-
-	for (mode = 0; mode < ARRAY_SIZE(edid_cea_modes); mode++) {
-		const struct drm_display_mode *cea_mode = &edid_cea_modes[mode];
-		unsigned int clock1, clock2;
-
-		/* Check both 60Hz and 59.94Hz */
-		clock1 = cea_mode->clock;
-		clock2 = cea_mode_alternate_clock(cea_mode);
-
-		if ((KHZ2PICOS(to_match->clock) == KHZ2PICOS(clock1) ||
-		     KHZ2PICOS(to_match->clock) == KHZ2PICOS(clock2)) &&
-		    drm_mode_equal_no_clocks_no_stereo(to_match, cea_mode))
-			return mode + 1;
-	}
 	return 0;
 }
 EXPORT_SYMBOL(drm_match_cea_mode);

@@ -30,8 +30,11 @@ unsigned long boosted_cpu_util(int cpu);
 #define SUGOV_KTHREAD_PRIORITY	50
 
 /* Hardcoded ratelimits */
-#define UP_RATE_DELAY_NS (0 * NSEC_PER_USEC) //Default: 500
-#define DOWN_RATE_DELAY_NS (0 * NSEC_PER_USEC) //Default: 20000
+
+#define RATELIMIT ((MSEC_PER_SEC / HZ) * RR_TIMESLICE)
+
+#define UP_RATE_DELAY_NS (RATELIMIT * NSEC_PER_USEC) //Default RATELIMIT: 500
+#define DOWN_RATE_DELAY_NS (RATELIMIT * NSEC_PER_USEC) //Default RATELIMIT: 20000
 #define MIN_RATE_LIMIT_NS (UP_RATE_DELAY_NS < DOWN_RATE_DELAY_NS ? \
 		UP_RATE_DELAY_NS : DOWN_RATE_DELAY_NS)
 

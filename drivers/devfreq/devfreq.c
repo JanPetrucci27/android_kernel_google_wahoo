@@ -976,10 +976,12 @@ static ssize_t min_freq_store(struct device *dev, struct device_attribute *attr,
 	
 	if (task_is_booster(current))
 		return count;
-	
+
+#ifdef CONFIG_DEVFREQ_BOOST
 	/* Minfreq is managed by devfreq_boost */
 	if (df->is_boost_device)
 		return count;
+#endif
 
 	ret = sscanf(buf, "%lu", &value);
 	if (ret != 1)

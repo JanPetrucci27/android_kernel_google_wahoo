@@ -50,6 +50,9 @@ static inline int string_unescape_any_inplace(char *buf)
 int string_escape_mem(const char *src, size_t isz, char *dst, size_t osz,
 		unsigned int flags, const char *only);
 
+int string_escape_mem_ascii(const char *src, size_t isz, char *dst,
+					size_t osz);
+
 static inline int string_escape_mem_any_np(const char *src, size_t isz,
 		char *dst, size_t osz, const char *only)
 {
@@ -67,5 +70,7 @@ static inline int string_escape_str_any_np(const char *src, char *dst,
 {
 	return string_escape_str(src, dst, sz, ESCAPE_ANY_NP, only);
 }
+
+void kfree_strarray(char **array, size_t n);
 
 #endif
