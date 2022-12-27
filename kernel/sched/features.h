@@ -3,7 +3,7 @@
  * them to run sooner, but does not allow tons of sleepers to
  * rip the spread apart.
  */
-#define SCHED_FEAT_GENTLE_FAIR_SLEEPERS 1
+#define SCHED_FEAT_GENTLE_FAIR_SLEEPERS 0
 
 /*
  * Place new tasks ahead so that they do not starve already running
@@ -54,7 +54,7 @@
  * Queue remote wakeups on the target CPU and process them
  * using the scheduler IPI. Reduces rq->lock contention/bounces.
  */
-#define SCHED_FEAT_TTWU_QUEUE 0
+#define SCHED_FEAT_TTWU_QUEUE 1
 
 /*
  * Issue a WARN when we do multiple update_rq_clock() calls
@@ -84,7 +84,6 @@
 #define SCHED_FEAT_RT_PUSH_IPI 0
 #endif
 
-#define SCHED_FEAT_FORCE_SD_OVERLAP 0
 #define SCHED_FEAT_RT_RUNTIME_SHARE 0
 #define SCHED_FEAT_LB_MIN 0
 #define SCHED_FEAT_ATTACH_AGE_LOAD 1
@@ -126,7 +125,7 @@
  * If enabled, this can be used to inform the scheduler about capacity
  * restrictions.
  */
-#define SCHED_FEAT_MIN_CAPACITY_CAPPING 1
+#define SCHED_FEAT_MIN_CAPACITY_CAPPING 0
 
 /*
  * Enforce the priority of candidates selected by find_best_target()
@@ -134,6 +133,12 @@
  * OFF: Use whichever of target or backup saves most.
  */
 #define SCHED_FEAT_FBT_STRICT_ORDER 0
+
+/*
+ * Use the Simplified Energy Model for EAS accounting only for
+ * active costs of CPUs.
+ */
+#define SCHED_FEAT_EAS_SIMPLIFIED_EM 1
 
 /*
  * Inflate the effective utilization of SchedTune-boosted tasks, which

@@ -619,27 +619,32 @@ void resched_cpu(int cpu)
  */
 int get_nohz_timer_target(void)
 {
-	int i, cpu = smp_processor_id();
+	int i, cpu = smp_processor_id(), default_cpu = -1;
 	struct sched_domain *sd;
 
-	if (!idle_cpu(cpu) && is_housekeeping_cpu(cpu))
-		return cpu;
+	if (is_housekeeping_cpu(cpu)) {
+		if (!idle_cpu(cpu))
+			return cpu;
+		default_cpu = cpu;
+	}
 
 	rcu_read_lock();
 	for_each_domain(cpu, sd) {
-		for_each_cpu(i, sched_domain_span(sd)) {
+		for_each_cpu_and(i, sched_domain_span(sd),
+			housekeeping_cpumask()) {
 			if (cpu == i)
 				continue;
 
-			if (!idle_cpu(i) && is_housekeeping_cpu(i)) {
+			if (!idle_cpu(i)) {
 				cpu = i;
 				goto unlock;
 			}
 		}
 	}
 
-	if (!is_housekeeping_cpu(cpu))
-		cpu = housekeeping_any_cpu();
+	if (default_cpu == -1)
+		default_cpu = housekeeping_any_cpu();
+	cpu = default_cpu;
 unlock:
 	rcu_read_unlock();
 	return cpu;
@@ -2819,43 +2824,6 @@ static void mmdrop_async_free(struct work_struct *work)
 	__mmdrop(mm);
 }
 
-void release_task_stack(struct task_struct *tsk);
-static void task_async_free(struct work_struct *work)
-{
-	struct task_struct *t = container_of(work, typeof(*t), async_free.work);
-	bool free_stack = READ_ONCE(t->async_free.free_stack);
-
-	atomic_set(&t->async_free.running, 0);
-
-	if (free_stack) {
-		release_task_stack(t);
-		put_task_struct(t);
-	} else {
-		__put_task_struct(t);
-	}
-}
-
-static void finish_task_switch_dead(struct task_struct *prev)
-{
-	if (atomic_cmpxchg(&prev->async_free.running, 0, 1)) {
-		put_task_stack(prev);
-		put_task_struct(prev);
-		return;
-	}
-
-	if (atomic_dec_and_test(&prev->stack_refcount)) {
-		prev->async_free.free_stack = true;
-	} else if (atomic_dec_and_test(&prev->usage)) {
-		prev->async_free.free_stack = false;
-	} else {
-		atomic_set(&prev->async_free.running, 0);
-		return;
-	}
-
-	INIT_WORK(&prev->async_free.work, task_async_free);
-	queue_work(system_unbound_wq, &prev->async_free.work);
-}
-
 /**
  * finish_task_switch - clean up after a task-switch
  * @prev: the thread we just switched away from.
@@ -2932,7 +2900,10 @@ static struct rq *finish_task_switch(struct task_struct *prev)
 			 */
 			kprobe_flush_task(prev);
 		
-			finish_task_switch_dead(prev);
+			/* Task is done with its stack. */
+			put_task_stack(prev);
+
+			put_task_struct_rcu_user(prev);
 	}
 
 	tick_nohz_task_switch();
@@ -6647,6 +6618,116 @@ sd_parent_degenerate(struct sched_domain *sd, struct sched_domain *parent)
 	return 1;
 }
 
+#ifdef CONFIG_ENERGY_MODEL
+static void free_pd(struct perf_domain *pd)
+{
+	struct perf_domain *tmp;
+
+	while (pd) {
+		tmp = pd->next;
+		kfree(pd);
+		pd = tmp;
+	}
+}
+
+static struct perf_domain *find_pd(struct perf_domain *pd, int cpu)
+{
+	while (pd) {
+		if (cpumask_test_cpu(cpu, perf_domain_span(pd)))
+			return pd;
+		pd = pd->next;
+	}
+
+	return NULL;
+}
+
+static struct perf_domain *pd_init(int cpu)
+{
+	struct em_perf_domain *obj = em_cpu_get(cpu);
+	struct perf_domain *pd;
+
+	if (!obj) {
+		if (sched_debug())
+			pr_info("%s: no EM found for CPU%d\n", __func__, cpu);
+		return NULL;
+	}
+
+	pd = kzalloc(sizeof(*pd), GFP_KERNEL);
+	if (!pd)
+		return NULL;
+	pd->em_pd = obj;
+
+	return pd;
+}
+
+static void perf_domain_debug(const struct cpumask *cpu_map,
+		struct perf_domain *pd)
+{
+	if (!sched_debug() || !pd)
+		return;
+
+	printk(KERN_DEBUG "root_domain %*pbl:", cpumask_pr_args(cpu_map));
+
+	while (pd) {
+		printk(KERN_CONT " pd%d:{ cpus=%*pbl nr_cstate=%d }",
+				cpumask_first(perf_domain_span(pd)),
+				cpumask_pr_args(perf_domain_span(pd)),
+				em_pd_nr_cap_states(pd->em_pd));
+		pd = pd->next;
+	}
+
+	printk(KERN_CONT "\n");
+}
+
+static void destroy_perf_domain_rcu(struct rcu_head *rp)
+{
+	struct perf_domain *pd;
+
+	pd = container_of(rp, struct perf_domain, rcu);
+	free_pd(pd);
+}
+
+static void build_perf_domains(const struct cpumask *cpu_map)
+{
+	struct perf_domain *pd = NULL, *tmp;
+	int cpu = cpumask_first(cpu_map);
+	struct root_domain *rd = cpu_rq(cpu)->rd;
+	int i;
+
+	for_each_cpu(i, cpu_map) {
+		/* Skip already covered CPUs. */
+		if (find_pd(pd, i))
+			continue;
+
+		/* Create the new pd and add it to the local list. */
+		tmp = pd_init(i);
+		if (!tmp)
+			goto free;
+		tmp->next = pd;
+		pd = tmp;
+	}
+
+	perf_domain_debug(cpu_map, pd);
+
+	/* Attach the new list of performance domains to the root domain. */
+	tmp = rd->pd;
+	rcu_assign_pointer(rd->pd, pd);
+	if (tmp)
+		call_rcu(&tmp->rcu, destroy_perf_domain_rcu);
+
+	return;
+
+free:
+	free_pd(pd);
+	tmp = rd->pd;
+	rcu_assign_pointer(rd->pd, NULL);
+	if (tmp)
+		call_rcu(&tmp->rcu, destroy_perf_domain_rcu);
+}
+#else
+static void free_pd(struct perf_domain *pd) { }
+#endif /* CONFIG_ENERGY_MODEL */
+
 static void free_rootdomain(struct rcu_head *rcu)
 {
 	struct root_domain *rd = container_of(rcu, struct root_domain, rcu);
@@ -6657,6 +6738,7 @@ static void free_rootdomain(struct rcu_head *rcu)
 	free_cpumask_var(rd->rto_mask);
 	free_cpumask_var(rd->online);
 	free_cpumask_var(rd->span);
+	free_pd(rd->pd);
 	kfree(rd);
 }
 
@@ -7989,7 +8071,7 @@ static int build_sched_domains(const struct cpumask *cpu_map,
 			sd = build_sched_domain(tl, cpu_map, attr, sd, i);
 			if (tl == sched_domain_topology)
 				*per_cpu_ptr(d.sd, i) = sd;
-			if (tl->flags & SDTL_OVERLAP || sched_feat(FORCE_SD_OVERLAP))
+			if (tl->flags & SDTL_OVERLAP)
 				sd->flags |= SD_OVERLAP;
 		}
 	}
@@ -8221,6 +8303,22 @@ match1:
 match2:
 		;
 	}
+
+
+#ifdef CONFIG_ENERGY_MODEL
+	/* Build perf. domains: */
+	for (i = 0; i < ndoms_new; i++) {
+		for (j = 0; j < n; j++) {
+			if (cpumask_equal(doms_new[i], doms_cur[j]) &&
+					cpu_rq(cpumask_first(doms_cur[j]))->rd->pd)
+				goto match3;
+		}
+		/* No match - add perf. domains for a new rd */
+		build_perf_domains(doms_new[i]);
+match3:
+		;
+	}
+#endif
 
 	/* Remember the new sched domains */
 	if (doms_cur != &fallback_doms)

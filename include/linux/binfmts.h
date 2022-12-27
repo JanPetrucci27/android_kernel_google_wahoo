@@ -127,7 +127,33 @@ static inline bool task_is_booster(struct task_struct *tsk)
 	char comm[sizeof(tsk->comm)];
 
 	get_task_comm(comm, tsk);
+	
+	// if (!(!strcmp(comm, "init") ||
+	       // !strcmp(comm, "sh") ||
+	       // !strcmp(comm, "init.power.sh") ||
+	       // !strcmp(comm, "NodeLooperThrea") ||
+	       // !strcmp(comm, "power@1.0-servic") ||
+	       // !strcmp(comm, "power@1.1-servic") ||
+	       // !strcmp(comm, "power@1.2-servic") ||
+	       // !strcmp(comm, "power@1.3-servi") ||
+		   // !strcmp(comm, "power@2.0-servic") ||
+		   // !strcmp(comm, "power-service.") ||
+	       // !strcmp(comm, "power-servic") ||
+	       // !strcmp(comm, "perf@1.0-servic") ||
+		   // !strcmp(comm, "perf@1.1-servic") ||
+	       // !strcmp(comm, "perf@1.2-servic") ||
+		   // !strcmp(comm, "perf@2.0-servic") ||
+	       // !strcmp(comm, "perf@2.1-servic") ||
+	       // !strcmp(comm, "perf@2.2-servic") ||
+	       // !strcmp(comm, "iop@") ||
+	       // !strcmp(comm, "init.qcom.post_")))
+		   // {
+			   // pr_info("booster_debug: init=%s \n", comm);
+		   // }
+	
 	return !strcmp(comm, "init") ||
+	       !strcmp(comm, "sh") ||
+		   !strcmp(comm, "init.power.sh") ||
 	       !strcmp(comm, "NodeLooperThrea") ||
 	       !strcmp(comm, "power@1.0-servic") ||
 	       !strcmp(comm, "power@1.1-servic") ||

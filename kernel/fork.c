@@ -228,7 +228,7 @@ static void account_kernel_stack(unsigned long *stack, int account)
 	mod_zone_page_state(zone, NR_KERNEL_STACK, account);
 }
 
-void release_task_stack(struct task_struct *tsk)
+static void release_task_stack(struct task_struct *tsk)
 {
 	account_kernel_stack(tsk->stack, -1);
 	arch_release_thread_stack(tsk->stack);
@@ -422,10 +422,12 @@ static struct task_struct *dup_task_struct(struct task_struct *orig, int node)
 #endif
 
 	/*
-	 * One for us, one for whoever does the "release_task()" (usually
-	 * parent)
+	 * One for the user space visible state that goes away when reaped.
+	 * One for the scheduler.
 	 */
-	atomic_set(&tsk->usage, 2);
+	refcount_set(&tsk->rcu_users, 2);
+	/* One for the rcu users */
+	atomic_set(&tsk->usage, 1);
 #ifdef CONFIG_BLK_DEV_IO_TRACE
 	tsk->btrace_seq = 0;
 #endif

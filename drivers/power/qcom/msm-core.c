@@ -43,7 +43,6 @@
 #define TEMP_MAX_POINT 95
 #define CPU_HOTPLUG_LIMIT 80
 #define CPU_BIT_MASK(cpu) BIT(cpu)
-#define DEFAULT_TEMP 40
 #define DEFAULT_LOW_HYST_TEMP 10
 #define DEFAULT_HIGH_HYST_TEMP 5
 #define CLUSTER_OFFSET_FOR_MPIDR 8
@@ -1111,7 +1110,8 @@ static int msm_core_dev_probe(struct platform_device *pdev)
 	for_each_possible_cpu(cpu)
 		set_threshold(&activity[cpu]);
 
-	schedule_delayed_work(&sampling_work, msecs_to_jiffies(0));
+	queue_delayed_work(system_power_efficient_wq,
+			&sampling_work, msecs_to_jiffies(0));
 	pm_notifier(system_suspend_handler, 0);
 #endif
 	cpufreq_register_notifier(&cpu_policy, CPUFREQ_POLICY_NOTIFIER);

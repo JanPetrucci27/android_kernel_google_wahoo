@@ -41,7 +41,7 @@
 #define BACKLIGHT_INDEX 66
 
 /* Minimum backlight value that does not flicker */
-static int elvss_off_threshold __read_mostly = 160;
+static int elvss_off_threshold __read_mostly = 66;
 
 /* Display configuration data */
 static const int bkl_to_pcc[BACKLIGHT_INDEX] = {

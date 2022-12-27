@@ -46,6 +46,7 @@ struct sched_param {
 #include <linux/rcupdate.h>
 #include <linux/rculist.h>
 #include <linux/rtmutex.h>
+#include <linux/refcount.h>
 
 #include <linux/time.h>
 #include <linux/param.h>
@@ -2043,7 +2044,10 @@ struct task_struct {
 	struct tlbflush_unmap_batch tlb_ubc;
 #endif
 
-	struct rcu_head rcu;
+	union {
+		refcount_t		rcu_users;
+		struct rcu_head		rcu;
+	};
 
 	/*
 	 * cache last used pipe for splice
@@ -2144,12 +2148,6 @@ struct task_struct {
 	/* A live task holds one reference. */
 	atomic_t stack_refcount;
 #endif
-
-	struct {
-		struct work_struct work;
-		atomic_t running;
-		bool free_stack;
-	} async_free;
 	
 /* CPU-specific state of this task */
 	struct thread_struct thread;
@@ -2370,6 +2368,8 @@ static inline void put_task_struct(struct task_struct *t)
 	if (atomic_dec_and_test(&t->usage))
 		__put_task_struct(t);
 }
+
+void put_task_struct_rcu_user(struct task_struct *task);
 
 #ifdef CONFIG_VIRT_CPU_ACCOUNTING_GEN
 extern void task_cputime(struct task_struct *t,

@@ -28,6 +28,10 @@
 #include "battery.h"
 #include "storm-watch.h"
 
+#ifdef CONFIG_FORCE_FAST_CHARGE
+#include <linux/fastchg.h>
+#endif
+
 static void *smblib_ipc_log;
 
 #define smblib_err(chg, fmt, ...)				\
@@ -877,10 +881,36 @@ static int smblib_usb_icl_vote_callback(struct votable *votable, void *data,
 		}
 		return rc;
 	}
-
+	
 	pd_icl_ua = get_client_vote_locked(votable, PD_VOTER);
 	default_icl_ua = get_client_vote_locked(votable, DEFAULT_VOTER);
 	usb_icl_ua = get_client_vote_locked(votable, USB_PSY_VOTER);
+	
+#ifdef CONFIG_FORCE_FAST_CHARGE
+	/* 
+	 * Apply properly forced fast charge according to USB version, 
+	 * do not set higher than supported mA.
+	 */
+	if (force_fast_charge) {
+		if (pd_icl_ua == USBIN_100MA) {
+			pd_icl_ua = USBIN_500MA;
+		} else if (pd_icl_ua == USBIN_150MA || pd_icl_ua == USBIN_500MA) {
+			pd_icl_ua = USBIN_900MA;
+		}
+		
+		if (default_icl_ua == USBIN_100MA) {
+			default_icl_ua = USBIN_500MA;
+		} else if (default_icl_ua == USBIN_150MA || default_icl_ua == USBIN_500MA) {
+			default_icl_ua = USBIN_900MA;
+		}
+		
+		if (usb_icl_ua == USBIN_100MA) {
+			usb_icl_ua = USBIN_500MA;
+		} else if (usb_icl_ua == USBIN_150MA || usb_icl_ua == USBIN_500MA) {
+			usb_icl_ua = USBIN_900MA;
+		}
+	}
+#endif
 
 	/* PD and Type-C current */
 	if (pd_icl_ua > 0) {

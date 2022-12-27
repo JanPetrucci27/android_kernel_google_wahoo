@@ -452,6 +452,11 @@ int sensor_get_temp(uint32_t sensor_id, int *temp)
 		return -ENODEV;
 
 	ret = sensor->tz->ops->get_temp(sensor->tz, temp);
+	
+	if (!temp && !ret) {
+		pr_debug("thermal_core: Reporting default temperature.");
+		*temp = DEFAULT_TEMP;
+	}
 
 	return ret;
 }
@@ -950,7 +955,7 @@ static void update_temperature(struct thermal_zone_device *tz)
 	ret = thermal_zone_get_temp(tz, &temp);
 	if (ret) {
 		if (ret != -EAGAIN)
-			dev_warn(&tz->device,
+			dev_dbg(&tz->device,
 				 "failed to read out thermal zone (%d)\n",
 				 ret);
 		return;

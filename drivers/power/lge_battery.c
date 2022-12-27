@@ -19,6 +19,10 @@
 #include <linux/wahoo_info.h>
 #include <linux/wakelock.h>
 
+#ifdef CONFIG_FORCE_FAST_CHARGE
+#include <linux/fastchg.h>
+#endif
+
 #define BATT_DRV_NAME	"lge_battery"
 
 #define pr_bm(reason, format, ...)					\
@@ -263,6 +267,17 @@ static int bm_vote_fcc_update(struct battery_manager *bm)
 static int bm_vote_fcc(struct battery_manager *bm, int reason, int fcc)
 {
 	int rc = 0;
+	
+#ifdef CONFIG_FORCE_FAST_CHARGE
+	/*
+	 * Battery current dirty hack while screen off(?)
+	 */
+	if (force_fast_charge) {	
+		if (reason == 2) {
+			fcc = CHG_CURRENT_MAX;
+		}
+	}
+#endif
 
 	bm_vote_fcc_table[reason] = fcc;
 	rc = bm_vote_fcc_update(bm);
@@ -378,6 +393,9 @@ void bm_check_therm_charging(struct battery_manager *bm,
 void bm_check_step_charging(struct battery_manager *bm, int volt)
 {
 	int rc, stat;
+#ifdef CONFIG_FORCE_FAST_CHARGE
+	int curr_temp;
+#endif
 
 	if (!bm->bm_active && bm->sc_status) {
 		rc = bm_vote_fcc(bm, BM_REASON_STEP, -EINVAL);
@@ -395,13 +413,32 @@ void bm_check_step_charging(struct battery_manager *bm, int volt)
 		if (volt < valid_batt_id[bm->batt_id].step_table[stat].volt)
 			break;
 	}
+	
+#ifdef CONFIG_FORCE_FAST_CHARGE
+   /*
+	* Battery current dirty hack while screen off(?)
+	*/
+	if (force_fast_charge) {	
+		curr_temp = CHG_CURRENT_MAX;
+	} else {
+		curr_temp = valid_batt_id[bm->batt_id].step_table[stat].cur;
+	}
+#endif
 
 	if (bm->sc_status != stat) {
+#ifdef CONFIG_FORCE_FAST_CHARGE
+		pr_bm(MISC, "STATE[%d->%d] CUR[%d] VOL[%d]\n",
+		      bm->sc_status, stat,
+		      curr_temp, volt);
+		rc = bm_vote_fcc(bm, BM_REASON_STEP,
+			 curr_temp);
+#else
 		pr_bm(MISC, "STATE[%d->%d] CUR[%d] VOL[%d]\n",
 		      bm->sc_status, stat,
 		      valid_batt_id[bm->batt_id].step_table[stat].cur, volt);
 		rc = bm_vote_fcc(bm, BM_REASON_STEP,
 			 valid_batt_id[bm->batt_id].step_table[stat].cur);
+#endif
 		if (rc < 0) {
 			pr_bm(ERROR, "Couldn't set ibat curr rc=%d\n", rc);
 			return;

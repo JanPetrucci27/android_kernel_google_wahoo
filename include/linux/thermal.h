@@ -32,7 +32,7 @@
 #include <uapi/linux/thermal.h>
 
 #define THERMAL_TRIPS_NONE	-1
-#define THERMAL_MAX_TRIPS	16
+#define THERMAL_MAX_TRIPS	12
 
 /* invalid cooling state */
 #define THERMAL_CSTATE_INVALID -1UL
@@ -67,6 +67,9 @@
 #elif defined(CONFIG_THERMAL_DEFAULT_GOV_POWER_ALLOCATOR)
 #define DEFAULT_THERMAL_GOVERNOR       "power_allocator"
 #endif
+
+/* Default temperature */
+#define DEFAULT_TEMP 40
 
 struct thermal_zone_device;
 struct thermal_cooling_device;

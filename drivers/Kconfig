@@ -204,6 +204,8 @@ source "drivers/hwtracing/stm/Kconfig"
 
 source "drivers/hwtracing/intel_th/Kconfig"
 
+source "drivers/hwtracing/google/Kconfig"
+
 source "drivers/fpga/Kconfig"
 
 source "drivers/tee/Kconfig"
@@ -217,5 +219,7 @@ source "drivers/sensors/Kconfig"
 source "drivers/htc_radio/Kconfig"
 
 source "drivers/dts_eagle/Kconfig"
+
+source "drivers/energy_model/Kconfig"
 
 endmenu

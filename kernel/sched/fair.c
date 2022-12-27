@@ -6100,6 +6100,39 @@ static inline bool cpu_in_sg(struct sched_group *sg, int cpu)
 	return cpu != -1 && cpumask_test_cpu(cpu, sched_group_span(sg));
 }
 
+
+static long compute_energy_simplified(struct task_struct *p, int dst_cpu,
+			    struct perf_domain *pd);
+
+int calc_total_energy(struct energy_env *eenv, struct sched_domain *sd,
+		       struct perf_domain *pd)
+{
+	int cpu_idx, cpu;
+
+	if (sched_feat(EAS_SIMPLIFIED_EM) && pd) {
+		for (cpu_idx = EAS_CPU_PRV; cpu_idx < EAS_CPU_CNT; ++cpu_idx) {
+			cpu = eenv->cpu[cpu_idx].cpu_id;
+			if (cpu < 0)
+				continue;
+			eenv->cpu[cpu_idx].energy = compute_energy_simplified(eenv->p, cpu, pd);
+		}
+
+	} else {
+		struct sched_group *sg = sd->groups;
+		do {
+			/* Skip SGs which do not contains a candidate CPU */
+			if (!cpumask_intersects(&eenv->cpus_mask, sched_group_span(sg)))
+				continue;
+
+			eenv->sg_top = sg;
+			if (compute_energy(eenv) == -EINVAL)
+				return EAS_CPU_PRV;
+		} while (sg = sg->next, sg != sd->groups);
+		/* remember - eenv energy values are unscaled */
+	}
+	return 0;
+}
+
 /*
  * select_energy_cpu_idx(): estimate the energy impact of changing the
  * utilization distribution.
@@ -6118,15 +6151,18 @@ static inline bool cpu_in_sg(struct sched_group *sg, int cpu)
 static inline int select_energy_cpu_idx(struct energy_env *eenv)
 {
 	struct sched_domain *sd;
-	struct sched_group *sg;
+	struct perf_domain *pd;
 	int sd_cpu = -1;
 	int cpu_idx;
 	int margin;
+ 	int ret;
 
 	sd_cpu = eenv->cpu[EAS_CPU_PRV].cpu_id;
 	sd = rcu_dereference(per_cpu(sd_ea, sd_cpu));
 	if (!sd)
 		return EAS_CPU_PRV;
+
+	pd = rcu_dereference(cpu_rq(sd_cpu)->rd->pd);
 
 	cpumask_clear(&eenv->cpus_mask);
 	for (cpu_idx = EAS_CPU_PRV; cpu_idx < EAS_CPU_CNT; ++cpu_idx) {
@@ -6137,19 +6173,9 @@ static inline int select_energy_cpu_idx(struct energy_env *eenv)
 		cpumask_set_cpu(cpu, &eenv->cpus_mask);
 	}
 
-	sg = sd->groups;
-
-	do {
-		/* Skip SGs which do not contains a candidate CPU */
-		if (!cpumask_intersects(&eenv->cpus_mask, sched_group_span(sg)))
-			continue;
-
-		eenv->sg_top = sg;
-		/* energy is unscaled to reduce rounding errors */
-		if (compute_energy(eenv) == -EINVAL)
-			return EAS_CPU_PRV;
-		
-	} while (sg = sg->next, sg != sd->groups);
+	ret = calc_total_energy(eenv, sd, pd);
+	if (ret)
+		return ret;
 	
 	/* Scale energy before comparisons */
 	for (cpu_idx = EAS_CPU_PRV; cpu_idx < EAS_CPU_CNT; ++cpu_idx)
@@ -6345,6 +6371,12 @@ static inline bool task_fits_max(struct task_struct *p, int cpu)
 		return true;
 
 	return __task_fits(p, cpu, 0);
+}
+
+static inline bool cpu_check_overutil_condition(int cpu,
+						unsigned long util)
+{
+	return (capacity_orig_of(cpu) * 1024) < (util * capacity_margin);
 }
 
 static bool __cpu_overutilized(int cpu, int delta)
@@ -7023,6 +7055,7 @@ static inline int find_best_target(struct task_struct *p, int *backup_cpu,
 	unsigned long min_wake_util = ULONG_MAX;
 	unsigned long target_max_spare_cap = 0;
 	unsigned long best_active_util = ULONG_MAX;
+	unsigned long target_idle_max_spare_cap = 0;
 	int best_idle_cstate = INT_MAX;
 	struct sched_domain *sd;
 	struct sched_group *sg;
@@ -7071,7 +7104,7 @@ static inline int find_best_target(struct task_struct *p, int *backup_cpu,
 		for_each_cpu_and(i, tsk_cpus_allowed(p), sched_group_span(sg)) {
 			unsigned long capacity_curr = capacity_curr_of(i);
 			unsigned long capacity_orig = capacity_orig_of(i);
-			unsigned long wake_util, new_util;
+			unsigned long wake_util, new_util, min_capped_util;
 			long spare_cap;
 			int idle_idx = INT_MAX;
 
@@ -7095,7 +7128,17 @@ static inline int find_best_target(struct task_struct *p, int *backup_cpu,
 			 * than the one required to boost the task.
 			 */
 			new_util = max(min_util, new_util);
-			if (new_util > capacity_orig)
+			
+			/*
+			 * Include minimum capacity constraint:
+			 * new_util contains the required utilization including
+			 * boost. min_capped_util also takes into account a
+			 * minimum capacity cap imposed on the CPU by external
+			 * actors.
+			 */
+			min_capped_util = max(new_util, capacity_min_of(i));
+
+			if (cpu_check_overutil_condition(i, new_util))
 				continue;
 			
 			/*
@@ -7103,7 +7146,7 @@ static inline int find_best_target(struct task_struct *p, int *backup_cpu,
 			 * to have available on this CPU once the task is
 			 * enqueued here.
 			 */
-			spare_cap = capacity_orig - new_util;
+			spare_cap = capacity_orig - min_capped_util;
 			
 			if (idle_cpu(i))
 				idle_idx = idle_get_state_idx(cpu_rq(i));
@@ -7238,6 +7281,13 @@ static inline int find_best_target(struct task_struct *p, int *backup_cpu,
 			 * consumptions without affecting performance.
 			 */
 			if (idle_cpu(i)) {
+				/* Favor CPUs that won't end up running at a
+				 * high OPP.
+				 */
+				if ((capacity_orig - min_capped_util) <
+					target_idle_max_spare_cap)
+					continue;
+					
 				/*
 				 * Skip CPUs in deeper idle state, but only
 				 * if they are also less energy efficient.
@@ -7250,6 +7300,8 @@ static inline int find_best_target(struct task_struct *p, int *backup_cpu,
 					continue;
 
 				target_capacity = capacity_orig;
+				target_idle_max_spare_cap = capacity_orig -
+							    min_capped_util;
 				best_idle_cstate = idle_idx;
 				best_idle_cpu = i;
 				continue;
@@ -7463,6 +7515,89 @@ out:
 
 static inline bool nohz_kick_needed(struct rq *rq, bool only_update);
 static void nohz_balancer_kick(bool only_update);
+
+/*
+ * Predicts what cpu_util(@cpu) would return if @p was migrated (and enqueued)
+ * to @dst_cpu.
+ */
+static unsigned long cpu_util_next(int cpu, struct task_struct *p, int dst_cpu)
+{
+	struct cfs_rq *cfs_rq = &cpu_rq(cpu)->cfs;
+	unsigned long util_est, util = READ_ONCE(cfs_rq->avg.util_avg);
+
+	/*
+	 * If @p migrates from @cpu to another, remove its contribution. Or,
+	 * if @p migrates from another CPU to @cpu, add its contribution. In
+	 * the other cases, @cpu is not impacted by the migration, so the
+	 * util_avg should already be correct.
+	 */
+	if (task_cpu(p) == cpu && dst_cpu != cpu)
+		util = max_t(long, util - task_util(p), 0);
+	else if (task_cpu(p) != cpu && dst_cpu == cpu)
+		util += task_util(p);
+
+	if (sched_feat(UTIL_EST)) {
+		util_est = READ_ONCE(cfs_rq->avg.util_est.enqueued);
+
+		/*
+		 * During wake-up, the task isn't enqueued yet and doesn't
+		 * appear in the cfs_rq->avg.util_est.enqueued of any rq,
+		 * so just add it (if needed) to "simulate" what will be
+		 * cpu_util() after the task has been enqueued.
+		 */
+		if (dst_cpu == cpu)
+			util_est += _task_util_est(p);
+
+		util = max(util, util_est);
+	}
+
+	return min_t(unsigned long, util, capacity_orig_of(cpu));
+}
+
+unsigned long sched_get_rt_rq_util(int cpu)
+{
+	struct rq *rq = cpu_rq(cpu);
+	return cpu_util_rt(rq);
+}
+
+/*
+ * compute_energy_simplified(): Estimates the energy that would be consumed
+ * if @p was migrated to @dst_cpu. compute_energy_simplified() predicts what
+ * will be the utilization landscape of the CPUs after the task migration,
+ * and uses the *simplified* Energy Model to compute what would be the energy
+ * if we decided to actually migrate that task.
+ */
+static long compute_energy_simplified(struct task_struct *p, int dst_cpu,
+			    struct perf_domain *pd)
+{
+	long util, max_util, sum_util, energy = 0;
+	int cpu;
+
+	while (pd) {
+		max_util = sum_util = 0;
+		/*
+		 * The capacity state of CPUs of the current rd can be driven by
+		 * CPUs of another rd if they belong to the same performance
+		 * domain. So, account for the utilization of these CPUs too
+		 * by masking pd with cpu_online_mask instead of the rd span.
+		 *
+		 * If an entire performance domain is outside of the current rd,
+		 * it will not appear in its pd list and will not be accounted
+		 * by compute_energy().
+		 */
+		for_each_cpu_and(cpu, perf_domain_span(pd), cpu_online_mask) {
+			util = cpu_util_next(cpu, p, dst_cpu);
+			util += sched_get_rt_rq_util(cpu);
+			max_util = max(util, max_util);
+			sum_util += util;
+		}
+
+		energy += em_pd_energy(pd->em_pd, max_util, sum_util);
+		pd = pd->next;
+	}
+
+	return energy;
+}
 
 /*
  * select_task_rq_fair: Select target runqueue for the waking task in domains

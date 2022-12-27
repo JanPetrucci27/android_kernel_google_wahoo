@@ -18,6 +18,7 @@
 #include <linux/tick.h>
 #include <linux/sched.h>
 #include <linux/math64.h>
+#include <linux/cpu.h>
 
 /*
  * Please note when changing the tuning values:
@@ -262,6 +263,7 @@ again:
 static int menu_select(struct cpuidle_driver *drv, struct cpuidle_device *dev)
 {
 	struct menu_device *data = this_cpu_ptr(&menu_devices);
+	struct device *device = get_cpu_device(dev->cpu);
 	int latency_req = cpuidle_governor_latency_req(dev->cpu);
 	int i;
 	int first_idx;
@@ -273,6 +275,10 @@ static int menu_select(struct cpuidle_driver *drv, struct cpuidle_device *dev)
 		menu_update(drv, dev);
 		data->needs_update = 0;
 	}
+	
+	/* resume_latency is 0 means no restriction */
+	if (resume_latency && resume_latency < latency_req)
+		latency_req = resume_latency;
 
 	/* Special case when user has set very strict latency requirement */
 	if (unlikely(latency_req == 0))
