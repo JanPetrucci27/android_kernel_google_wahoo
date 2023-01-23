@@ -106,7 +106,7 @@ ENDPROC(cpu_do_idle)
  *
  * x0: virtual address of context pointer
  */
-ENTRY(cpu_do_suspend)
+SYM_FUNC_START(cpu_do_suspend)
 	mrs	x2, tpidr_el0
 	mrs	x3, tpidrro_el0
 	mrs	x4, contextidr_el1
@@ -125,14 +125,14 @@ ENTRY(cpu_do_suspend)
 	stp	x9, x10, [x0, #64]
 	stp	x11, x12, [x0, #80]
 	ret
-ENDPROC(cpu_do_suspend)
+SYM_FUNC_END(cpu_do_suspend)
 
 /**
  * cpu_do_resume - restore CPU register context
  *
  * x0: Address of context pointer
  */
-ENTRY(cpu_do_resume)
+SYM_FUNC_START(cpu_do_resume)
 	ldp	x2, x3, [x0]
 	ldp	x4, x5, [x0, #16]
 	ldp	x6, x8, [x0, #32]
@@ -162,7 +162,7 @@ ENTRY(cpu_do_resume)
 	reset_pmuserenr_el0 x0			// Disable PMU access from EL0
 	isb
 	ret
-ENDPROC(cpu_do_resume)
+SYM_FUNC_END(cpu_do_resume)
 #endif
 
 /*
@@ -172,7 +172,7 @@ ENDPROC(cpu_do_resume)
  *
  *	- pgd_phys - physical address of new TTB
  */
-ENTRY(cpu_do_switch_mm)
+SYM_FUNC_START(cpu_do_switch_mm)
 	mrs	x2, ttbr1_el1
 	mmid	x1, x1				// get mm->context.id
 #ifdef CONFIG_ARM64_SW_TTBR0_PAN
@@ -184,7 +184,7 @@ ENTRY(cpu_do_switch_mm)
 	msr	ttbr0_el1, x0			// now update TTBR0
 	isb
 	b	post_ttbr_update_workaround	// Back to C code...
-ENDPROC(cpu_do_switch_mm)
+SYM_FUNC_END(cpu_do_switch_mm)
 
 	.pushsection ".idmap.text", "ax"
 /*
@@ -193,7 +193,7 @@ ENDPROC(cpu_do_switch_mm)
  * This is the low-level counterpart to cpu_replace_ttbr1, and should not be
  * called by anything else. It can only be executed from a TTBR0 mapping.
  */
-ENTRY(idmap_cpu_replace_ttbr1)
+SYM_FUNC_START(idmap_cpu_replace_ttbr1)
 	mrs	x2, daif
 	msr	daifset, #0xf
 
@@ -211,7 +211,7 @@ ENTRY(idmap_cpu_replace_ttbr1)
 	msr	daif, x2
 
 	ret
-ENDPROC(idmap_cpu_replace_ttbr1)
+SYM_FUNC_END(idmap_cpu_replace_ttbr1)
 	.popsection
 
 /*
@@ -220,7 +220,7 @@ ENDPROC(idmap_cpu_replace_ttbr1)
  *	Initialise the processor for turning the MMU on.  Return in x0 the
  *	value of the SCTLR_EL1 register.
  */
-ENTRY(__cpu_setup)
+SYM_FUNC_START(__cpu_setup)
 	tlbi	vmalle1				// Invalidate local TLB
 	dsb	nsh
 
@@ -290,7 +290,7 @@ ENTRY(__cpu_setup)
 #endif	/* CONFIG_ARM64_HW_AFDBM */
 	msr	tcr_el1, x10
 	ret					// return to head.S
-ENDPROC(__cpu_setup)
+SYM_FUNC_END(__cpu_setup)
 
 	/*
 	 * We set the desired value explicitly, including those of the

@@ -37,7 +37,7 @@ struct mbox_test_device {
 	char			*rx_buffer;
 	char			*signal;
 	char			*message;
-	spinlock_t		lock;
+	raw_spinlock_t		lock;
 };
 
 static ssize_t mbox_test_signal_write(struct file *filp,
@@ -161,7 +161,7 @@ static ssize_t mbox_test_message_read(struct file *filp, char __user *userbuf,
 		goto out;
 	}
 
-	spin_lock_irqsave(&tdev->lock, flags);
+	raw_spin_lock_irqsave(&tdev->lock, flags);
 
 	ptr = tdev->rx_buffer;
 	while (l < MBOX_HEXDUMP_MAX_LEN) {
@@ -178,7 +178,7 @@ static ssize_t mbox_test_message_read(struct file *filp, char __user *userbuf,
 
 	memset(tdev->rx_buffer, 0, MBOX_MAX_MSG_LEN);
 
-	spin_unlock_irqrestore(&tdev->lock, flags);
+	raw_spin_unlock_irqrestore(&tdev->lock, flags);
 
 	ret = simple_read_from_buffer(userbuf, count, ppos, touser, MBOX_HEXDUMP_MAX_LEN);
 out:
@@ -219,7 +219,7 @@ static void mbox_test_receive_message(struct mbox_client *client, void *message)
 	struct mbox_test_device *tdev = dev_get_drvdata(client->dev);
 	unsigned long flags;
 
-	spin_lock_irqsave(&tdev->lock, flags);
+	raw_spin_lock_irqsave(&tdev->lock, flags);
 	if (tdev->mmio) {
 		memcpy_fromio(tdev->rx_buffer, tdev->mmio, MBOX_MAX_MSG_LEN);
 		print_hex_dump(KERN_INFO, "Client: Received [MMIO]: ",
@@ -231,7 +231,7 @@ static void mbox_test_receive_message(struct mbox_client *client, void *message)
 			       message, MBOX_MAX_MSG_LEN, true);
 		memcpy(tdev->rx_buffer, message, MBOX_MAX_MSG_LEN);
 	}
-	spin_unlock_irqrestore(&tdev->lock, flags);
+	raw_spin_unlock_irqrestore(&tdev->lock, flags);
 }
 
 static void mbox_test_prepare_message(struct mbox_client *client, void *message)
@@ -309,7 +309,7 @@ static int mbox_test_probe(struct platform_device *pdev)
 	tdev->dev = &pdev->dev;
 	platform_set_drvdata(pdev, tdev);
 
-	spin_lock_init(&tdev->lock);
+	raw_spin_lock_init(&tdev->lock);
 
 	if (tdev->rx_channel) {
 		tdev->rx_buffer = devm_kzalloc(&pdev->dev,

@@ -476,6 +476,19 @@ static inline void *kvzalloc(size_t size, gfp_t flags)
 	return kvmalloc(size, flags | __GFP_ZERO);
 }
 
+static inline void *kvmalloc_array(size_t n, size_t size, gfp_t flags)
+{
+	if (size != 0 && n > SIZE_MAX / size)
+		return NULL;
+
+	return kvmalloc(n * size, flags);
+}
+
+static inline void *kvcalloc(size_t n, size_t size, gfp_t flags)
+{
+	return kvmalloc_array(n, size, flags | __GFP_ZERO);
+}
+
 extern void kvfree(const void *addr);
 
 static inline void compound_lock(struct page *page)
@@ -1634,14 +1647,44 @@ static inline pte_t *get_locked_pte(struct mm_struct *mm, unsigned long addr,
 	return ptep;
 }
 
-#ifdef __PAGETABLE_PUD_FOLDED
+#if defined(__PAGETABLE_PUD_FOLDED) || !defined(CONFIG_MMU)
 static inline int __pud_alloc(struct mm_struct *mm, pgd_t *pgd,
 						unsigned long address)
 {
 	return 0;
 }
+
+static inline unsigned long mm_nr_puds(const struct mm_struct *mm)
+{
+	return 0;
+}
+
+static inline void mm_nr_puds_init(struct mm_struct *mm) {}
+static inline void mm_inc_nr_puds(struct mm_struct *mm) {}
+static inline void mm_dec_nr_puds(struct mm_struct *mm) {}
+
 #else
 int __pud_alloc(struct mm_struct *mm, pgd_t *pgd, unsigned long address);
+
+static inline void mm_nr_puds_init(struct mm_struct *mm)
+{
+	atomic_long_set(&mm->nr_puds, 0);
+}
+
+static inline unsigned long mm_nr_puds(const struct mm_struct *mm)
+{
+	return atomic_long_read(&mm->nr_puds);
+}
+
+static inline void mm_inc_nr_puds(struct mm_struct *mm)
+{
+	atomic_long_inc(&mm->nr_puds);
+}
+
+static inline void mm_dec_nr_puds(struct mm_struct *mm)
+{
+	atomic_long_dec(&mm->nr_puds);
+}
 #endif
 
 #if defined(__PAGETABLE_PMD_FOLDED) || !defined(CONFIG_MMU)
@@ -1653,7 +1696,7 @@ static inline int __pmd_alloc(struct mm_struct *mm, pud_t *pud,
 
 static inline void mm_nr_pmds_init(struct mm_struct *mm) {}
 
-static inline unsigned long mm_nr_pmds(struct mm_struct *mm)
+static inline unsigned long mm_nr_pmds(const struct mm_struct *mm)
 {
 	return 0;
 }
@@ -1669,7 +1712,7 @@ static inline void mm_nr_pmds_init(struct mm_struct *mm)
 	atomic_long_set(&mm->nr_pmds, 0);
 }
 
-static inline unsigned long mm_nr_pmds(struct mm_struct *mm)
+static inline unsigned long mm_nr_pmds(const struct mm_struct *mm)
 {
 	return atomic_long_read(&mm->nr_pmds);
 }
@@ -1683,6 +1726,38 @@ static inline void mm_dec_nr_pmds(struct mm_struct *mm)
 {
 	atomic_long_dec(&mm->nr_pmds);
 }
+#endif
+
+#ifdef CONFIG_MMU
+static inline void mm_nr_ptes_init(struct mm_struct *mm)
+{
+	atomic_long_set(&mm->nr_ptes, 0);
+}
+
+static inline unsigned long mm_nr_ptes(const struct mm_struct *mm)
+{
+	return atomic_long_read(&mm->nr_ptes);
+}
+
+static inline void mm_inc_nr_ptes(struct mm_struct *mm)
+{
+	atomic_long_inc(&mm->nr_ptes);
+}
+
+static inline void mm_dec_nr_ptes(struct mm_struct *mm)
+{
+	atomic_long_dec(&mm->nr_ptes);
+}
+#else
+static inline void mm_nr_ptes_init(struct mm_struct *mm) {}
+
+static inline unsigned long mm_nr_ptes(const struct mm_struct *mm)
+{
+	return 0;
+}
+
+static inline void mm_inc_nr_ptes(struct mm_struct *mm) {}
+static inline void mm_dec_nr_ptes(struct mm_struct *mm) {}
 #endif
 
 int __pte_alloc(struct mm_struct *mm, struct vm_area_struct *vma,

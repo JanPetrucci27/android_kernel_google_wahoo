@@ -71,13 +71,20 @@ ifeq ($(CONFIG_COMPAT_VDSO), y)
   endif
 endif
 
+# msm8998 optimizations
+ifeq ($(cc-name),clang)
+OPT_FLAGS := -O3 -march=armv8-a+crc+crypto -mtune=cortex-a53
+else
+OPT_FLAGS := -O3 -march=armv8-a+crc+crypto -mtune=cortex-a73.cortex-a53
+endif
+KBUILD_CFLAGS  += $(OPT_FLAGS)
+KBUILD_AFLAGS  += $(OPT_FLAGS)
+KBUILD_LDFLAGS += $(OPT_FLAGS)
+
 ifeq ($(cc-name),clang)
 KBUILD_CFLAGS	+= -mno-implicit-float
 else
 KBUILD_CFLAGS	+= -mgeneral-regs-only
-ifeq ($(CONFIG_ARCH_MSM8998), y)
-KBUILD_CFLAGS	+= -mcpu=cortex-a73.cortex-a53+crypto
-endif
 endif
 KBUILD_CFLAGS	+= $(lseinstr) $(vdso32)
 KBUILD_CFLAGS	+= -fno-pic
@@ -104,18 +111,6 @@ else
 KBUILD_CPPFLAGS	+= -mlittle-endian
 AS		+= -EL
 LDFLAGS		+= -EL $(call ld-option, -maarch64elf, -maarch64linux  -z norelro)
-endif
-
-# msm8998 optimizations
-ifeq ($(cc-name),clang)
-arch-$(CONFIG_ARCH_MSM8998)	:= $(call cc-option,-march=armv8-a+crc+crypto -mcpu=cortex-a53+crc+crypto)
-tune-$(CONFIG_ARCH_MSM8998)	:= -mtune=cortex-a53
-else
-arch-$(CONFIG_ARCH_MSM8998)	:= $(call cc-option,-march=armv8-a+crc+crypto -mcpu=cortex-a73.cortex-a53+crc+crypto)
-tune-$(CONFIG_ARCH_MSM8998)	:= -mtune=cortex-a73.cortex-a53
-
-KBUILD_CFLAGS	+= $(arch-y) $(tune-y)
-KBUILD_AFLAGS	+= $(arch-y) $(tune-y)
 endif
 
 CHECKFLAGS	+= -D__aarch64__ -m64
@@ -237,6 +232,8 @@ vdso_install:
 archclean:
 	$(Q)$(MAKE) $(clean)=$(boot)
 	$(Q)$(MAKE) $(clean)=$(boot)/dts
+	$(Q)$(MAKE) $(clean)=arch/arm64/kernel/vdso
+	$(Q)$(MAKE) $(clean)=arch/arm64/kernel/vdso32
 
 CLEAN_FILES += $(boot)/Image $(boot)/Image-dtb $(boot)/Image.* $(boot)/dtbo.img $(boot)/*.dtbc
 MRPROPER_FILES += $(boot)/Image $(boot)/Image-dtb $(boot)/Image.* $(boot)/dtbo.img $(boot)/*.dtbc

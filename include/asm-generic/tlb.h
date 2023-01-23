@@ -223,6 +223,4 @@ static inline void tlb_flush_pmd_range(struct mmu_gather *tlb,
 		__pmd_free_tlb(tlb, pmdp, address);		\
 	} while (0)
 
-#define tlb_migrate_finish(mm) do {} while (0)
-
 #endif /* _ASM_GENERIC__TLB_H */

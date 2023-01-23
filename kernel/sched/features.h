@@ -3,7 +3,7 @@
  * them to run sooner, but does not allow tons of sleepers to
  * rip the spread apart.
  */
-#define SCHED_FEAT_GENTLE_FAIR_SLEEPERS 0
+#define SCHED_FEAT_GENTLE_FAIR_SLEEPERS 1
 
 /*
  * Place new tasks ahead so that they do not starve already running
@@ -22,7 +22,7 @@
  * skip buddy i.e task called yield() is always skipped and the
  * next entity is selected to run irrespective of the vruntime
  */
-#define SCHED_FEAT_STRICT_SKIP_BUDDY 1
+#define SCHED_FEAT_STRICT_SKIP_BUDDY 0
 
 /*
  * Prefer to schedule the task that ran last (when we did
@@ -48,7 +48,7 @@
 /*
  * Decrement CPU capacity based on time not spent running tasks
  */
-#define SCHED_FEAT_NONTASK_CAPACITY 1
+#define SCHED_FEAT_NONTASK_CAPACITY 0
 
 /*
  * Queue remote wakeups on the target CPU and process them
@@ -138,7 +138,7 @@
  * Use the Simplified Energy Model for EAS accounting only for
  * active costs of CPUs.
  */
-#define SCHED_FEAT_EAS_SIMPLIFIED_EM 1
+#define SCHED_FEAT_EAS_SIMPLIFIED_EM 0
 
 /*
  * Inflate the effective utilization of SchedTune-boosted tasks, which

@@ -60,7 +60,7 @@ struct sti_mbox_device {
 	void __iomem		*base;
 	const char		*name;
 	u32			enabled[STI_MBOX_INST_MAX];
-	spinlock_t		lock;
+	raw_spinlock_t		lock;
 };
 
 /**
@@ -129,10 +129,10 @@ static void sti_mbox_enable_channel(struct mbox_chan *chan)
 	unsigned long flags;
 	void __iomem *base = MBOX_BASE(mdev, instance);
 
-	spin_lock_irqsave(&mdev->lock, flags);
+	raw_spin_lock_irqsave(&mdev->lock, flags);
 	mdev->enabled[instance] |= BIT(channel);
 	writel_relaxed(BIT(channel), base + STI_ENA_SET_OFFSET);
-	spin_unlock_irqrestore(&mdev->lock, flags);
+	raw_spin_unlock_irqrestore(&mdev->lock, flags);
 }
 
 static void sti_mbox_disable_channel(struct mbox_chan *chan)
@@ -144,10 +144,10 @@ static void sti_mbox_disable_channel(struct mbox_chan *chan)
 	unsigned long flags;
 	void __iomem *base = MBOX_BASE(mdev, instance);
 
-	spin_lock_irqsave(&mdev->lock, flags);
+	raw_spin_lock_irqsave(&mdev->lock, flags);
 	mdev->enabled[instance] &= ~BIT(channel);
 	writel_relaxed(BIT(channel), base + STI_ENA_CLR_OFFSET);
-	spin_unlock_irqrestore(&mdev->lock, flags);
+	raw_spin_unlock_irqrestore(&mdev->lock, flags);
 }
 
 static void sti_mbox_clear_irq(struct mbox_chan *chan)
@@ -449,7 +449,7 @@ static int sti_mbox_probe(struct platform_device *pdev)
 	mdev->dev		= &pdev->dev;
 	mdev->mbox		= mbox;
 
-	spin_lock_init(&mdev->lock);
+	raw_spin_lock_init(&mdev->lock);
 
 	/* STi Mailbox does not have a Tx-Done or Tx-Ready IRQ */
 	mbox->txdone_irq	= false;

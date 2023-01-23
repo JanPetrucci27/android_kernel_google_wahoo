@@ -60,7 +60,7 @@
 
 struct bcm2835_mbox {
 	void __iomem *regs;
-	spinlock_t lock;
+	raw_spinlock_t lock;
 	struct mbox_controller controller;
 };
 
@@ -88,10 +88,10 @@ static int bcm2835_send_data(struct mbox_chan *link, void *data)
 	struct bcm2835_mbox *mbox = bcm2835_link_mbox(link);
 	u32 msg = *(u32 *)data;
 
-	spin_lock(&mbox->lock);
+	raw_spin_lock(&mbox->lock);
 	writel(msg, mbox->regs + MAIL1_WRT);
 	dev_dbg(mbox->controller.dev, "Request 0x%08X\n", msg);
-	spin_unlock(&mbox->lock);
+	raw_spin_unlock(&mbox->lock);
 	return 0;
 }
 
@@ -117,9 +117,9 @@ static bool bcm2835_last_tx_done(struct mbox_chan *link)
 	struct bcm2835_mbox *mbox = bcm2835_link_mbox(link);
 	bool ret;
 
-	spin_lock(&mbox->lock);
+	raw_spin_lock(&mbox->lock);
 	ret = !(readl(mbox->regs + MAIL1_STA) & ARM_MS_FULL);
-	spin_unlock(&mbox->lock);
+	raw_spin_unlock(&mbox->lock);
 	return ret;
 }
 
@@ -149,7 +149,7 @@ static int bcm2835_mbox_probe(struct platform_device *pdev)
 	mbox = devm_kzalloc(dev, sizeof(*mbox), GFP_KERNEL);
 	if (mbox == NULL)
 		return -ENOMEM;
-	spin_lock_init(&mbox->lock);
+	raw_spin_lock_init(&mbox->lock);
 
 	ret = devm_request_irq(dev, irq_of_parse_and_map(dev->of_node, 0),
 			       bcm2835_mbox_irq, 0, dev_name(dev), mbox);

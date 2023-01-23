@@ -928,8 +928,9 @@ static void mdss_dsi_panel_bl_ctrl(struct mdss_panel_data *pdata,
 	
 #ifdef CONFIG_FB_MSM_MDSS_FLICKER_FREE
 	/* Remap backlight value prior to HBM */
-	if (bl_level != 0)
+	if (bl_level != 0) {
 		bl_level = mdss_panel_calc_backlight(bl_level);
+	}
 #endif
 
 	/*

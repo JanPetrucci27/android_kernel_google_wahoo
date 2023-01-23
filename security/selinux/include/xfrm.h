@@ -46,12 +46,10 @@ static inline void selinux_xfrm_notify_policyload(void)
 {
 	struct net *net;
 
-	rtnl_lock();
 	for_each_net(net) {
 		atomic_inc(&net->xfrm.flow_cache_genid);
 		rt_genid_bump_all(net);
 	}
-	rtnl_unlock();
 }
 #else
 static inline int selinux_xfrm_enabled(void)

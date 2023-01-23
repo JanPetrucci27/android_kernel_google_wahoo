@@ -87,13 +87,6 @@
  */
 #define MDP_TIME_PERIOD_CALC_FPS_US	1000000
 
-#define MDSS_BRIGHT_TO_BL_DIM(out, v) do {\
-			out = (12*v*v+1393*v+3060)/4465;\
-			} while (0)
-
-bool backlight_dimmer = false;
-module_param(backlight_dimmer, bool, 0755);
-
 static struct fb_info *fbi_list[MAX_FBI_LIST];
 static int fbi_list_index;
 
@@ -296,11 +289,7 @@ static void mdss_fb_set_bl_brightness(struct led_classdev *led_cdev,
 		mfd->boot_notification_led = NULL;
 	}
 
-	if (backlight_dimmer) {
-		MDSS_BRIGHT_TO_BL_DIM(bl_lvl, value);
-	} else {
-		bl_lvl = mdss_brightness_to_bl(mfd->panel_info, value);
-	}
+	bl_lvl = mdss_brightness_to_bl(mfd->panel_info, value);
 
 	if (!IS_CALIB_MODE_BL(mfd) && (!mfd->ext_bl_ctrl || !value ||
 							!mfd->bl_level)) {
@@ -1772,8 +1761,11 @@ void mdss_fb_set_backlight(struct msm_fb_data_type *mfd, u32 bkl_lvl)
 		if (!IS_CALIB_MODE_BL(mfd))
 			mdss_fb_scale_bl(mfd, &temp);
 #ifdef CONFIG_FB_MSM_MDSS_FLICKER_FREE
-		/* Update flicker free */
 		if (mfd->op_enable == 0)
+			mdss_fb_update_last_screen_on(true);
+		/* Update flicker free */
+		mdss_fb_update_last_screen_on_tmp();
+		if (mdss_fb_get_last_screen_on())
 			mdss_fb_update_flicker_free(mfd, temp);
 #endif
 		/*
@@ -1822,8 +1814,11 @@ void mdss_fb_update_backlight(struct msm_fb_data_type *mfd)
 				(*mfd->mdp.ad_calc_bl)(mfd, temp, &temp,
 								&bl_notify);
 #ifdef CONFIG_FB_MSM_MDSS_FLICKER_FREE
-			/* Update flicker free */
 			if (mfd->op_enable == 0)
+				mdss_fb_update_last_screen_on(true);
+			/* Update flicker free */
+			mdss_fb_update_last_screen_on_tmp();
+			if (mdss_fb_get_last_screen_on())
 				mdss_fb_update_flicker_free(mfd, temp);
 #endif
 			if (bl_notify)
@@ -1849,7 +1844,7 @@ static int mdss_fb_start_disp_thread(struct msm_fb_data_type *mfd)
 	mdss_fb_get_split(mfd);
 
 	atomic_set(&mfd->commits_pending, 0);
-	mfd->disp_thread = kthread_run_perf_critical(cpu_perf_mask, __mdss_fb_display_thread,
+	mfd->disp_thread = kthread_run_perf_critical(cpu_lp_mask, __mdss_fb_display_thread,
 				mfd, "mdss_fb%d", mfd->index);
 
 	if (IS_ERR(mfd->disp_thread)) {
@@ -2181,6 +2176,16 @@ static int mdss_fb_blank(int blank_mode, struct fb_info *info)
 	pr_debug("mode: %d\n", blank_mode);
 
 	pdata = dev_get_platdata(&mfd->pdev->dev);
+
+#ifdef CONFIG_FB_MSM_MDSS_FLICKER_FREE
+	if (blank_mode == 0) {
+		mdss_fb_update_last_screen_on(true);
+	} else {
+		mdss_fb_update_last_screen_on(false);
+	}
+
+	mdss_fb_update_last_screen_on_tmp();
+#endif
 
 	if (pdata->panel_info.is_lpm_mode &&
 			blank_mode == FB_BLANK_UNBLANK) {

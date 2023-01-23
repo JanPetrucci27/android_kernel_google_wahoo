@@ -5771,6 +5771,27 @@ static QDF_STATUS find_cfg_item(tCfgIniEntry *iniTable, unsigned long entries,
 
 	for (i = 0; i < entries; i++) {
 		if (strcmp(iniTable[i].name, name) == 0) {
+			
+			if (strstr(name, "gChannelBondingMode24GHz")) {
+				*value = "1";
+				pr_info("WLAN_HDD_CFG: gChannelBondingMode24GHz = %s\n", *value);
+			}
+							
+			if (strstr(name, "gChannelBondingMode5GHz")) {
+				*value = "1";
+				pr_info("WLAN_HDD_CFG: gChannelBondingMode5GHz = %s\n", *value);
+			}
+		
+			if (strstr(name, "gForce1x1Exception")) {
+				*value = "0";
+				pr_info("WLAN_HDD_CFG: gForce1x1Exception = %s\n", *value);
+			}
+			
+			if (strstr(name, "sae_enabled")) {
+				*value = "1";
+				pr_info("WLAN_HDD_CFG: sae_enabled = %s\n", *value);
+			}			
+			
 			*value = iniTable[i].value;
 			hdd_debug("Found %s entry for Name=[%s] Value=[%s] ",
 				  WLAN_INI_FILE, name, *value);
@@ -7713,7 +7734,7 @@ QDF_STATUS hdd_parse_config_ini(hdd_context_t *pHddCtx)
 						while (*buffer != '\0')
 							buffer++;
 						*buffer = '\0';
-						cfgIniTable[i].name = name;
+						cfgIniTable[i].name = name;						
 						cfgIniTable[i++].value = value;
 						if (i >= MAX_CFG_INI_ITEMS) {
 							hdd_err("Number of items in %s > %d",

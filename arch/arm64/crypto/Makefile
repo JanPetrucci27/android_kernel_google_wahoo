@@ -32,6 +32,14 @@ aes-ce-blk-y := aes-glue-ce.o aes-ce.o
 obj-$(CONFIG_CRYPTO_AES_ARM64_NEON_BLK) += aes-neon-blk.o
 aes-neon-blk-y := aes-glue-neon.o aes-neon.o
 
+ifeq ($(cc-name),clang)
+ccflags-y += -mtune=cortex-a53 -march=armv8-a+crc+crypto
+asflags-y += -mtune=cortex-a53 -march=armv8-a+crc+crypto
+else
+ccflags-y += -mtune=cortex-a73.cortex-a53 -march=armv8-a+crc+crypto
+asflags-y += -mtune=cortex-a73.cortex-a53 -march=armv8-a+crc+crypto
+endif
+
 AFLAGS_aes-ce.o		:= -DINTERLEAVE=4
 AFLAGS_aes-neon.o	:= -DINTERLEAVE=4
 
@@ -39,7 +47,11 @@ CFLAGS_aes-glue-ce.o	:= -DUSE_V8_CRYPTO_EXTENSIONS
 
 obj-$(CONFIG_CRYPTO_CRC32_ARM64) += crc32-arm64.o
 
-CFLAGS_crc32-arm64.o	:= -mcpu=generic+crc $(filter -mcpu=%, $(KBUILD_CFLAGS))
+ifeq ($(cc-name),clang)
+CFLAGS_crc32-arm64.o	:= -mcpu=cortex-a53+crc
+else
+CFLAGS_crc32-arm64.o	:= -mcpu=cortex-a73.cortex-a53+crc
+endif
 
 $(obj)/aes-glue-%.o: $(src)/aes-glue.c FORCE
 	$(call if_changed_rule,cc_o_c)

@@ -28,6 +28,9 @@ uint32_t mdss_panel_calc_backlight(uint32_t bl_lvl);
 
 /* Functions to set internal variables */
 void mdss_fb_update_flicker_free(struct msm_fb_data_type *mfd, uint32_t bl_lvl);
+void mdss_fb_update_last_screen_on(bool screen_on);
+bool mdss_fb_get_last_screen_on(void);
+void mdss_fb_update_last_screen_on_tmp(void);
 void mdss_panel_set_elvss_off_threshold(int val);
 
 #endif  /* _FLICKER_FREE_H */

@@ -123,7 +123,7 @@ config QCOM_RTB_SEPARATE_CPUS
 
 config TRACING
 	bool
-	select DEBUG_FS
+	select DEBUG_FS if !ANDROID
 	select RING_BUFFER
 	select STACKTRACE if STACKTRACE_SUPPORT
 	select TRACEPOINTS
@@ -135,6 +135,20 @@ config TRACING
 config GENERIC_TRACER
 	bool
 	select TRACING
+
+if TRACING
+
+config DISABLE_TRACE_PRINTK
+	bool "Force disable trace_printk() usage"
+	default y
+	help
+	  When trace_printk() is used in any of the kernel source, it enables
+	  debugging functions which are not desired for production kernel.
+	  Enabling this option will replace trace_printk() with pr_debug().
+
+	  If in doubt, say Y.
+
+endif
 
 #
 # Minimum requirements an architecture has to meet for us to
@@ -422,7 +436,7 @@ config BLK_DEV_IO_TRACE
 	depends on SYSFS
 	depends on BLOCK
 	select RELAY
-	select DEBUG_FS
+	select DEBUG_FS if !ANDROID
 	select TRACEPOINTS
 	select GENERIC_TRACER
 	select STACKTRACE

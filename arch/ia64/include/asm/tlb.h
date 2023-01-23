@@ -261,8 +261,6 @@ tlb_flush_pmd_range(struct mmu_gather *tlb, unsigned long address,
 		tlb->end_addr = address + size;
 }
 
-#define tlb_migrate_finish(mm)	platform_tlb_migrate_finish(mm)
-
 #define tlb_start_vma(tlb, vma)			do { } while (0)
 #define tlb_end_vma(tlb, vma)			do { } while (0)
 

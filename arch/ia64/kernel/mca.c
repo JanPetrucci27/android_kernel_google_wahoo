@@ -985,7 +985,7 @@ ia64_mca_modify_original_stack(struct pt_regs *regs,
 	const char *msg;
 	int cpu = smp_processor_id();
 
-	previous_current = curr_task(cpu);
+	ia64_set_curr_task = curr_task(cpu);
 	set_curr_task(cpu, current);
 	if ((p = strchr(current->comm, ' ')))
 		*p = '\0';

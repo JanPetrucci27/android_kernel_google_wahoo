@@ -136,8 +136,8 @@
 			05 01 00 00 00 00 01 38
 			/* Step-up control */
 			39 01 00 00 00 00 03 E2 20 0D
-			/* Display off and sleep 64 ms */
-			05 01 00 00 40 00 01 28
+			/* Display off and sleep 58 ms */
+			05 01 00 00 3A 00 01 28
 			/* Set ALPM brightness to normal (exit ALPM) */
 			39 01 00 00 00 00 02 E4 30
 			/* Enter normal mode */

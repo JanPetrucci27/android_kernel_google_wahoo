@@ -19,6 +19,10 @@
 #include <linux/wahoo_info.h>
 #include <linux/wakelock.h>
 
+#ifdef CONFIG_FORCE_BATT_VOLTAGE_LIMIT
+#include <linux/force_batt_voltage_limit.h>
+#endif
+
 #ifdef CONFIG_FORCE_FAST_CHARGE
 #include <linux/fastchg.h>
 #endif
@@ -36,6 +40,7 @@
 	} while (0)
 
 #define NORM_VOLT			4400000
+#define OPT_VOLT			4200000 /* Optimum voltage for Li-ion battery*/
 #define LIM_VOLT			4100000
 #define PARALLEL_VOLT			4450000
 #define CHG_CURRENT_MAX			3550000
@@ -393,9 +398,6 @@ void bm_check_therm_charging(struct battery_manager *bm,
 void bm_check_step_charging(struct battery_manager *bm, int volt)
 {
 	int rc, stat;
-#ifdef CONFIG_FORCE_FAST_CHARGE
-	int curr_temp;
-#endif
 
 	if (!bm->bm_active && bm->sc_status) {
 		rc = bm_vote_fcc(bm, BM_REASON_STEP, -EINVAL);
@@ -413,32 +415,51 @@ void bm_check_step_charging(struct battery_manager *bm, int volt)
 		if (volt < valid_batt_id[bm->batt_id].step_table[stat].volt)
 			break;
 	}
-	
-#ifdef CONFIG_FORCE_FAST_CHARGE
-   /*
-	* Battery current dirty hack while screen off(?)
-	*/
-	if (force_fast_charge) {	
-		curr_temp = CHG_CURRENT_MAX;
+
+#ifdef CONFIG_FORCE_BATT_VOLTAGE_LIMIT
+	if (force_batt_voltage_limit) {
+		volt = bm_set_property(bm->batt_psy,
+					 POWER_SUPPLY_PROP_VOLTAGE_MAX,
+					 OPT_VOLT);
+		if (volt < 0) {
+			pr_bm(ERROR, "Couldn't set battery float voltage, rc=%d", volt);
+			return;
+		} else {
+			pr_info("Battery Volt = 4.2mV\n");
+		}
 	} else {
-		curr_temp = valid_batt_id[bm->batt_id].step_table[stat].cur;
+		volt = bm_set_property(bm->batt_psy,
+					 POWER_SUPPLY_PROP_VOLTAGE_MAX,
+					 NORM_VOLT);
+		if (volt < 0) {
+			pr_bm(ERROR, "Couldn't set battery float voltage, rc=%d", volt);
+			return;
+		} else {
+			pr_info("Battery Volt = 4.4mV\n");
+		}
 	}
+
 #endif
 
 	if (bm->sc_status != stat) {
 #ifdef CONFIG_FORCE_FAST_CHARGE
-		pr_bm(MISC, "STATE[%d->%d] CUR[%d] VOL[%d]\n",
-		      bm->sc_status, stat,
-		      curr_temp, volt);
-		rc = bm_vote_fcc(bm, BM_REASON_STEP,
-			 curr_temp);
-#else
-		pr_bm(MISC, "STATE[%d->%d] CUR[%d] VOL[%d]\n",
-		      bm->sc_status, stat,
-		      valid_batt_id[bm->batt_id].step_table[stat].cur, volt);
-		rc = bm_vote_fcc(bm, BM_REASON_STEP,
-			 valid_batt_id[bm->batt_id].step_table[stat].cur);
+		if (force_fast_charge)
+		{
+			pr_bm(MISC, "STATE[%d->%d] CUR[%d] VOL[%d]\n",
+				  bm->sc_status, stat,
+				  CHG_CURRENT_MAX, volt);
+			rc = bm_vote_fcc(bm, BM_REASON_STEP,
+				 CHG_CURRENT_MAX);
+		} else
 #endif
+		{
+			pr_bm(MISC, "STATE[%d->%d] CUR[%d] VOL[%d]\n",
+				  bm->sc_status, stat,
+				  valid_batt_id[bm->batt_id].step_table[stat].cur, volt);
+			rc = bm_vote_fcc(bm, BM_REASON_STEP,
+				 valid_batt_id[bm->batt_id].step_table[stat].cur);
+		}
+
 		if (rc < 0) {
 			pr_bm(ERROR, "Couldn't set ibat curr rc=%d\n", rc);
 			return;

@@ -7978,7 +7978,7 @@ static struct md_personality raid4_personality =
 static int __init raid5_init(void)
 {
 	raid5_wq = alloc_workqueue("raid5wq",
-		WQ_UNBOUND|WQ_MEM_RECLAIM|WQ_CPU_INTENSIVE|WQ_SYSFS, 0);
+		WQ_UNBOUND | WQ_MEM_RECLAIM | WQ_SYSFS, 0);
 	if (!raid5_wq)
 		return -ENOMEM;
 	register_md_personality(&raid6_personality);

@@ -593,7 +593,7 @@ struct msm_pcie_dev_t {
 	uint32_t			    parf_swing;
 
 	bool				 cfg_access;
-	spinlock_t			 cfg_lock;
+	raw_spinlock_t			 			 cfg_lock;
 	unsigned long		    irqsave_flags;
 	struct mutex			enumerate_lock;
 	struct mutex		     setup_lock;
@@ -3291,7 +3291,7 @@ static inline int msm_pcie_oper_conf(struct pci_bus *bus, u32 devfn, int oper,
 	rc_idx = dev->rc_idx;
 	rc = (bus->number == 0);
 
-	spin_lock_irqsave(&dev->cfg_lock, dev->irqsave_flags);
+	raw_spin_lock_irqsave(&dev->cfg_lock, dev->irqsave_flags);
 
 	if (!dev->cfg_access) {
 		PCIE_DBG3(dev,
@@ -3389,7 +3389,7 @@ static inline int msm_pcie_oper_conf(struct pci_bus *bus, u32 devfn, int oper,
 	}
 
 unlock:
-	spin_unlock_irqrestore(&dev->cfg_lock, dev->irqsave_flags);
+	raw_spin_unlock_irqrestore(&dev->cfg_lock, dev->irqsave_flags);
 out:
 	return rv;
 }
@@ -6666,7 +6666,7 @@ int __init pcie_init(void)
 				"PCIe IPC logging %s is enable for RC%d\n",
 				rc_name, i);
 #endif
-		spin_lock_init(&msm_pcie_dev[i].cfg_lock);
+		raw_spin_lock_init(&msm_pcie_dev[i].cfg_lock);
 		msm_pcie_dev[i].cfg_access = true;
 		mutex_init(&msm_pcie_dev[i].enumerate_lock);
 		mutex_init(&msm_pcie_dev[i].setup_lock);
@@ -6762,10 +6762,10 @@ static int msm_pcie_pm_suspend(struct pci_dev *dev,
 		return ret;
 	}
 
-	spin_lock_irqsave(&pcie_dev->cfg_lock,
+	raw_spin_lock_irqsave(&pcie_dev->cfg_lock,
 				pcie_dev->irqsave_flags);
 	pcie_dev->cfg_access = false;
-	spin_unlock_irqrestore(&pcie_dev->cfg_lock,
+	raw_spin_unlock_irqrestore(&pcie_dev->cfg_lock,
 				pcie_dev->irqsave_flags);
 
 	msm_pcie_write_mask(pcie_dev->elbi + PCIE20_ELBI_SYS_CTRL, 0,
@@ -6809,17 +6809,17 @@ static void msm_pcie_fixup_suspend(struct pci_dev *dev)
 	if (pcie_dev->link_status != MSM_PCIE_LINK_ENABLED)
 		return;
 
-	spin_lock_irqsave(&pcie_dev->cfg_lock,
+	raw_spin_lock_irqsave(&pcie_dev->cfg_lock,
 				pcie_dev->irqsave_flags);
 	if (pcie_dev->disable_pc) {
 		PCIE_DBG(pcie_dev,
 			"RC%d: Skip suspend because of user request\n",
 			pcie_dev->rc_idx);
-		spin_unlock_irqrestore(&pcie_dev->cfg_lock,
+		raw_spin_unlock_irqrestore(&pcie_dev->cfg_lock,
 				pcie_dev->irqsave_flags);
 		return;
 	}
-	spin_unlock_irqrestore(&pcie_dev->cfg_lock,
+	raw_spin_unlock_irqrestore(&pcie_dev->cfg_lock,
 				pcie_dev->irqsave_flags);
 
 	mutex_lock(&pcie_dev->recovery_lock);
@@ -6847,10 +6847,10 @@ static int msm_pcie_pm_resume(struct pci_dev *dev,
 		pinctrl_select_state(pcie_dev->pinctrl,
 					pcie_dev->pins_default);
 
-	spin_lock_irqsave(&pcie_dev->cfg_lock,
+	raw_spin_lock_irqsave(&pcie_dev->cfg_lock,
 				pcie_dev->irqsave_flags);
 	pcie_dev->cfg_access = true;
-	spin_unlock_irqrestore(&pcie_dev->cfg_lock,
+	raw_spin_unlock_irqrestore(&pcie_dev->cfg_lock,
 				pcie_dev->irqsave_flags);
 
 	ret = msm_pcie_enable(pcie_dev, PM_PIPE_CLK | PM_CLK | PM_VREG);
@@ -7090,7 +7090,7 @@ int msm_pcie_pm_control(enum msm_pcie_pm_opt pm_opt, u32 busnr, void *user,
 		PCIE_DBG(&msm_pcie_dev[rc_idx],
 			"User of RC%d requests to keep the link always alive.\n",
 			rc_idx);
-		spin_lock_irqsave(&msm_pcie_dev[rc_idx].cfg_lock,
+		raw_spin_lock_irqsave(&msm_pcie_dev[rc_idx].cfg_lock,
 				msm_pcie_dev[rc_idx].irqsave_flags);
 		if (msm_pcie_dev[rc_idx].suspending) {
 			PCIE_ERR(&msm_pcie_dev[rc_idx],
@@ -7100,17 +7100,17 @@ int msm_pcie_pm_control(enum msm_pcie_pm_opt pm_opt, u32 busnr, void *user,
 		} else {
 			msm_pcie_dev[rc_idx].disable_pc = true;
 		}
-		spin_unlock_irqrestore(&msm_pcie_dev[rc_idx].cfg_lock,
+		raw_spin_unlock_irqrestore(&msm_pcie_dev[rc_idx].cfg_lock,
 				msm_pcie_dev[rc_idx].irqsave_flags);
 		break;
 	case MSM_PCIE_ENABLE_PC:
 		PCIE_DBG(&msm_pcie_dev[rc_idx],
 			"User of RC%d cancels the request of alive link.\n",
 			rc_idx);
-		spin_lock_irqsave(&msm_pcie_dev[rc_idx].cfg_lock,
+		raw_spin_lock_irqsave(&msm_pcie_dev[rc_idx].cfg_lock,
 				msm_pcie_dev[rc_idx].irqsave_flags);
 		msm_pcie_dev[rc_idx].disable_pc = false;
-		spin_unlock_irqrestore(&msm_pcie_dev[rc_idx].cfg_lock,
+		raw_spin_unlock_irqrestore(&msm_pcie_dev[rc_idx].cfg_lock,
 				msm_pcie_dev[rc_idx].irqsave_flags);
 		break;
 	default:

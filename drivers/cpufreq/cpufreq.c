@@ -393,7 +393,7 @@ scale_freq_capacity(const cpumask_t *cpus, unsigned long cur_freq,
 		 cpumask_pr_args(cpus), cur_freq, max_freq, scale);
 }
 
-unsigned long cpufreq_scale_freq_capacity(struct sched_domain *sd, int cpu)
+unsigned long cpufreq_scale_freq_capacity(int cpu)
 {
 	return per_cpu(freq_scale, cpu);
 }
@@ -421,7 +421,7 @@ scale_max_freq_capacity(const cpumask_t *cpus, unsigned long policy_max_freq)
 		 cpumask_pr_args(cpus), policy_max_freq, max_freq, scale);
 }
 
-unsigned long cpufreq_scale_max_freq_capacity(struct sched_domain *sd, int cpu)
+unsigned long cpufreq_scale_max_freq_capacity(int cpu)
 {
 	return per_cpu(max_freq_scale, cpu);
 }
@@ -449,7 +449,7 @@ scale_min_freq_capacity(const cpumask_t *cpus, unsigned long policy_min_freq)
 		 cpumask_pr_args(cpus), policy_min_freq, max_freq, scale);
 }
 
-unsigned long cpufreq_scale_min_freq_capacity(struct sched_domain *sd, int cpu)
+unsigned long cpufreq_scale_min_freq_capacity(int cpu)
 {
 	return per_cpu(min_freq_scale, cpu);
 }
@@ -862,9 +862,8 @@ static ssize_t store_scaling_governor(struct cpufreq_policy *policy,
 	struct cpufreq_policy new_policy;
 	
 	// Force Performance on Little cpus
-	
-	if (cpumask_test_cpu(policy->cpu, cpu_lp_mask))
-		return count;
+	// if (cpumask_test_cpu(policy->cpu, cpu_lp_mask))
+		// return count;
 
 	memcpy(&new_policy, policy, sizeof(*policy));
 

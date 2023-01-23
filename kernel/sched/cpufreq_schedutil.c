@@ -213,7 +213,7 @@ static unsigned int get_next_freq(struct sugov_policy *sg_policy,
 	unsigned int freq = arch_scale_freq_invariant() ?
 				policy->cpuinfo.max_freq : policy->cur;
 
-	freq = (freq + (freq >> 2)) * util / max;
+	freq = (freq + (freq >> 3)) * util / max;
 
 	if (freq == sg_policy->cached_raw_freq && !sg_policy->need_freq_update)
 		return sg_policy->next_freq;
@@ -238,7 +238,7 @@ static void sugov_get_util(unsigned long *util, unsigned long *max, u64 time, in
 	unsigned long max_cap, rt;
 	s64 delta;
 
-	max_cap = arch_scale_cpu_capacity(NULL, cpu);
+	max_cap = arch_scale_cpu_capacity(cpu);
 
 	sched_avg_update(rq);
 	delta = time - rq->age_stamp;
@@ -667,8 +667,4 @@ struct cpufreq_governor cpufreq_gov_schedutil = {
 	.owner = THIS_MODULE,
 };
 
-static int __init sugov_register(void)
-{
-	return cpufreq_register_governor(&cpufreq_gov_schedutil);
-}
-fs_initcall(sugov_register);
+cpufreq_governor_init(cpufreq_gov_schedutil);

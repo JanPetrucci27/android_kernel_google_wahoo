@@ -892,18 +892,6 @@ static int smblib_usb_icl_vote_callback(struct votable *votable, void *data,
 	 * do not set higher than supported mA.
 	 */
 	if (force_fast_charge) {
-		if (pd_icl_ua == USBIN_100MA) {
-			pd_icl_ua = USBIN_500MA;
-		} else if (pd_icl_ua == USBIN_150MA || pd_icl_ua == USBIN_500MA) {
-			pd_icl_ua = USBIN_900MA;
-		}
-		
-		if (default_icl_ua == USBIN_100MA) {
-			default_icl_ua = USBIN_500MA;
-		} else if (default_icl_ua == USBIN_150MA || default_icl_ua == USBIN_500MA) {
-			default_icl_ua = USBIN_900MA;
-		}
-		
 		if (usb_icl_ua == USBIN_100MA) {
 			usb_icl_ua = USBIN_500MA;
 		} else if (usb_icl_ua == USBIN_150MA || usb_icl_ua == USBIN_500MA) {

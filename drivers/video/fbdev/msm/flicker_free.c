@@ -8,6 +8,7 @@
  * Copyright (C) 2019-2020, Tanish <tanish2k09.dev@gmail.com>
  * Copyright (C) 2020, shxyke <shxyke@gmail.com>
  * Copyright (C) 2021, ederekun <sedrickvince@gmail.com>
+ * Copyright (C) 2022, Ameer Azizan <ameerazizan97@gmail.com>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -41,7 +42,7 @@
 #define BACKLIGHT_INDEX 66
 
 /* Minimum backlight value that does not flicker */
-static int elvss_off_threshold __read_mostly = 66;
+static int elvss_off_threshold __read_mostly = 111;
 
 /* Display configuration data */
 static const int bkl_to_pcc[BACKLIGHT_INDEX] = {
@@ -67,7 +68,10 @@ static uint32_t copyback = 0;
 
 /* State booleans */
 static bool pcc_enabled = false;
-static bool mdss_backlight_enable = true;
+static bool mdss_backlight_enable = false;
+
+static bool last_screen_on = true;
+static bool last_screen_on_tmp = true;
 
 static uint32_t last_bl_lvl = 0;
 
@@ -87,7 +91,7 @@ static inline int flicker_free_push(int val)
 
 	/* Configure dither values */
 	dither_config.flags = MDP_PP_OPS_WRITE;
-	if (mdss_backlight_enable)
+	if (mdss_backlight_enable && last_screen_on)
 		dither_config.flags |= MDP_PP_OPS_ENABLE;
 	else
 		dither_config.flags |= MDP_PP_OPS_DISABLE;
@@ -129,7 +133,7 @@ static inline int flicker_free_push(int val)
 
 uint32_t mdss_panel_calc_backlight(uint32_t bl_lvl)
 {
-	if (mdss_backlight_enable && bl_lvl < elvss_off_threshold) {
+	if (last_screen_on && mdss_backlight_enable && bl_lvl < elvss_off_threshold) {
 		pcc_enabled = true;
 		if (!flicker_free_push(bl_lvl))
 			return elvss_off_threshold;
@@ -189,6 +193,29 @@ void mdss_fb_update_flicker_free(struct msm_fb_data_type *mfd, uint32_t bl_lvl)
 {
 	ff_mfd = mfd;
 	last_bl_lvl = bl_lvl;
+}
+
+void mdss_fb_update_last_screen_on(bool screen_on)
+{
+	last_screen_on = screen_on;
+}
+
+bool mdss_fb_get_last_screen_on(void)
+{
+	return last_screen_on;
+}
+
+void mdss_fb_update_last_screen_on_tmp(void)
+{
+	struct mdss_panel_data *pdata;
+
+	if (last_screen_on_tmp != last_screen_on) {
+		last_screen_on_tmp = last_screen_on;
+		if (likely(ff_mfd)) {
+			pdata = dev_get_platdata(&ff_mfd->pdev->dev);
+			pdata->set_backlight(pdata, last_bl_lvl);
+		}
+	}
 }
 
 void mdss_panel_set_elvss_off_threshold(int val)

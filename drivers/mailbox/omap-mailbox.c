@@ -80,7 +80,7 @@ struct omap_mbox_fifo {
 };
 
 struct omap_mbox_queue {
-	spinlock_t		lock;
+	raw_spinlock_t		lock;
 	struct kfifo		fifo;
 	struct work_struct	work;
 	struct omap_mbox	*mbox;
@@ -316,12 +316,12 @@ static void mbox_rx_work(struct work_struct *work)
 		WARN_ON(len != sizeof(msg));
 
 		mbox_chan_received_data(mq->mbox->chan, (void *)msg);
-		spin_lock_irq(&mq->lock);
+		raw_spin_lock_irq(&mq->lock);
 		if (mq->full) {
 			mq->full = false;
 			_omap_mbox_enable_irq(mq->mbox, IRQ_RX);
 		}
-		spin_unlock_irq(&mq->lock);
+		raw_spin_unlock_irq(&mq->lock);
 	}
 }
 
@@ -385,7 +385,7 @@ static struct omap_mbox_queue *mbox_queue_alloc(struct omap_mbox *mbox,
 	if (!mq)
 		return NULL;
 
-	spin_lock_init(&mq->lock);
+	raw_spin_lock_init(&mq->lock);
 
 	if (kfifo_alloc(&mq->fifo, mbox_kfifo_size, GFP_KERNEL))
 		goto error;
@@ -492,13 +492,13 @@ struct mbox_chan *omap_mbox_request_channel(struct mbox_client *cl,
 		return ERR_PTR(-ENOENT);
 
 	chan = mbox->chan;
-	spin_lock_irqsave(&chan->lock, flags);
+	raw_spin_lock_irqsave(&chan->lock, flags);
 	chan->msg_free = 0;
 	chan->msg_count = 0;
 	chan->active_req = NULL;
 	chan->cl = cl;
 	init_completion(&chan->tx_complete);
-	spin_unlock_irqrestore(&chan->lock, flags);
+	raw_spin_unlock_irqrestore(&chan->lock, flags);
 
 	ret = chan->mbox->ops->startup(chan);
 	if (ret) {

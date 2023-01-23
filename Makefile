@@ -380,7 +380,7 @@ CFLAGS_KERNEL	=
 AFLAGS_KERNEL	=
 CFLAGS_GCOV	= -fprofile-arcs -ftest-coverage -fno-tree-loop-im
 CFLAGS_KCOV	= -fsanitize-coverage=trace-pc
-
+LDFLAGS_vmlinux =	--strip-debug
 
 # Use USERINCLUDE when you must reference the UAPI directories only.
 USERINCLUDE    := \
@@ -626,8 +626,10 @@ endif # $(dot-config)
 all: vmlinux
 
 ifeq ($(cc-name),clang)
+OPT_FLAGS += -march=armv8-a+crc+crypto
+OPT_FLAGS += -mtune=cortex-a53
 ifdef CONFIG_POLLY_CLANG
-KBUILD_CFLAGS += -mllvm -polly \
+OPT_FLAGS += -mllvm -polly \
 		   -mllvm -polly-run-dce \
 		   -mllvm -polly-run-inliner \
            -mllvm -polly-isl-arg=--no-schedule-serialize-sccs \
@@ -637,7 +639,16 @@ KBUILD_CFLAGS += -mllvm -polly \
 		   -mllvm -polly-vectorizer=stripmine \
            -mllvm -polly-detect-profitability-min-per-loop-insts=40 \
 		   -mllvm -polly-invariant-load-hoisting
+
+# ifeq ($(call clang-ifversion, -ge, 1500, y), y)
+OPT_FLAGS += -mllvm -polly-reschedule=1 \
+	-mllvm -polly-loopfusion-greedy=1 \
+	-mllvm -polly-postopts=1
+# else
+# OPT_FLAGS += -mllvm -polly-opt-fusion=max
+# endif
 endif
+
 ifneq ($(CROSS_COMPILE),)
 CLANG_TRIPLE	?= $(CROSS_COMPILE)
 CLANG_FLAGS	+= --target=$(notdir $(CLANG_TRIPLE:%-=%))
@@ -656,7 +667,14 @@ CLANG_FLAGS	+= -no-integrated-as
 endif
 KBUILD_CFLAGS	+= $(CLANG_FLAGS)
 KBUILD_AFLAGS	+= $(CLANG_FLAGS)
+else
+OPT_FLAGS += -march=armv8-a+crc+crypto
+OPT_FLAGS += -mtune=cortex-a73.cortex-a53
 endif
+
+KBUILD_CFLAGS += -O3 $(OPT_FLAGS)
+KBUILD_AFLAGS += -O3 $(OPT_FLAGS)
+KBUILD_LDFLAGS += $(OPT_FLAGS)
 
 # Use store motion pass for gcse
 KBUILD_CFLAGS	+= $(call cc-option,-fgcse-sm)
@@ -678,9 +696,11 @@ endif
 ifeq ($(cc-name),clang)
 ifeq ($(ld-name),lld)
 KBUILD_CFLAGS	+= -fuse-ld=lld
-KBUILD_LDFLAGS += -O3
+KBUILD_LDFLAGS += -O3 --strip-debug
+LDFLAGS += -O3 --strip-debug
 ifdef CONFIG_LTO_CLANG
 LDFLAGS += --lto-O3
+KBUILD_LDFLAGS	+= --lto-O3
 endif
 endif
 KBUILD_CPPFLAGS	+= -Qunused-arguments
@@ -722,11 +742,13 @@ ifdef CONFIG_CC_WERROR
 KBUILD_CFLAGS	+= -Werror
 endif
 
-CFLAGS += -fuse-ld=lld -O3 -mllvm -polly -march=armv8.1-a+crypto+fp16+rcpc
+CFLAGS += -fuse-ld=lld -O3 -mllvm -polly -march=armv8-a+crc+crypto
 LDFLAGS += -mllvm -polly -z norelro
 
 ifdef CONFIG_CC_WERROR
+ifeq ($(cc-name),clang)
 KBUILD_CFLAGS	+= -Werror
+endif
 endif
 
 # Tell compiler to use pipes instead of temporary files during compilation
@@ -813,6 +835,7 @@ KBUILD_CFLAGS += -fno-builtin
 # Quiet clang warning: comparison of unsigned expression < 0 is always false
 
 KBUILD_CFLAGS += $(call cc-disable-warning, tautological-compare)
+KBUILD_CFLAGS += $(call cc-disable-warning, compound-token-split-by-space)
 endif
 
 KBUILD_CFLAGS += $(call cc-option,-fno-delete-null-pointer-checks,)
@@ -905,7 +928,7 @@ endif
 lto-clang-flags += -fvisibility=default $(call cc-option, -fsplit-lto-unit)
 
 # Limit inlining across translation units to reduce binary size
-LD_FLAGS_LTO_CLANG := -mllvm -import-instr-limit=5
+LD_FLAGS_LTO_CLANG := --plugin-opt=-import-instr-limit=5
 
 KBUILD_LDFLAGS += $(LD_FLAGS_LTO_CLANG)
 KBUILD_LDFLAGS_MODULE += $(LD_FLAGS_LTO_CLANG)
@@ -948,10 +971,10 @@ KBUILD_CFLAGS += $(call cc-disable-warning, restrict)
 KBUILD_CFLAGS += $(call cc-disable-warning, maybe-uninitialized)
 
 # disable invalid "can't wrap" optimizations for signed / pointers
-KBUILD_CFLAGS	+= $(call cc-option,-fno-strict-overflow)
+KBUILD_CFLAGS	+= -fno-strict-overflow
 
 # Make sure -fstack-check isn't enabled (like gentoo apparently did)
-KBUILD_CFLAGS  += $(call cc-option,-fno-stack-check,)
+KBUILD_CFLAGS  += -fno-stack-check
 
 # conserve stack if available
 KBUILD_CFLAGS   += $(call cc-option,-fconserve-stack)
@@ -960,7 +983,7 @@ KBUILD_CFLAGS   += $(call cc-option,-fconserve-stack)
 KBUILD_CFLAGS   += $(call cc-option,-Werror=implicit-int)
 
 # Prohibit date/time macros, which would make the build non-deterministic
-KBUILD_CFLAGS   += $(call cc-option,-Werror=date-time)
+KBUILD_CFLAGS   += -Werror=date-time
 
 # use the deterministic mode of AR if available
 KBUILD_ARFLAGS := $(call ar-option,D)
@@ -976,8 +999,7 @@ KBUILD_AFLAGS   += $(ARCH_AFLAGS)   $(KAFLAGS)
 KBUILD_CFLAGS   += $(ARCH_CFLAGS)   $(KCFLAGS)
 
 # Use --build-id when available.
-LDFLAGS_BUILD_ID = $(patsubst -Wl$(comma)%,%,\
-			      $(call cc-ldoption, -Wl$(comma)--build-id,))
+LDFLAGS_BUILD_ID := $(call ld-option, --build-id)
 KBUILD_LDFLAGS_MODULE += $(LDFLAGS_BUILD_ID)
 LDFLAGS_vmlinux += $(LDFLAGS_BUILD_ID)
 
@@ -1087,8 +1109,8 @@ core-y		:= $(patsubst %/, %/built-in.a, $(core-y))
 drivers-y	:= $(patsubst %/, %/built-in.a, $(drivers-y))
 net-y		:= $(patsubst %/, %/built-in.a, $(net-y))
 libs-y1		:= $(patsubst %/, %/lib.a, $(libs-y))
-libs-y2		:= $(patsubst %/, %/built-in.a, $(filter-out %.a, $(libs-y)))
-libs-y		:= $(libs-y1) $(libs-y2)
+libs-y2                := $(patsubst %/, %/built-in.a, $(filter-out %.a, $(libs-y)))
+libs-y         := $(libs-y1) $(libs-y2)
 virt-y		:= $(patsubst %/, %/built-in.a, $(virt-y))
 
 # Externally visible symbols (used by link-vmlinux.sh)
