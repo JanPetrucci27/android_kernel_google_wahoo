@@ -9,7 +9,7 @@
 
 #include <linux/fastchg.h>
 
-int force_batt_voltage_limit = 1;
+int force_batt_voltage_limit = 0;
 
 static int __init get_batt_voltage_limit_opt(char *ffc)
 {
