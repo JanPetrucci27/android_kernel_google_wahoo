@@ -3630,9 +3630,11 @@ static int __init msm_serial_hs_init(void)
 		pr_err("%s failed to load\n", __func__);
 		return ret;
 	}
+#ifdef CONFIG_DEBUG_FS
 	debug_base = debugfs_create_dir("msm_serial_hs", NULL);
 	if (IS_ERR_OR_NULL(debug_base))
 		pr_err("msm_serial_hs: Cannot create debugfs dir\n");
+#endif
 
 	ret = platform_driver_register(&msm_serial_hs_platform_driver);
 	if (ret) {

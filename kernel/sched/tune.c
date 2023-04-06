@@ -272,7 +272,7 @@ schedtune_accept_deltas(int nrg_delta, int cap_delta,
  *    implementation especially for the computation of the per-CPU boost
  *    value
  */
-#define BOOSTGROUPS_COUNT 5
+#define BOOSTGROUPS_COUNT 7
 
 /* Array of configured boostgroups */
 static struct schedtune *allocated_group[BOOSTGROUPS_COUNT] = {
@@ -845,7 +845,7 @@ static int prefer_high_cap_write(struct cgroup_subsys_state *css,
 static int boost_write_wrapper(struct cgroup_subsys_state *css,
 			       struct cftype *cft, s64 boost)
 {
-	if (task_is_booster(current))
+	if (likely(task_is_booster(current)))
 		return 0;
 
 	return boost_write(css, cft, boost);
@@ -854,7 +854,7 @@ static int boost_write_wrapper(struct cgroup_subsys_state *css,
 static int prefer_idle_write_wrapper(struct cgroup_subsys_state *css,
 				     struct cftype *cft, u64 prefer_idle)
 {
-	if (task_is_booster(current))
+	if (likely(task_is_booster(current)))
 		return 0;
 
 	return prefer_idle_write(css, cft, prefer_idle);
@@ -863,7 +863,7 @@ static int prefer_idle_write_wrapper(struct cgroup_subsys_state *css,
 static int prefer_high_cap_write_wrapper(struct cgroup_subsys_state *css,
 				     struct cftype *cft, u64 prefer_high_cap)
 {
-	if (task_is_booster(current))
+	if (likely(task_is_booster(current)))
 		return 0;
 
 	return prefer_high_cap_write(css, cft, prefer_high_cap);

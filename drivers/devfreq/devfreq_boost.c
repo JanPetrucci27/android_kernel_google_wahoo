@@ -10,6 +10,11 @@
 #include <linux/input.h>
 #include <linux/kthread.h>
 
+
+#ifndef CONFIG_CPU_INPUT_BOOST
+	unsigned long last_input_time;
+#endif
+
 enum {
 	SCREEN_OFF,
 	INPUT_BOOST,
@@ -53,6 +58,9 @@ static struct df_boost_drv df_boost_drv_g __read_mostly = {
 
 static void __devfreq_boost_kick(struct boost_dev *b)
 {
+	if (msecs_to_jiffies(CONFIG_DEVFREQ_INPUT_BOOST_DURATION_MS) == 0)
+		return;
+	
 	if (!READ_ONCE(b->df) || test_bit(SCREEN_OFF, &b->state))
 		return;
 
@@ -211,6 +219,10 @@ static void devfreq_boost_input_event(struct input_handle *handle,
 
 	for (i = 0; i < DEVFREQ_MAX; i++)
 		__devfreq_boost_kick(d->devices + i);
+	
+#ifndef CONFIG_CPU_INPUT_BOOST
+	last_input_time = jiffies;
+#endif
 }
 
 static int devfreq_boost_input_connect(struct input_handler *handler,

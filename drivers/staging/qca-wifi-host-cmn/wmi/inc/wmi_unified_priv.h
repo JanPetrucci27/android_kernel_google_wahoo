@@ -43,8 +43,6 @@
 #define WMI_UNIFIED_MAX_EVENT 0x100
 #define WMI_MAX_CMDS 1024
 
-#ifdef WMI_INTERFACE_EVENT_LOGGING
-
 #define WMI_EVENT_DEBUG_MAX_ENTRY (1024)
 #define WMI_EVENT_DEBUG_ENTRY_MAX_LENGTH (16)
 /* wmi_mgmt commands */
@@ -157,8 +155,6 @@ struct wmi_debug_log_info {
 	struct dentry *wmi_log_debugfs_dir;
 	uint8_t wmi_instance_id;
 };
-
-#endif /*WMI_INTERFACE_EVENT_LOGGING */
 
 #ifdef WLAN_OPEN_SOURCE
 struct fwdebug {

@@ -626,7 +626,6 @@ __mutex_lock_common(struct mutex *lock, long state, unsigned int subclass,
 	struct task_struct *task = current;
 	struct mutex_waiter waiter;
 	unsigned long flags;
-	bool first = false;
 	struct ww_mutex *ww;
 	int ret;
 
@@ -670,6 +669,8 @@ __mutex_lock_common(struct mutex *lock, long state, unsigned int subclass,
 
 	set_task_state(task, state);
 	for (;;) {
+		bool first;
+		
 		/*
 		 * Once we hold wait_lock, we're serialized against
 		 * mutex_unlock() handing the lock off to us, do a trylock
@@ -698,10 +699,9 @@ __mutex_lock_common(struct mutex *lock, long state, unsigned int subclass,
 		spin_unlock_mutex(&lock->wait_lock, flags);
 		schedule_preempt_disabled();
 
-		if (!first && __mutex_waiter_is_first(lock, &waiter)) {
-			first = true;
+		first = __mutex_waiter_is_first(lock, &waiter);
+		if (first)
 			__mutex_set_flag(lock, MUTEX_FLAG_HANDOFF);
-		}
 
 		set_task_state(task, state);
 		/*

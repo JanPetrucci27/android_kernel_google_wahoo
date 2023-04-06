@@ -424,9 +424,8 @@ void bm_check_step_charging(struct battery_manager *bm, int volt)
 		if (volt < 0) {
 			pr_bm(ERROR, "Couldn't set battery float voltage, rc=%d", volt);
 			return;
-		} else {
-			pr_info("Battery Volt = 4.2mV\n");
 		}
+
 	} else {
 		volt = bm_set_property(bm->batt_psy,
 					 POWER_SUPPLY_PROP_VOLTAGE_MAX,
@@ -434,11 +433,8 @@ void bm_check_step_charging(struct battery_manager *bm, int volt)
 		if (volt < 0) {
 			pr_bm(ERROR, "Couldn't set battery float voltage, rc=%d", volt);
 			return;
-		} else {
-			pr_info("Battery Volt = 4.4mV\n");
 		}
 	}
-
 #endif
 
 	if (bm->sc_status != stat) {

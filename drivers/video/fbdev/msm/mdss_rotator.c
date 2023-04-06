@@ -2228,14 +2228,16 @@ static int mdss_rotator_handle_request(struct mdss_rot_mgr *mgr,
 	ret = copy_from_user(items, user_req.list, size);
 	if (ret) {
 		pr_err("fail to copy rotation items\n");
-		goto handle_request_err;
+		kfree(items);
+		return ret;
 	}
 
 	req = mdss_rotator_req_init(mgr, items, user_req.count, user_req.flags);
 	if (IS_ERR_OR_NULL(req)) {
 		pr_err("fail to allocate rotation request\n");
 		ret = PTR_ERR(req);
-		goto handle_request_err;
+		kfree(items);
+		return ret;
 	}
 
 	mutex_lock(&mgr->lock);
@@ -2268,7 +2270,6 @@ static int mdss_rotator_handle_request(struct mdss_rot_mgr *mgr,
 
 handle_request_err1:
 	mutex_unlock(&mgr->lock);
-handle_request_err:
 	devm_kfree(&mgr->pdev->dev, items);
 	devm_kfree(&mgr->pdev->dev, req);
 	return ret;
@@ -2388,7 +2389,8 @@ static int mdss_rotator_handle_request32(struct mdss_rot_mgr *mgr,
 	ret = copy_from_user(items, compat_ptr(user_req32.list), size);
 	if (ret) {
 		pr_err("fail to copy rotation items\n");
-		goto handle_request32_err;
+		kfree(items);
+		return ret;
 	}
 
 	req = mdss_rotator_req_init(mgr, items, user_req32.count,
@@ -2396,7 +2398,8 @@ static int mdss_rotator_handle_request32(struct mdss_rot_mgr *mgr,
 	if (IS_ERR_OR_NULL(req)) {
 		pr_err("fail to allocate rotation request\n");
 		ret = PTR_ERR(req);
-		goto handle_request32_err;
+		kfree(items);
+		return ret;
 	}
 
 	mutex_lock(&mgr->lock);
@@ -2429,7 +2432,6 @@ static int mdss_rotator_handle_request32(struct mdss_rot_mgr *mgr,
 
 handle_request32_err1:
 	mutex_unlock(&mgr->lock);
-handle_request32_err:
 	devm_kfree(&mgr->pdev->dev, items);
 	devm_kfree(&mgr->pdev->dev, req);
 	return ret;

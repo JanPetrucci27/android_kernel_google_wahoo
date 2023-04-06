@@ -91,7 +91,7 @@ queue_ra_store(struct request_queue *q, const char *page, size_t count)
 	if (ret < 0)
 		return ret;
 	
-	if (task_is_booster(current))
+	if (likely(task_is_booster(current)))
 		ra_kb = VM_MAX_READAHEAD;
 
 	q->backing_dev_info.ra_pages = ra_kb >> (PAGE_CACHE_SHIFT - 10);

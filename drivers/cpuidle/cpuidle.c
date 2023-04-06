@@ -102,9 +102,9 @@ static int find_deepest_state(struct cpuidle_driver *drv,
 
 	for (i = 0; i < drv->state_count; i++) {
 		struct cpuidle_state *s = &drv->states[i];
-		struct cpuidle_state_usage *su = &dev->states_usage[i];
 
-		if (s->disabled || su->disable || s->exit_latency <= latency_req
+		if (dev->states_usage[i].disable
+			|| s->exit_latency <= latency_req
 		    || s->exit_latency > max_latency
 		    || (s->flags & forbidden_flags)
 		    || (freeze && !s->enter_freeze))
@@ -538,11 +538,15 @@ static void __cpuidle_device_init(struct cpuidle_device *dev)
  */
 static int __cpuidle_register_device(struct cpuidle_device *dev)
 {
-	int ret;
 	struct cpuidle_driver *drv = cpuidle_get_cpu_driver(dev);
-
+	int i, ret;
+	
 	if (!try_module_get(drv->owner))
 		return -EINVAL;
+	
+	for (i = 0; i < drv->state_count; i++)
+		if (drv->states[i].disabled)
+			dev->states_usage[i].disable |= CPUIDLE_STATE_DISABLED_BY_DRIVER;
 
 	per_cpu(cpuidle_devices, dev->cpu) = dev;
 	list_add(&dev->device_list, &cpuidle_detected_devices);

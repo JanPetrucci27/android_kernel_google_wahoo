@@ -30,6 +30,7 @@
 #include <drm/drm_atomic.h>
 #include <drm/drm_plane_helper.h>
 #include <linux/pm_qos.h>
+#include <linux/devfreq_boost.h>
 
 /**
  * drm_atomic_state_default_release -
@@ -1521,6 +1522,10 @@ static int __drm_mode_atomic_ioctl(struct drm_device *dev, void *data,
 	if ((arg->flags & DRM_MODE_ATOMIC_TEST_ONLY) &&
 			(arg->flags & DRM_MODE_PAGE_FLIP_EVENT))
 		return -EINVAL;
+		
+	if (!(arg->flags & DRM_MODE_ATOMIC_TEST_ONLY) && 
+			(time_before(jiffies, last_input_time + msecs_to_jiffies(3000))))
+		devfreq_boost_kick(DEVFREQ_MSM_CPUBW);
 
 	drm_modeset_acquire_init(&ctx, 0);
 

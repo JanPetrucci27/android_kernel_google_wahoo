@@ -3845,7 +3845,7 @@ irqreturn_t wcd9xxx_dce_handler(int irq, void *data)
 		mask = wcd9xxx_get_button_mask(btn);
 		mbhc->buttons_pressed |= mask;
 		wcd9xxx_lock_sleep(core_res);
-		if (schedule_delayed_work(&mbhc->mbhc_btn_dwork,
+		if (queue_delayed_work(system_power_efficient_wq, &mbhc->mbhc_btn_dwork,
 					  msecs_to_jiffies(400)) == 0) {
 			WARN(1, "Button pressed twice without release event\n");
 			wcd9xxx_unlock_sleep(core_res);
@@ -4672,7 +4672,7 @@ int wcd9xxx_mbhc_start(struct wcd9xxx_mbhc *mbhc,
 		rc = wcd9xxx_init_and_calibrate(mbhc);
 	} else {
 		if (!mbhc->mbhc_fw || !mbhc->mbhc_cal)
-			schedule_delayed_work(&mbhc->mbhc_firmware_dwork,
+			queue_delayed_work(system_power_efficient_wq, &mbhc->mbhc_firmware_dwork,
 					     usecs_to_jiffies(FW_READ_TIMEOUT));
 		else
 			pr_debug("%s: Skipping to read mbhc fw, 0x%pK %pK\n",

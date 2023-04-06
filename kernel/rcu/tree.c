@@ -130,6 +130,8 @@ int rcu_num_lvls __read_mostly = RCU_NUM_LVLS;
 /* Number of rcu_nodes at specified level. */
 static int num_rcu_lvl[] = NUM_RCU_LVL_INIT;
 int rcu_num_nodes __read_mostly = NUM_RCU_NODES; /* Total # rcu_nodes in use. */
+/* panic() on RCU Stall sysctl. */
+int sysctl_panic_on_rcu_stall __read_mostly = CONFIG_RCU_PANIC_ON_STALL;
 
 /*
  * The rcu_scheduler_active variable transitions from zero to one just
@@ -1238,6 +1240,12 @@ static void rcu_dump_cpu_stacks(struct rcu_state *rsp)
 	}
 }
 
+static inline void panic_on_rcu_stall(void)
+{
+	if (sysctl_panic_on_rcu_stall)
+		panic("RCU Stall\n");
+}
+
 static void print_other_cpu_stall(struct rcu_state *rsp, unsigned long gpnum)
 {
 	int cpu;
@@ -1317,6 +1325,8 @@ static void print_other_cpu_stall(struct rcu_state *rsp, unsigned long gpnum)
 	msm_trigger_wdog_bite();
 #endif
 
+	panic_on_rcu_stall();
+
 	force_quiescent_state(rsp);  /* Kick them all. */
 }
 
@@ -1356,7 +1366,9 @@ static void print_cpu_stall(struct rcu_state *rsp)
 	/* Induce non secure watchdog bite to collect context */
 	msm_trigger_wdog_bite();
 #endif
-
+	
+	panic_on_rcu_stall();
+	
 	/*
 	 * Attempt to revive the RCU machinery by forcing a context switch.
 	 *

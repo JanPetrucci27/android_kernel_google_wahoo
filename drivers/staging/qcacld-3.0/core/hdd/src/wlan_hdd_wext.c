@@ -3186,9 +3186,11 @@ static QDF_STATUS hdd_wlan_get_ibss_peer_info(hdd_adapter_t *pAdapter,
 {
 	QDF_STATUS status = QDF_STATUS_E_FAILURE;
 	tHalHandle hHal = WLAN_HDD_GET_HAL_CTX(pAdapter);
+#ifdef WLAN_DEBUG
 	hdd_station_ctx_t *pStaCtx = WLAN_HDD_GET_STATION_CTX_PTR(pAdapter);
 	tSirPeerInfoRspParams *pPeerInfo = &pStaCtx->ibss_peer_info;
-
+#endif
+	
 	INIT_COMPLETION(pAdapter->ibss_peer_info_comp);
 	status = sme_request_ibss_peer_info(hHal, pAdapter,
 					    hdd_get_ibss_peer_info_cb,
@@ -3205,6 +3207,7 @@ static QDF_STATUS hdd_wlan_get_ibss_peer_info(hdd_adapter_t *pAdapter,
 			return QDF_STATUS_E_FAILURE;
 		}
 
+#ifdef WLAN_DEBUG
 		/** Print the peer info */
 		hdd_debug("pPeerInfo->numIBSSPeers = %d ", pPeerInfo->numPeers);
 		{
@@ -3217,6 +3220,7 @@ static QDF_STATUS hdd_wlan_get_ibss_peer_info(hdd_adapter_t *pAdapter,
 				mac_addr, (int)tx_rate,
 				(int)pPeerInfo->peerInfoParams[0].rssi);
 		}
+#endif
 	} else {
 		hdd_warn("Warning: sme_request_ibss_peer_info Request failed");
 	}

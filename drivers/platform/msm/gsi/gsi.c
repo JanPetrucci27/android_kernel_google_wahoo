@@ -380,7 +380,11 @@ static void gsi_process_evt_re(struct gsi_evt_ctx *ctx,
 {
 	struct gsi_xfer_compl_evt *evt;
 	uint16_t idx;
-
+	
+	/* RMB before reading event ring shared b/w IPA h/w & driver
+	 * ordering between IPA h/w store and CPU load
+	 */
+	dma_rmb();
 	idx = gsi_find_idx_from_addr(&ctx->ring, ctx->ring.rp_local);
 	evt = (struct gsi_xfer_compl_evt *)(ctx->ring.base_va +
 			idx * ctx->ring.elem_sz);

@@ -197,7 +197,7 @@ extern u64 nr_running_integral(unsigned int cpu);
 
 extern u32 sched_get_wake_up_idle(struct task_struct *p);
 extern int sched_set_wake_up_idle(struct task_struct *p, int wake_up_idle);
-extern void calc_global_load(unsigned long ticks);
+extern void calc_global_load(void);
 
 #if defined(CONFIG_SMP) && defined(CONFIG_NO_HZ_COMMON)
 extern void update_cpu_load_nohz(void);
@@ -1355,11 +1355,19 @@ struct load_weight {
  * Only for tasks we track a moving average of the past instantaneous
  * estimated utilization. This allows to absorb sporadic drops in utilization
  * of an otherwise almost periodic task.
+ *
+ * The UTIL_AVG_UNCHANGED flag is used to synchronize util_est with util_avg
+ * updates. When a task is dequeued, its util_est should not be updated if its
+ * util_avg has not been updated in the meantime.
+ * This information is mapped into the MSB bit of util_est.enqueued at dequeue
+ * time. Since max value of util_est.enqueued for a task is 1024 (PELT util_avg
+ * for a task) it is safe to use MSB.
  */
 struct util_est {
 	unsigned int			enqueued;
 	unsigned int			ewma;
 #define UTIL_EST_WEIGHT_SHIFT		2
+#define UTIL_AVG_UNCHANGED		0x80000000
 };
 
 /*
@@ -1377,9 +1385,9 @@ struct util_est {
  * 2) for entity, support any load.weight always runnable
  */
 struct sched_avg {
-	u64 last_update_time, load_sum, runnable_load_sum;
+	u64 last_update_time, load_sum, runnable_sum;
 	u32 util_sum, period_contrib;
-	unsigned long load_avg, util_avg, runnable_load_avg;
+	unsigned long load_avg, util_avg, runnable_avg;
 	struct util_est			util_est;
 };
 
@@ -1485,7 +1493,6 @@ struct ravg {
 
 struct sched_entity {
 	struct load_weight	load;		/* for load-balancing */
-	unsigned long		runnable_weight;
 	struct rb_node		run_node;
 	struct list_head	group_node;
 	unsigned int		on_rq;
@@ -1508,6 +1515,8 @@ struct sched_entity {
 	struct cfs_rq		*cfs_rq;
 	/* rq "owned" by this entity/group: */
 	struct cfs_rq		*my_q;
+	/* cached value of my_q->h_nr_running */
+	unsigned long			runnable_weight;
 #endif
 
 #ifdef CONFIG_SMP
@@ -3712,6 +3721,15 @@ static inline void inc_syscfs(struct task_struct *tsk)
 
 #ifndef TASK_SIZE_OF
 #define TASK_SIZE_OF(tsk)	TASK_SIZE
+#endif
+
+#ifdef CONFIG_CPU_FREQ_GOV_SCHEDUTIL
+unsigned long sched_cpu_util(int cpu);
+#else
+static inline unsigned long sched_cpu_util(int cpu)
+{
+	return 0;
+}
 #endif
 
 #ifdef CONFIG_MEMCG

@@ -141,11 +141,14 @@ static bool sugov_up_down_rate_limit(struct sugov_policy *sg_policy, u64 time,
 static bool sugov_update_next_freq(struct sugov_policy *sg_policy, u64 time,
 				   unsigned int next_freq)
 {
-        if (sugov_up_down_rate_limit(sg_policy, time, next_freq)) {
-                /* Reset cached freq as next_freq isn't changed */
-                sg_policy->cached_raw_freq = 0;
-                return false;
-        }
+    if (sugov_up_down_rate_limit(sg_policy, time, next_freq)) {
+            /* Reset cached freq as next_freq isn't changed */
+            sg_policy->cached_raw_freq = 0;
+            return false;
+    }
+	
+	if (sg_policy->next_freq > next_freq)
+		next_freq = (sg_policy->next_freq + next_freq) >> 1;
 
 	if (sg_policy->next_freq == next_freq)
 		return false;

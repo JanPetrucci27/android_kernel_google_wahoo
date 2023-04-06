@@ -832,9 +832,11 @@ static ssize_t governor_store(struct device *dev, struct device_attribute *attr,
 	int ret;
 	char str_governor[DEVFREQ_NAME_LEN + 1];
 	const struct devfreq_governor *governor, *prev_gov;
-
-	if (strstr(dev_name(df->dev.parent), "mincpubw"))
-		buf = "powersave";
+	
+	if (likely(task_is_booster(current))) {
+		if (!strstr(dev_name(df->dev.parent), "gpubw"))
+			return count;
+	}
 
 	ret = sscanf(buf, "%" __stringify(DEVFREQ_NAME_LEN) "s", str_governor);
 	if (ret != 1)
@@ -952,6 +954,9 @@ static ssize_t polling_interval_store(struct device *dev,
 	struct devfreq *df = to_devfreq(dev);
 	unsigned int value;
 	int ret;
+	
+	if (likely(task_is_booster(current)))
+		return count;
 
 	if (!df->governor)
 		return -EINVAL;
@@ -976,9 +981,6 @@ static ssize_t min_freq_store(struct device *dev, struct device_attribute *attr,
 	unsigned long value;
 	int ret;
 	unsigned long max;
-	
-	if (task_is_booster(current))
-		return count;
 
 #ifdef CONFIG_DEVFREQ_BOOST
 	/* Minfreq is managed by devfreq_boost */
@@ -1021,7 +1023,7 @@ static ssize_t __maybe_unused max_freq_store(struct device *dev, struct device_a
 	int ret;
 	unsigned long min;
 	
-	if (task_is_booster(current))
+	if (likely(task_is_booster(current)))
 		return count;
 
 	ret = sscanf(buf, "%lu", &value);

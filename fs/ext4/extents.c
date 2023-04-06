@@ -580,6 +580,7 @@ int ext4_ext_precache(struct inode *inode)
 {
 	struct ext4_inode_info *ei = EXT4_I(inode);
 	struct ext4_ext_path *path = NULL;
+	struct ext4_ext_path path_onstack[SZ_4K / sizeof(*path)] __aligned(8);
 	struct buffer_head *bh;
 	int i = 0, depth, ret = 0;
 
@@ -589,11 +590,15 @@ int ext4_ext_precache(struct inode *inode)
 	down_read(&ei->i_data_sem);
 	depth = ext_depth(inode);
 
-	path = kzalloc(sizeof(struct ext4_ext_path) * (depth + 1),
-		       GFP_NOFS);
-	if (path == NULL) {
-		up_read(&ei->i_data_sem);
-		return -ENOMEM;
+	if (depth + 1 <= ARRAY_SIZE(path_onstack)) {
+			path = path_onstack;
+			memset(path, 0, sizeof(*path) * (depth + 1));
+	} else {
+		path = kcalloc(depth + 1, sizeof(*path), GFP_NOFS);
+		if (path == NULL) {
+			up_read(&ei->i_data_sem);
+			return -ENOMEM;
+		}
 	}
 
 	/* Don't cache anything if there are no external extent blocks */
@@ -633,7 +638,8 @@ int ext4_ext_precache(struct inode *inode)
 out:
 	up_read(&ei->i_data_sem);
 	ext4_ext_drop_refs(path);
-	kfree(path);
+	if (path != path_onstack)
+		kfree(path);
 	return ret;
 }
 

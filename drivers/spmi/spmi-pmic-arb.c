@@ -138,6 +138,7 @@ struct apid_data {
  * @acc_status:		address of SPMI ACC interrupt status registers.
  * @cnfg:		address of the PMIC Arbiter configuration registers.
  * @lock:		lock to synchronize accesses.
+ * @irq_lock:		lock to ensure mutual exclusion for IRQ type setting
  * @channel:		execution environment channel to use for accesses.
  * @irq:		PMIC ARB interrupt.
  * @ee:			the current Execution Environment
@@ -160,6 +161,7 @@ struct spmi_pmic_arb {
 	void __iomem		*core;
 	resource_size_t		core_size;
 	raw_spinlock_t		lock;
+	raw_spinlock_t		irq_lock;
 	u8			channel;
 	int			irq;
 	u8			ee;
@@ -686,10 +688,13 @@ static void qpnpint_irq_unmask(struct irq_data *d)
 
 static int qpnpint_irq_set_type(struct irq_data *d, unsigned int flow_type)
 {
+	struct spmi_pmic_arb *pmic_arb = irq_data_get_irq_chip_data(d);
 	struct spmi_pmic_arb_qpnpint_type type;
 	u8 irq = HWIRQ_IRQ(d->hwirq);
 	u8 bit_mask_irq = BIT(irq);
-
+	unsigned long flags;
+	
+	raw_spin_lock_irqsave(&pmic_arb->irq_lock, flags);
 	qpnpint_spmi_read(d, QPNPINT_REG_SET_TYPE, &type, sizeof(type));
 
 	if (flow_type & (IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING)) {
@@ -700,8 +705,10 @@ static int qpnpint_irq_set_type(struct irq_data *d, unsigned int flow_type)
 			type.polarity_low  |= bit_mask_irq;
 	} else {
 		if ((flow_type & (IRQF_TRIGGER_HIGH)) &&
-		    (flow_type & (IRQF_TRIGGER_LOW)))
+		    (flow_type & (IRQF_TRIGGER_LOW))) {
+			raw_spin_unlock_irqrestore(&pmic_arb->irq_lock, flags);
 			return -EINVAL;
+		}
 
 		type.type &= ~bit_mask_irq; /* level trig */
 		if (flow_type & IRQF_TRIGGER_HIGH)
@@ -711,7 +718,8 @@ static int qpnpint_irq_set_type(struct irq_data *d, unsigned int flow_type)
 	}
 
 	qpnpint_spmi_write(d, QPNPINT_REG_SET_TYPE, &type, sizeof(type));
-
+	raw_spin_unlock_irqrestore(&pmic_arb->irq_lock, flags);
+	
 	if (flow_type & IRQ_TYPE_EDGE_BOTH)
 		irq_set_handler_locked(d, handle_edge_irq);
 	else
@@ -1392,6 +1400,7 @@ static int spmi_pmic_arb_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, ctrl);
 	raw_spin_lock_init(&pa->lock);
+	raw_spin_lock_init(&pa->irq_lock);
 
 	ctrl->cmd = pmic_arb_cmd;
 	ctrl->read_cmd = pmic_arb_read_cmd;

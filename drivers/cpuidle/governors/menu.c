@@ -117,7 +117,6 @@
  */
 
 struct menu_device {
-	int		last_state_idx;
 	int             needs_update;
 
 	unsigned int	next_timer_us;
@@ -164,7 +163,7 @@ static inline int which_bucket(unsigned int duration, unsigned long nr_iowaiters
 static inline int performance_multiplier(unsigned long nr_iowaiters)
 {
 	/* for IO wait tasks (per cpu!) we add 10x each */
-	return 1 + 10 * nr_iowaiters;
+	return 1 + 2 * nr_iowaiters;
 }
 
 static DEFINE_PER_CPU(struct menu_device, menu_devices);
@@ -335,9 +334,8 @@ static int menu_select(struct cpuidle_driver *drv, struct cpuidle_device *dev)
 	idx = -1;
 	for (i = first_idx; i < drv->state_count; i++) {
 		struct cpuidle_state *s = &drv->states[i];
-		struct cpuidle_state_usage *su = &dev->states_usage[i];
 
-		if (s->disabled || su->disable)
+		if (dev->states_usage[i].disable)
 			continue;
 		if (idx == -1)
 			idx = i; /* first enabled state */
@@ -352,9 +350,9 @@ static int menu_select(struct cpuidle_driver *drv, struct cpuidle_device *dev)
 	if (idx == -1)
 		idx = 0; /* No states enabled. Must use 0. */
 
-	data->last_state_idx = idx;
+	dev->last_state_idx = idx;
 
-	return data->last_state_idx;
+	return dev->last_state_idx;
 }
 
 /**
@@ -369,7 +367,7 @@ static void menu_reflect(struct cpuidle_device *dev, int index)
 {
 	struct menu_device *data = this_cpu_ptr(&menu_devices);
 
-	data->last_state_idx = index;
+	dev->last_state_idx = index;
 	data->needs_update = 1;
 }
 
@@ -381,7 +379,7 @@ static void menu_reflect(struct cpuidle_device *dev, int index)
 static void menu_update(struct cpuidle_driver *drv, struct cpuidle_device *dev)
 {
 	struct menu_device *data = this_cpu_ptr(&menu_devices);
-	int last_idx = data->last_state_idx;
+	int last_idx = dev->last_state_idx;
 	struct cpuidle_state *target = &drv->states[last_idx];
 	unsigned int measured_us;
 	unsigned int new_factor;

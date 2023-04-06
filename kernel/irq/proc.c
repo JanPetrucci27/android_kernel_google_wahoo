@@ -122,9 +122,13 @@ static ssize_t write_irq_affinity(int type, struct file *file,
 {
 	unsigned int irq = (int)(long)PDE_DATA(file_inode(file));
 	cpumask_var_t new_value;
+	struct irq_desc *desc = irq_to_desc(irq);
 	int err;
 
 	if (!irq_can_set_affinity_usr(irq) || no_irq_affinity)
+		return -EIO;
+	
+	if (!irqd_has_set(&desc->irq_data, IRQF_PERF_CRITICAL))
 		return -EIO;
 
 	if (!alloc_cpumask_var(&new_value, GFP_KERNEL))

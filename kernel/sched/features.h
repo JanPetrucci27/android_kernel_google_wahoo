@@ -94,6 +94,9 @@
 #define SCHED_FEAT_UTIL_EST 1
 #define SCHED_FEAT_UTIL_EST_FASTUP 1
 
+#define SCHED_FEAT_ALT_PERIOD 1
+#define SCHED_FEAT_BASE_SLICE 1
+
 #define SCHED_FEAT_WA_IDLE 1
 #define SCHED_FEAT_WA_WEIGHT 1
 #define SCHED_FEAT_WA_BIAS 1
@@ -120,14 +123,6 @@
 #define SCHED_FEAT_EAS_PREFER_IDLE 0
 
 /*
- * Minimum capacity capping. Keep track of minimum capacity factor when
- * minimum frequency available to a policy is modified.
- * If enabled, this can be used to inform the scheduler about capacity
- * restrictions.
- */
-#define SCHED_FEAT_MIN_CAPACITY_CAPPING 0
-
-/*
  * Enforce the priority of candidates selected by find_best_target()
  * ON: If the target CPU saves any energy, use that.
  * OFF: Use whichever of target or backup saves most.
@@ -138,7 +133,7 @@
  * Use the Simplified Energy Model for EAS accounting only for
  * active costs of CPUs.
  */
-#define SCHED_FEAT_EAS_SIMPLIFIED_EM 0
+#define SCHED_FEAT_EAS_SIMPLIFIED_EM 1
 
 /*
  * Inflate the effective utilization of SchedTune-boosted tasks, which

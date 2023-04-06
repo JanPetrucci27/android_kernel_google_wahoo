@@ -3340,8 +3340,11 @@ static int __wlan_hdd_cfg80211_disable_dfs_chan_scan(struct wiphy *wiphy,
 	int ret_val;
 	uint32_t no_dfs_flag = 0;
 
-	ENTER_DEV(dev);
 
+#ifdef WLAN_DEBUG
+	ENTER_DEV(dev);
+#endif
+	
 	ret_val = wlan_hdd_validate_context(hdd_ctx);
 	if (ret_val)
 		return ret_val;
@@ -18534,6 +18537,7 @@ static const char *hdd_ieee80211_reason_code_to_str(uint16_t reason)
  */
 static void hdd_print_netdev_txq_status(struct net_device *dev)
 {
+#ifdef WLAN_DEBUG
 	unsigned int i;
 
 	if (!dev)
@@ -18544,6 +18548,7 @@ static void hdd_print_netdev_txq_status(struct net_device *dev)
 
 		hdd_info("netdev tx queue[%u] state: 0x%lx", i, txq->state);
 	}
+#endif
 }
 
 /**
@@ -18580,9 +18585,11 @@ static int __wlan_hdd_cfg80211_disconnect(struct wiphy *wiphy,
 			 TRACE_CODE_HDD_CFG80211_DISCONNECT,
 			 pAdapter->sessionId, reason));
 	hdd_print_netdev_txq_status(dev);
+#ifdef WLAN_DEBUG
 	hdd_debug("Device_mode %s(%d) reason code(%d)",
 		hdd_device_mode_to_string(pAdapter->device_mode),
 		pAdapter->device_mode, reason);
+#endif
 
 	status = wlan_hdd_validate_context(pHddCtx);
 

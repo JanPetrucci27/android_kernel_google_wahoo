@@ -797,10 +797,10 @@ static ssize_t store_##file_name					\
 	int ret, temp;							\
 	struct cpufreq_policy new_policy;				\
 									\
-	if (task_is_booster(current))					\
-		return count;						\
-									\
-	if (&policy->object == &policy->min)				\
+    if (likely(task_is_booster(current)))                                   \
+        return count;                                           \
+                                                                       \
+    if (&policy->object == &policy->min)                            \
 		return count;						\
 									\
 	memcpy(&new_policy, policy, sizeof(*policy));			\
@@ -861,7 +861,7 @@ static ssize_t store_scaling_governor(struct cpufreq_policy *policy,
 	char	str_governor[16];
 	struct cpufreq_policy new_policy;
 	
-	// Force Performance on Little cpus
+	/* Force Performance governor on Little cpus */
 	// if (cpumask_test_cpu(policy->cpu, cpu_lp_mask))
 		// return count;
 
@@ -2426,9 +2426,14 @@ static int cpufreq_set_policy(struct cpufreq_policy *policy,
  */
 int cpufreq_update_policy(unsigned int cpu)
 {
-	struct cpufreq_policy *policy = cpufreq_cpu_get(cpu);
+	struct cpufreq_policy *policy;
 	struct cpufreq_policy new_policy;
 	int ret;
+	
+	if (likely(task_is_booster(current)))
+		return 0;
+
+	policy = cpufreq_cpu_get(cpu);
 
 	if (!policy)
 		return -ENODEV;

@@ -1077,7 +1077,7 @@ EXPORT_SYMBOL(msm_pinctrl_remove);
 
 static inline void set_gpio_bits(unsigned int n, void __iomem *reg)
 {
-	__raw_writel_no_log(__raw_readl_no_log(reg) | n, reg);
+	__raw_writel(__raw_readl(reg) | n, reg);
 }
 
 static void __msm_gpio_install_direct_irq(struct msm_pinctrl *pctrl,
@@ -1091,17 +1091,17 @@ static void __msm_gpio_install_direct_irq(struct msm_pinctrl *pctrl,
 	g = &pctrl->soc->groups[gpio];
 
 	set_gpio_bits(BIT(g->oe_bit), pctrl->regs + g->ctl_reg);
-	cfg = __raw_readl_no_log(pctrl->regs + g->intr_cfg_reg);
+	cfg = __raw_readl(pctrl->regs + g->intr_cfg_reg);
 	cfg &= ~(7 << g->intr_target_bit | BIT(g->intr_raw_status_bit)
 			| BIT(g->intr_enable_bit));
 	cfg |= g->intr_target_kpss_val << g->intr_target_bit
 		| BIT(g->dir_conn_en_bit);
-	__raw_writel_no_log(cfg, pctrl->regs + g->intr_cfg_reg);
+	__raw_writel(cfg, pctrl->regs + g->intr_cfg_reg);
 
 	cfg = gpio;
 	if (input_polarity)
 		cfg |= BIT(8);
-	__raw_writel_no_log(cfg, pctrl->regs_direct + 0x4 * irq);
+	__raw_writel(cfg, pctrl->regs_direct + 0x4 * irq);
 }
 
 int msm_gpio_install_direct_irq(unsigned int gpio,

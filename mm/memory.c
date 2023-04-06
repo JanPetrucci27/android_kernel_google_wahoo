@@ -2566,6 +2566,12 @@ static int do_wp_page(struct mm_struct *mm, struct vm_area_struct *vma,
 	__releases(ptl)
 {
 	struct page *old_page;
+	
+	
+	if (vmf2->flags & FAULT_FLAG_SPECULATIVE) {
+		pte_unmap_unlock(vmf2->pte, vmf2->ptl);
+		return VM_FAULT_RETRY;
+	}
 
 	old_page = __vm_normal_page(vma, address, orig_pte, vmf2->vma_flags);
 	if (!old_page) {
@@ -3811,12 +3817,14 @@ int __handle_speculative_fault(struct mm_struct *mm, unsigned long address,
 	vmf.vma_flags = READ_ONCE(vma->vm_flags);
 	vmf.vma_page_prot = READ_ONCE(vma->vm_page_prot);
 
+#ifdef CONFIG_USERFAULTFD
 	/* Can't call userland page fault handler in the speculative path */
-	if (unlikely(vmf.vma_flags & VM_UFFD_MISSING)) {
+	if (unlikely(vmf.vma_flags & __VM_UFFD_FLAGS)) {
 		trace_spf_vma_notsup(_RET_IP_, vma, address);
 		goto out_put;
 	}
-
+#endif
+	
 	if (vmf.vma_flags & VM_GROWSDOWN || vmf.vma_flags & VM_GROWSUP) {
 		/*
 		 * This could be detected by the check address against VMA's

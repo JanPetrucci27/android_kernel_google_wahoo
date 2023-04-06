@@ -214,7 +214,7 @@ static inline u32 task_sid(const struct task_struct *task)
 /*
  * get the subjective security ID of the current task
  */
-static inline u32 current_sid(void)
+u32 current_sid(void)
 {
 	const struct task_security_struct *tsec = current_security();
 
@@ -821,7 +821,8 @@ static int selinux_set_mnt_opts(struct super_block *sb,
 	if (!strcmp(sb->s_type->name, "debugfs") ||
 	    !strcmp(sb->s_type->name, "tracefs") ||
 	    !strcmp(sb->s_type->name, "sysfs") ||
-	    !strcmp(sb->s_type->name, "pstore"))
+	    !strcmp(sb->s_type->name, "pstore") ||
+	    !strcmp(sb->s_type->name, "bpf"))
 		sbsec->flags |= SE_SBGENFS;
 
 	if (!sbsec->behavior) {
@@ -2280,7 +2281,7 @@ static int check_nnp_nosuid(const struct linux_binprm *bprm,
 
 	if (new_tsec->sid == old_tsec->sid)
 		return 0; /* No change in credentials */
-
+	
 	/*
 	 * The only transitions we permit under NNP or nosuid
 	 * are transitions to bounded SIDs, i.e. SIDs that are
@@ -2779,7 +2780,7 @@ static int selinux_sb_kern_mount(struct super_block *sb, int flags, void *data)
 		return rc;
 
 	/* Allow all mounts performed by the kernel */
-	if (flags & MS_KERNMOUNT)
+	if (flags & (MS_KERNMOUNT | MS_SUBMOUNT))
 		return 0;
 
 	ad.type = LSM_AUDIT_DATA_DENTRY;
@@ -3262,9 +3263,13 @@ static int selinux_inode_getsecurity(struct inode *inode, const char *name, void
 	if (error)
 		return error;
 	error = size;
-	if (alloc)
+	if (alloc) {
 		*buffer = context;
-	
+		goto out_nofree;
+	}
+	if (context != context_onstack)
+		kfree(context);
+out_nofree:
 	return error;
 }
 

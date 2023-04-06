@@ -6,6 +6,8 @@ ccflags-$(CONFIG_SYNC) += -Idrivers/staging/android
 ccflags-$(CONFIG_DRM_MSM_DSI_PLL) += -Idrivers/gpu/drm/msm/dsi
 ccflags-y += -Idrivers/gpu/drm/msm/sde
 
+ccflags-y += -O3
+
 msm_drm-y := \
 	hdmi/hdmi.o \
 	hdmi/hdmi_audio.o \

@@ -2,6 +2,8 @@
 # and is generally not a function of system call inputs.
 KCOV_INSTRUMENT := n
 
+ccflags-y += -O3
+
 obj-y += update.o sync.o
 obj-$(CONFIG_SRCU) += srcu.o
 obj-$(CONFIG_RCU_TORTURE_TEST) += rcutorture.o

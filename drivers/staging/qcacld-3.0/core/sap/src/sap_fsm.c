@@ -4397,7 +4397,9 @@ QDF_STATUS sap_fsm(ptSapContext sap_ctx, ptWLAN_SAPEvent sap_event)
 	 * state var that keeps track of state machine
 	 */
 	eSapFsmStates_t state_var = sap_ctx->sapsMachine;
+#ifdef WLAN_DEBUG
 	uint32_t msg = sap_event->event; /* State machine input event message */
+#endif	
 	QDF_STATUS qdf_status = QDF_STATUS_E_FAILURE;
 	tHalHandle hal = CDS_GET_HAL_CB(sap_ctx->p_cds_gctx);
 	tpAniSirGlobal mac_ctx;
@@ -4415,10 +4417,12 @@ QDF_STATUS sap_fsm(ptSapContext sap_ctx, ptWLAN_SAPEvent sap_event)
 		return QDF_STATUS_E_FAILURE;
 	}
 
+#ifdef WLAN_DEBUG
 	QDF_TRACE(QDF_MODULE_ID_SAP, QDF_TRACE_LEVEL_DEBUG,
 		  FL("sap_ctx=%pK, state_var=%d, msg=0x%x"),
 		  sap_ctx, state_var, msg);
-
+#endif
+	
 	switch (state_var) {
 	case eSAP_DISCONNECTED:
 		qdf_status = sap_fsm_state_disconnected(sap_ctx, sap_event,

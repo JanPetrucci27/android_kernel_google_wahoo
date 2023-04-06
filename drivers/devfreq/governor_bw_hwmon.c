@@ -108,7 +108,7 @@ static ssize_t store_##name(struct device *dev,				\
 	int ret;							\
 	unsigned int val;						\
 									\
-	if (task_is_booster(current))					\
+	if (likely(task_is_booster(current)))					\
 		return count;						\
 									\
 	ret = sscanf(buf, "%u", &val);					\
@@ -149,7 +149,7 @@ static ssize_t store_list_##name(struct device *dev,			\
 	int ret;							\
 	unsigned int i = 0, val;					\
 									\
-	if (task_is_booster(current))					\
+	if (likely(task_is_booster(current)))					\
 		return count;						\
 									\
 	do {								\
@@ -739,7 +739,7 @@ static ssize_t store_throttle_adj(struct device *dev,
 	int ret;
 	unsigned int val;
 	
-	if (task_is_booster(current))
+	if (likely(task_is_booster(current)))
 		return count;
 
 	if (!node->hw->set_throttle_adj)

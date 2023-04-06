@@ -445,20 +445,6 @@ static int notrace ramoops_pstore_write_buf(enum pstore_type_id type,
 		return 0;
 	}
 
-	if (type != PSTORE_TYPE_DMESG)
-		return -EINVAL;
-
-	/* Out of the various dmesg dump types, ramoops is currently designed
-	 * to only store crash logs, rather than storing general kernel logs.
-	 */
-	if (reason != KMSG_DUMP_OOPS &&
-	    reason != KMSG_DUMP_PANIC)
-		return -EINVAL;
-
-	/* Skip Oopes when configured to do so. */
-	if (reason == KMSG_DUMP_OOPS && !cxt->dump_oops)
-		return -EINVAL;
-
 	/* Explicitly only take the first part of any new crash.
 	 * If our buffer is larger than kmsg_bytes, this can never happen,
 	 * and if our buffer is smaller than kmsg_bytes, we don't want the

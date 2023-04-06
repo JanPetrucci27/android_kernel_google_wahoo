@@ -29,6 +29,9 @@
 
 #include "smpboot.h"
 
+#undef trace_suspend_resume
+#define trace_suspend_resume(x, ...)
+
 #ifdef CONFIG_SMP
 /* Serializes the updates to cpu_online_mask, cpu_present_mask */
 static DEFINE_MUTEX(cpu_add_remove_lock);

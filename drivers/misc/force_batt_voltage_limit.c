@@ -7,7 +7,7 @@
 
 #include <linux/module.h>
 
-#include <linux/fastchg.h>
+#include <linux/force_batt_voltage_limit.h>
 
 int force_batt_voltage_limit = 0;
 

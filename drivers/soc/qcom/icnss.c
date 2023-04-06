@@ -50,7 +50,7 @@
 
 #include "wlan_firmware_service_v01.h"
 
-#ifdef CONFIG_ICNSS_DEBUG
+#ifdef CONFIG_DEBUG_FS
 unsigned long qmi_timeout = 10000;
 module_param(qmi_timeout, ulong, 0600);
 
@@ -114,7 +114,7 @@ module_param(qmi_timeout, ulong, 0600);
 				     ##__VA_ARGS__);			\
 	} while (0)
 
-#ifdef CONFIG_ICNSS_DEBUG
+#ifdef CONFIG_DEBUG_FS
 #define ICNSS_ASSERT(_condition) do {					\
 		if (!(_condition)) {					\
 			icnss_pr_err("ASSERT at line %d\n", __LINE__);	\
@@ -396,7 +396,7 @@ static struct icnss_priv {
 	char function_name[QMI_WLFW_FUNCTION_NAME_LEN_V01 + 1];
 } *penv;
 
-#ifdef CONFIG_ICNSS_DEBUG
+#ifdef CONFIG_DEBUG_FS
 static void icnss_ignore_qmi_timeout(bool ignore)
 {
 	ignore_qmi_timeout = ignore;
@@ -3552,7 +3552,7 @@ out:
 	return ret;
 }
 
-#ifdef CONFIG_ICNSS_DEBUG
+#ifdef CONFIG_DEBUG_FS
 static int icnss_fw_debug_show(struct seq_file *s, void *data)
 {
 	struct icnss_priv *priv = s->private;

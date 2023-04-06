@@ -35,7 +35,8 @@
 #include <linux/cma.h>
 #include <linux/highmem.h>
 #include <linux/io.h>
-#include <linux/delay.h>
+#include <linux/sched.h>
+#include <linux/jiffies.h>
 #include <trace/events/cma.h>
 
 #include "cma.h"
@@ -388,8 +389,9 @@ struct page *cma_alloc(struct cma *cma, size_t count, unsigned int align)
 	unsigned long start = 0;
 	unsigned long bitmap_maxno, bitmap_no, bitmap_count;
 	struct page *page = NULL;
+	int num_attempts = 0;
+	int max_retries = 5;
 	int ret;
-	int retry_after_sleep = 0;
 
 	if (!cma || !cma->count)
 		return NULL;
@@ -416,19 +418,23 @@ struct page *cma_alloc(struct cma *cma, size_t count, unsigned int align)
 				bitmap_maxno, start, bitmap_count, mask,
 				offset);
 		if (bitmap_no >= bitmap_maxno) {
-			if (retry_after_sleep < 2) {
-				start = 0;
-				/*
-				* Page may be momentarily pinned by some other
-				* process which has been scheduled out, eg.
-				* in exit path, during unmap call, or process
-				* fork and so cannot be freed there. Sleep
-				* for 100ms and retry twice to see if it has
-				* been freed later.
-				*/
+			if ((num_attempts < max_retries) && (ret == -EBUSY)) {
 				mutex_unlock(&cma->lock);
-				msleep(100);
-				retry_after_sleep++;
+
+				if (fatal_signal_pending(current))
+					break;
+
+				/*
+				 * Page may be momentarily pinned by some other
+				 * process which has been scheduled out, e.g.
+				 * in exit path, during unmap call, or process
+				 * fork and so cannot be freed there. Sleep
+				 * for 100ms and retry the allocation.
+				 */
+				start = 0;
+				ret = -ENOMEM;
+				schedule_timeout_killable(msecs_to_jiffies(100));
+				num_attempts++;
 				continue;
 			} else {
 				mutex_unlock(&cma->lock);

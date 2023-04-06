@@ -78,7 +78,7 @@ static ssize_t store_##name(struct device *dev,				\
 	struct devfreq *df = to_devfreq(dev);				\
 	struct cache_hwmon_node *hw = df->data;				\
 									\
-	if (task_is_booster(current))					\
+	if (likely(task_is_booster(current)))					\
 		return count;						\
 									\
 	ret = sscanf(buf, "%u", &val);					\

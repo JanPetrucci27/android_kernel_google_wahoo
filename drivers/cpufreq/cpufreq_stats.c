@@ -577,7 +577,7 @@ void acct_update_power(struct task_struct *task, cputime_t cputime)
 		return;
 
 	stats = policy->stats;
-	if (!stats) {
+	if (unlikely(!stats)) {
 		cpufreq_cpu_put(policy);
 		return;
 	}

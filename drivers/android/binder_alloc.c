@@ -36,12 +36,15 @@ enum {
 	BINDER_DEBUG_BUFFER_ALLOC           = 1U << 2,
 	BINDER_DEBUG_BUFFER_ALLOC_ASYNC     = 1U << 3,
 };
+
+#ifdef CONFIG_ANDROID_BINDER_LOGS
 static uint32_t binder_alloc_debug_mask = 0;
 
 module_param_named(debug_mask, binder_alloc_debug_mask,
 		   uint, 0644);
+#endif
 
-#ifdef DEBUG
+#ifdef CONFIG_ANDROID_BINDER_LOGS
 #define binder_alloc_debug(mask, x...) \
 	do { \
 		if (binder_alloc_debug_mask & mask) \
