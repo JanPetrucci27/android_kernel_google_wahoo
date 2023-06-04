@@ -919,9 +919,11 @@ static ssize_t do_tcp_sendpages(struct sock *sk, struct page *page, int offset,
 	}
 
 	sk_clear_bit(SOCKWQ_ASYNC_NOSPACE, sk);
-
-	mss_now = tcp_send_mss(sk, &size_goal, flags);
+	
 	copied = 0;
+	
+restart:
+	mss_now = tcp_send_mss(sk, &size_goal, flags);
 
 	err = -EPIPE;
 	if (sk->sk_err || (sk->sk_shutdown & SEND_SHUTDOWN))
@@ -936,6 +938,9 @@ static ssize_t do_tcp_sendpages(struct sock *sk, struct page *page, int offset,
 new_segment:
 			if (!sk_stream_memory_free(sk))
 				goto wait_for_sndbuf;
+			
+			if (sk_flush_backlog(sk))
+				goto restart;
 
 			skb = sk_stream_alloc_skb(sk, 0, sk->sk_allocation,
 						  skb_queue_empty(&sk->sk_write_queue));

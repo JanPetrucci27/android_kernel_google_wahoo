@@ -125,9 +125,10 @@ static void __cpu_input_boost_kick_max(struct boost_drv *b,
 		wake_up(&b->boost_waitq);
 }
 
-void cpu_input_boost_kick_max(unsigned int duration_ms)
+void cpu_input_boost_kick_max(void)
 {
 	struct boost_drv *b = &boost_drv_g;
+	unsigned int duration_ms = 58;
 
 	__cpu_input_boost_kick_max(b, duration_ms);
 }

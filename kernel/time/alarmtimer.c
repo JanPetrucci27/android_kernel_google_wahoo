@@ -463,7 +463,7 @@ static int alarmtimer_suspend(struct device *dev)
 		return 0;
 
 	if (ktime_to_ns(min) < 2 * NSEC_PER_SEC)
-		__pm_wakeup_event(ws, ktime_to_ms(min) + 5);
+		__pm_wakeup_event(ws, ktime_to_ms(min) + 10);
 
 	/* Setup an rtc timer to fire that far in the future */
 	rtc_timer_cancel(rtc, &rtctimer);

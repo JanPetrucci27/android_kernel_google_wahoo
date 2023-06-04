@@ -753,6 +753,8 @@ struct mm_struct *mm_alloc(void)
 void __mmdrop(struct mm_struct *mm)
 {
 	BUG_ON(mm == &init_mm);
+	WARN_ON_ONCE(mm == current->mm);
+	WARN_ON_ONCE(mm == current->active_mm);
 	mm_free_pgd(mm);
 	destroy_context(mm);
 	mmu_notifier_mm_destroy(mm);
@@ -1963,8 +1965,8 @@ long _do_fork(unsigned long clone_flags,
 	
 	/* Boost DDR bus to the max for 50 ms when userspace launches an app */
 	if (task_is_zygote(current)) {
-		cpu_input_boost_kick_max(118);
-		devfreq_boost_kick_max(DEVFREQ_MSM_CPUBW, 118);
+		cpu_input_boost_kick_max();
+		devfreq_boost_kick_max(DEVFREQ_MSM_CPUBW);
 	}
 	
 	/*

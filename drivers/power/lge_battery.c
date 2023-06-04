@@ -397,7 +397,7 @@ void bm_check_therm_charging(struct battery_manager *bm,
 
 void bm_check_step_charging(struct battery_manager *bm, int volt)
 {
-	int rc, stat;
+	int rc, stat, value;
 
 	if (!bm->bm_active && bm->sc_status) {
 		rc = bm_vote_fcc(bm, BM_REASON_STEP, -EINVAL);
@@ -415,21 +415,18 @@ void bm_check_step_charging(struct battery_manager *bm, int volt)
 		if (volt < valid_batt_id[bm->batt_id].step_table[stat].volt)
 			break;
 	}
-
+	
 #ifdef CONFIG_FORCE_BATT_VOLTAGE_LIMIT
-	if (force_batt_voltage_limit) {
+	if (volt != 0) {
+		if (force_batt_voltage_limit)
+			value = OPT_VOLT;
+		else
+			value = NORM_VOLT;
+		
 		volt = bm_set_property(bm->batt_psy,
 					 POWER_SUPPLY_PROP_VOLTAGE_MAX,
-					 OPT_VOLT);
-		if (volt < 0) {
-			pr_bm(ERROR, "Couldn't set battery float voltage, rc=%d", volt);
-			return;
-		}
-
-	} else {
-		volt = bm_set_property(bm->batt_psy,
-					 POWER_SUPPLY_PROP_VOLTAGE_MAX,
-					 NORM_VOLT);
+					 value);
+		
 		if (volt < 0) {
 			pr_bm(ERROR, "Couldn't set battery float voltage, rc=%d", volt);
 			return;
@@ -440,22 +437,18 @@ void bm_check_step_charging(struct battery_manager *bm, int volt)
 	if (bm->sc_status != stat) {
 #ifdef CONFIG_FORCE_FAST_CHARGE
 		if (force_fast_charge)
-		{
-			pr_bm(MISC, "STATE[%d->%d] CUR[%d] VOL[%d]\n",
-				  bm->sc_status, stat,
-				  CHG_CURRENT_MAX, volt);
-			rc = bm_vote_fcc(bm, BM_REASON_STEP,
-				 CHG_CURRENT_MAX);
-		} else
+			value = CHG_CURRENT_MAX;
+		else
+			value = valid_batt_id[bm->batt_id].step_table[stat].cur;
+#else
+		value = valid_batt_id[bm->batt_id].step_table[stat].cur;
 #endif
-		{
-			pr_bm(MISC, "STATE[%d->%d] CUR[%d] VOL[%d]\n",
-				  bm->sc_status, stat,
-				  valid_batt_id[bm->batt_id].step_table[stat].cur, volt);
-			rc = bm_vote_fcc(bm, BM_REASON_STEP,
-				 valid_batt_id[bm->batt_id].step_table[stat].cur);
-		}
-
+		pr_bm(MISC, "STATE[%d->%d] CUR[%d] VOL[%d]\n",
+			  bm->sc_status, stat,
+			  value, volt);
+		rc = bm_vote_fcc(bm, BM_REASON_STEP,
+			 value);
+		
 		if (rc < 0) {
 			pr_bm(ERROR, "Couldn't set ibat curr rc=%d\n", rc);
 			return;

@@ -65,6 +65,14 @@ struct page {
 		};
 
 		union {
+			/*
+			 * If the page is neither PageSlab nor mappable to userspace,
+			 * the value stored here may help determine what this page
+			 * is used for.  See page-flags.h for a list of page types
+			 * which are currently stored here.
+			 */
+			unsigned int page_type;
+			
 #if defined(CONFIG_HAVE_CMPXCHG_DOUBLE) && \
 	defined(CONFIG_HAVE_ALIGNED_STRUCT_PAGE)
 			/* Used for cmpxchg_double in slub */

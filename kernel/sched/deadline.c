@@ -46,21 +46,277 @@ static inline int on_dl_rq(struct sched_dl_entity *dl_se)
 	return !RB_EMPTY_NODE(&dl_se->rb_node);
 }
 
-static void add_average_bw(struct sched_dl_entity *dl_se, struct dl_rq *dl_rq)
+#ifdef CONFIG_RT_MUTEXES
+static inline struct sched_dl_entity *pi_of(struct sched_dl_entity *dl_se)
 {
-	u64 se_bw = dl_se->dl_bw;
-
-	dl_rq->avg_bw += se_bw;
+	return dl_se->pi_se;
 }
 
-static void clear_average_bw(struct sched_dl_entity *dl_se, struct dl_rq *dl_rq)
+static inline bool is_dl_boosted(struct sched_dl_entity *dl_se)
 {
-	u64 se_bw = dl_se->dl_bw;
+	return pi_of(dl_se) != dl_se;
+}
+#else
+static inline struct sched_dl_entity *pi_of(struct sched_dl_entity *dl_se)
+{
+	return dl_se;
+}
 
-	dl_rq->avg_bw -= se_bw;
-	if (dl_rq->avg_bw < 0) {
-		WARN_ON(1);
-		dl_rq->avg_bw = 0;
+static inline bool is_dl_boosted(struct sched_dl_entity *dl_se)
+{
+	return false;
+}
+#endif
+
+static inline
+void __add_running_bw(u64 dl_bw, struct dl_rq *dl_rq)
+{
+	u64 old = dl_rq->running_bw;
+
+	lockdep_assert_held(&(rq_of_dl_rq(dl_rq))->lock);
+	dl_rq->running_bw += dl_bw;
+	SCHED_WARN_ON(dl_rq->running_bw < old); /* overflow */
+	/* kick cpufreq (see the comment in kernel/sched/sched.h). */
+	cpufreq_update_util(rq_of_dl_rq(dl_rq), 0);
+}
+
+static inline
+void __sub_running_bw(u64 dl_bw, struct dl_rq *dl_rq)
+{
+	u64 old = dl_rq->running_bw;
+
+	lockdep_assert_held(&(rq_of_dl_rq(dl_rq))->lock);
+	dl_rq->running_bw -= dl_bw;
+	SCHED_WARN_ON(dl_rq->running_bw > old); /* underflow */
+	if (dl_rq->running_bw > old)
+		dl_rq->running_bw = 0;
+	/* kick cpufreq (see the comment in kernel/sched/sched.h). */
+	cpufreq_update_util(rq_of_dl_rq(dl_rq), 0);
+}
+
+static inline
+void __add_rq_bw(u64 dl_bw, struct dl_rq *dl_rq)
+{
+	u64 old = dl_rq->this_bw;
+
+	lockdep_assert_held(&(rq_of_dl_rq(dl_rq))->lock);
+	dl_rq->this_bw += dl_bw;
+	SCHED_WARN_ON(dl_rq->this_bw < old); /* overflow */
+}
+
+static inline
+void __sub_rq_bw(u64 dl_bw, struct dl_rq *dl_rq)
+{
+	u64 old = dl_rq->this_bw;
+
+	lockdep_assert_held(&(rq_of_dl_rq(dl_rq))->lock);
+	dl_rq->this_bw -= dl_bw;
+	SCHED_WARN_ON(dl_rq->this_bw > old); /* underflow */
+	if (dl_rq->this_bw > old)
+		dl_rq->this_bw = 0;
+	SCHED_WARN_ON(dl_rq->running_bw > dl_rq->this_bw);
+}
+
+
+static inline
+void add_rq_bw(struct sched_dl_entity *dl_se, struct dl_rq *dl_rq)
+{
+	if (!dl_entity_is_special(dl_se))
+		__add_rq_bw(dl_se->dl_bw, dl_rq);
+}
+
+static inline
+void sub_rq_bw(struct sched_dl_entity *dl_se, struct dl_rq *dl_rq)
+{
+	if (!dl_entity_is_special(dl_se))
+		__sub_rq_bw(dl_se->dl_bw, dl_rq);
+}
+
+static inline
+void add_running_bw(struct sched_dl_entity *dl_se, struct dl_rq *dl_rq)
+{
+	if (!dl_entity_is_special(dl_se))
+		__add_running_bw(dl_se->dl_bw, dl_rq);
+}
+
+static inline
+void sub_running_bw(struct sched_dl_entity *dl_se, struct dl_rq *dl_rq)
+{
+	if (!dl_entity_is_special(dl_se))
+		__sub_running_bw(dl_se->dl_bw, dl_rq);
+}
+
+void dl_change_utilization(struct task_struct *p, u64 new_bw)
+{
+	struct rq *rq;
+	
+	BUG_ON(p->dl.flags & SCHED_FLAG_SUGOV);
+
+	if (task_on_rq_queued(p))
+		return;
+
+	rq = task_rq(p);
+	if (p->dl.dl_non_contending) {
+		sub_running_bw(&p->dl, &rq->dl);
+		p->dl.dl_non_contending = 0;
+		/*
+		 * If the timer handler is currently running and the
+		 * timer cannot be cancelled, inactive_task_timer()
+		 * will see that dl_not_contending is not set, and
+		 * will not touch the rq's active utilization,
+		 * so we are still safe.
+		 */
+		if (hrtimer_try_to_cancel(&p->dl.inactive_timer) == 1)
+			put_task_struct(p);
+	}
+	__sub_rq_bw(p->dl.dl_bw, &rq->dl);
+	__add_rq_bw(new_bw, &rq->dl);
+}
+
+/*
+ * The utilization of a task cannot be immediately removed from
+ * the rq active utilization (running_bw) when the task blocks.
+ * Instead, we have to wait for the so called "0-lag time".
+ *
+ * If a task blocks before the "0-lag time", a timer (the inactive
+ * timer) is armed, and running_bw is decreased when the timer
+ * fires.
+ *
+ * If the task wakes up again before the inactive timer fires,
+ * the timer is cancelled, whereas if the task wakes up after the
+ * inactive timer fired (and running_bw has been decreased) the
+ * task's utilization has to be added to running_bw again.
+ * A flag in the deadline scheduling entity (dl_non_contending)
+ * is used to avoid race conditions between the inactive timer handler
+ * and task wakeups.
+ *
+ * The following diagram shows how running_bw is updated. A task is
+ * "ACTIVE" when its utilization contributes to running_bw; an
+ * "ACTIVE contending" task is in the TASK_RUNNING state, while an
+ * "ACTIVE non contending" task is a blocked task for which the "0-lag time"
+ * has not passed yet. An "INACTIVE" task is a task for which the "0-lag"
+ * time already passed, which does not contribute to running_bw anymore.
+ *                              +------------------+
+ *             wakeup           |    ACTIVE        |
+ *          +------------------>+   contending     |
+ *          | add_running_bw    |                  |
+ *          |                   +----+------+------+
+ *          |                        |      ^
+ *          |                dequeue |      |
+ * +--------+-------+                |      |
+ * |                |   t >= 0-lag   |      | wakeup
+ * |    INACTIVE    |<---------------+      |
+ * |                | sub_running_bw |      |
+ * +--------+-------+                |      |
+ *          ^                        |      |
+ *          |              t < 0-lag |      |
+ *          |                        |      |
+ *          |                        V      |
+ *          |                   +----+------+------+
+ *          | sub_running_bw    |    ACTIVE        |
+ *          +-------------------+                  |
+ *            inactive timer    |  non contending  |
+ *            fired             +------------------+
+ *
+ * The task_non_contending() function is invoked when a task
+ * blocks, and checks if the 0-lag time already passed or
+ * not (in the first case, it directly updates running_bw;
+ * in the second case, it arms the inactive timer).
+ *
+ * The task_contending() function is invoked when a task wakes
+ * up, and checks if the task is still in the "ACTIVE non contending"
+ * state or not (in the second case, it updates running_bw).
+ */
+static void task_non_contending(struct task_struct *p)
+{
+	struct sched_dl_entity *dl_se = &p->dl;
+	struct hrtimer *timer = &dl_se->inactive_timer;
+	struct dl_rq *dl_rq = dl_rq_of_se(dl_se);
+	struct rq *rq = rq_of_dl_rq(dl_rq);
+	s64 zerolag_time;
+
+	/*
+	 * If this is a non-deadline task that has been boosted,
+	 * do nothing
+	 */
+	if (dl_se->dl_runtime == 0)
+		return;
+	
+	if (dl_entity_is_special(dl_se))
+		return;
+
+	WARN_ON(dl_se->dl_non_contending);
+
+	zerolag_time = dl_se->deadline -
+		 div64_long((dl_se->runtime * dl_se->dl_period),
+			dl_se->dl_runtime);
+
+	/*
+	 * Using relative times instead of the absolute "0-lag time"
+	 * allows to simplify the code
+	 */
+	zerolag_time -= rq_clock(rq);
+
+	/*
+	 * If the "0-lag time" already passed, decrease the active
+	 * utilization now, instead of starting a timer
+	 */
+	if ((zerolag_time < 0) || hrtimer_active(&dl_se->inactive_timer)) {
+		if (dl_task(p))
+			sub_running_bw(dl_se, dl_rq);
+		if (!dl_task(p) || p->state == TASK_DEAD) {
+			struct dl_bw *dl_b = dl_bw_of(task_cpu(p));
+			
+			if (p->state == TASK_DEAD)
+				sub_rq_bw(&p->dl, &rq->dl);
+			raw_spin_lock(&dl_b->lock);
+			__dl_sub(dl_b, p->dl.dl_bw, dl_bw_cpus(task_cpu(p)));
+			__dl_clear_params(p);
+			raw_spin_unlock(&dl_b->lock);
+		}
+
+		return;
+	}
+
+	dl_se->dl_non_contending = 1;
+	get_task_struct(p);
+	hrtimer_start(timer, ns_to_ktime(zerolag_time), HRTIMER_MODE_REL);
+}
+
+static void task_contending(struct sched_dl_entity *dl_se, int flags)
+{
+	struct dl_rq *dl_rq = dl_rq_of_se(dl_se);
+
+	/*
+	 * If this is a non-deadline task that has been boosted,
+	 * do nothing
+	 */
+	if (dl_se->dl_runtime == 0)
+		return;
+	
+	if (flags & ENQUEUE_MIGRATED)
+		add_rq_bw(dl_se, dl_rq);
+
+	if (dl_se->dl_non_contending) {
+		dl_se->dl_non_contending = 0;
+		/*
+		 * If the timer handler is currently running and the
+		 * timer cannot be cancelled, inactive_task_timer()
+		 * will see that dl_not_contending is not set, and
+		 * will not touch the rq's active utilization,
+		 * so we are still safe.
+		 */
+		if (hrtimer_try_to_cancel(&dl_se->inactive_timer) == 1)
+			put_task_struct(dl_task_of(dl_se));
+	} else {
+		/*
+		 * Since "dl_non_contending" is not set, the
+		 * task's utilization has already been removed from
+		 * active utilization (either when the task blocked,
+		 * when the "inactive timer" fired).
+		 * So, add it back.
+		 */
+		add_running_bw(dl_se, dl_rq);
 	}
 }
 
@@ -104,6 +360,10 @@ void init_dl_rq(struct dl_rq *dl_rq)
 #else
 	init_dl_bw(&dl_rq->dl_bw);
 #endif
+
+	dl_rq->running_bw = 0;
+	dl_rq->this_bw = 0;
+	init_dl_rq_bw_ratio(dl_rq);
 }
 
 #ifdef CONFIG_SMP
@@ -262,7 +522,8 @@ static struct rq *find_lock_later_rq(struct task_struct *task, struct rq *rq);
 static struct rq *dl_task_offline_migration(struct rq *rq, struct task_struct *p)
 {
 	struct rq *later_rq = NULL;
-
+	struct dl_bw *dl_b;
+	
 	later_rq = find_lock_later_rq(p, rq);
 	if (!later_rq) {
 		int cpu;
@@ -289,6 +550,38 @@ static struct rq *dl_task_offline_migration(struct rq *rq, struct task_struct *p
 		later_rq = cpu_rq(cpu);
 		double_lock_balance(rq, later_rq);
 	}
+	
+	if (p->dl.dl_non_contending || p->dl.dl_throttled) {
+		/*
+		 * Inactive timer is armed (or callback is running, but
+		 * waiting for us to release rq locks). In any case, when it
+		 * will fire (or continue), it will see running_bw of this
+		 * task migrated to later_rq (and correctly handle it).
+		 */
+		sub_running_bw(&p->dl, &rq->dl);
+		sub_rq_bw(&p->dl, &rq->dl);
+
+		add_rq_bw(&p->dl, &later_rq->dl);
+		add_running_bw(&p->dl, &later_rq->dl);
+	} else {
+		sub_rq_bw(&p->dl, &rq->dl);
+		add_rq_bw(&p->dl, &later_rq->dl);
+	}
+
+	/*
+	 * And we finally need to fixup root_domain(s) bandwidth accounting,
+	 * since p is still hanging out in the old (now moved to default) root
+	 * domain.
+	 */
+	dl_b = &rq->rd->dl_bw;
+	raw_spin_lock(&dl_b->lock);
+	__dl_sub(dl_b, p->dl.dl_bw, cpumask_weight(rq->rd->span));
+	raw_spin_unlock(&dl_b->lock);
+
+	dl_b = &later_rq->rd->dl_bw;
+	raw_spin_lock(&dl_b->lock);
+	__dl_add(dl_b, p->dl.dl_bw, cpumask_weight(later_rq->rd->span));
+	raw_spin_unlock(&dl_b->lock);
 	
 	set_task_cpu(p, later_rq->cpu);
 	double_unlock_balance(later_rq, rq);
@@ -353,22 +646,29 @@ static void check_preempt_curr_dl(struct rq *rq, struct task_struct *p,
  * one, and to (try to!) reconcile itself with its own scheduling
  * parameters.
  */
-static inline void setup_new_dl_entity(struct sched_dl_entity *dl_se,
-				       struct sched_dl_entity *pi_se)
+static inline void setup_new_dl_entity(struct sched_dl_entity *dl_se)
 {
 	struct dl_rq *dl_rq = dl_rq_of_se(dl_se);
 	struct rq *rq = rq_of_dl_rq(dl_rq);
 
-	WARN_ON(!dl_se->dl_new || dl_se->dl_throttled);
+	WARN_ON(is_dl_boosted(dl_se));
+	WARN_ON(dl_time_before(rq_clock(rq), dl_se->deadline));
+
+	/*
+	 * We are racing with the deadline timer. So, do nothing because
+	 * the deadline timer handler will take care of properly recharging
+	 * the runtime and postponing the deadline
+	 */
+	if (dl_se->dl_throttled)
+		return;
 
 	/*
 	 * We use the regular wall clock time to set deadlines in the
 	 * future; in fact, we must consider execution overheads (time
 	 * spent on hardirq context, etc.).
 	 */
-	dl_se->deadline = rq_clock(rq) + pi_se->dl_deadline;
-	dl_se->runtime = pi_se->dl_runtime;
-	dl_se->dl_new = 0;
+	dl_se->deadline = rq_clock(rq) + dl_se->dl_deadline;
+	dl_se->runtime = dl_se->dl_runtime;
 }
 
 /*
@@ -389,22 +689,24 @@ static inline void setup_new_dl_entity(struct sched_dl_entity *dl_se,
  * could happen are, typically, a entity voluntarily trying to overcome its
  * runtime, or it just underestimated it during sched_setattr().
  */
-static void replenish_dl_entity(struct sched_dl_entity *dl_se,
-				struct sched_dl_entity *pi_se)
+static void replenish_dl_entity(struct sched_dl_entity *dl_se)
 {
 	struct dl_rq *dl_rq = dl_rq_of_se(dl_se);
 	struct rq *rq = rq_of_dl_rq(dl_rq);
 
-	BUG_ON(pi_se->dl_runtime <= 0);
+	BUG_ON(pi_of(dl_se)->dl_runtime <= 0);
 
 	/*
 	 * This could be the case for a !-dl task that is boosted.
 	 * Just go with full inherited parameters.
 	 */
 	if (dl_se->dl_deadline == 0) {
-		dl_se->deadline = rq_clock(rq) + pi_se->dl_deadline;
-		dl_se->runtime = pi_se->dl_runtime;
+		dl_se->deadline = rq_clock(rq) + pi_of(dl_se)->dl_deadline;
+		dl_se->runtime = pi_of(dl_se)->dl_runtime;
 	}
+	
+	if (dl_se->dl_yielded && dl_se->runtime > 0)
+		dl_se->runtime = 0;
 
 	/*
 	 * We keep moving the deadline away until we get some
@@ -413,8 +715,8 @@ static void replenish_dl_entity(struct sched_dl_entity *dl_se,
 	 * arbitrary large.
 	 */
 	while (dl_se->runtime <= 0) {
-		dl_se->deadline += pi_se->dl_period;
-		dl_se->runtime += pi_se->dl_runtime;
+		dl_se->deadline += pi_of(dl_se)->dl_period;
+		dl_se->runtime += pi_of(dl_se)->dl_runtime;
 	}
 
 	/*
@@ -428,8 +730,8 @@ static void replenish_dl_entity(struct sched_dl_entity *dl_se,
 	 */
 	if (dl_time_before(dl_se->deadline, rq_clock(rq))) {
 		printk_deferred_once("sched: DL replenish lagged to much\n");
-		dl_se->deadline = rq_clock(rq) + pi_se->dl_deadline;
-		dl_se->runtime = pi_se->dl_runtime;
+		dl_se->deadline = rq_clock(rq) + pi_of(dl_se)->dl_deadline;
+		dl_se->runtime = pi_of(dl_se)->dl_runtime;
 	}
 
 	if (dl_se->dl_yielded)
@@ -462,8 +764,7 @@ static void replenish_dl_entity(struct sched_dl_entity *dl_se,
  * task with deadline equal to period this is the same of using
  * dl_period instead of dl_deadline in the equation above.
  */
-static bool dl_entity_overflow(struct sched_dl_entity *dl_se,
-			       struct sched_dl_entity *pi_se, u64 t)
+static bool dl_entity_overflow(struct sched_dl_entity *dl_se, u64 t)
 {
 	u64 left, right;
 
@@ -485,9 +786,9 @@ static bool dl_entity_overflow(struct sched_dl_entity *dl_se,
 	 * of anything below microseconds resolution is actually fiction
 	 * (but still we want to give the user that illusion >;).
 	 */
-	left = (pi_se->dl_deadline >> DL_SCALE) * (dl_se->runtime >> DL_SCALE);
+	left = (pi_of(dl_se)->dl_deadline >> DL_SCALE) * (dl_se->runtime >> DL_SCALE);
 	right = ((dl_se->deadline - t) >> DL_SCALE) *
-		(pi_se->dl_runtime >> DL_SCALE);
+		(pi_of(dl_se)->dl_runtime >> DL_SCALE);
 
 	return dl_time_before(right, left);
 }
@@ -572,36 +873,23 @@ static inline bool dl_is_implicit(struct sched_dl_entity *dl_se)
  * Please refer to the comments update_dl_revised_wakeup() function to find
  * more about the Revised CBS rule.
  */
-static void update_dl_entity(struct sched_dl_entity *dl_se,
-			     struct sched_dl_entity *pi_se)
+static void update_dl_entity(struct sched_dl_entity *dl_se)
 {
 	struct dl_rq *dl_rq = dl_rq_of_se(dl_se);
 	struct rq *rq = rq_of_dl_rq(dl_rq);
 
-	if (dl_se->dl_new)
-		add_average_bw(dl_se, dl_rq);
-
-	/*
-	 * The arrival of a new instance needs special treatment, i.e.,
-	 * the actual scheduling parameters have to be "renewed".
-	 */
-	if (dl_se->dl_new) {
-		setup_new_dl_entity(dl_se, pi_se);
-		return;
-	}
-
 	if (dl_time_before(dl_se->deadline, rq_clock(rq)) ||
-	    dl_entity_overflow(dl_se, pi_se, rq_clock(rq))) {
+	    dl_entity_overflow(dl_se, rq_clock(rq))) {
 
 		if (unlikely(!dl_is_implicit(dl_se) &&
 			     !dl_time_before(dl_se->deadline, rq_clock(rq)) &&
-			     !dl_se->dl_boosted)){
+			     !is_dl_boosted(dl_se))) {
 			update_dl_revised_wakeup(dl_se, rq);
 			return;
 		}
 
-		dl_se->deadline = rq_clock(rq) + pi_se->dl_deadline;
-		dl_se->runtime = pi_se->dl_runtime;
+		dl_se->deadline = rq_clock(rq) + pi_of(dl_se)->dl_deadline;
+		dl_se->runtime = pi_of(dl_se)->dl_runtime;
 	}
 }
 
@@ -693,26 +981,14 @@ static enum hrtimer_restart dl_task_timer(struct hrtimer *timer)
 	 * The task might have changed its scheduling policy to something
 	 * different than SCHED_DEADLINE (through switched_fromd_dl()).
 	 */
-	if (!dl_task(p)) {
-		__dl_clear_params(p);
-		goto unlock;
-	}
-
-	/*
-	 * This is possible if switched_from_dl() raced against a running
-	 * callback that took the above !dl_task() path and we've since then
-	 * switched back into SCHED_DEADLINE.
-	 *
-	 * There's nothing to do except drop our task reference.
-	 */
-	if (dl_se->dl_new)
+	if (!dl_task(p))
 		goto unlock;
 
 	/*
 	 * The task might have been boosted by someone else and might be in the
 	 * boosting/deboosting path, its not throttled.
 	 */
-	if (dl_se->dl_boosted)
+	if (is_dl_boosted(dl_se))
 		goto unlock;
 
 	/*
@@ -740,7 +1016,7 @@ static enum hrtimer_restart dl_task_timer(struct hrtimer *timer)
 	 * but do not enqueue -- wait for our wakeup to do that.
 	 */
 	if (!task_on_rq_queued(p)) {
-		replenish_dl_entity(dl_se, dl_se);
+		replenish_dl_entity(dl_se);
 		goto unlock;
 	}
 
@@ -831,7 +1107,7 @@ static inline void dl_check_constrained_dl(struct sched_dl_entity *dl_se)
 
 	if (dl_time_before(dl_se->deadline, rq_clock(rq)) &&
 	    dl_time_before(rq_clock(rq), dl_next_period(dl_se))) {
-		if (unlikely(dl_se->dl_boosted || !start_dl_timer(p)))
+		if (unlikely(is_dl_boosted(dl_se) || !start_dl_timer(p)))
 			return;
 		dl_se->dl_throttled = 1;
 		if (dl_se->runtime > 0)
@@ -848,6 +1124,47 @@ int dl_runtime_exceeded(struct sched_dl_entity *dl_se)
 extern bool sched_rt_bandwidth_account(struct rt_rq *rt_rq);
 
 /*
+ * This function implements the GRUB accounting rule:
+ * according to the GRUB reclaiming algorithm, the runtime is
+ * not decreased as "dq = -dt", but as
+ * "dq = -max{u / Umax, (1 - Uinact - Uextra)} dt",
+ * where u is the utilization of the task, Umax is the maximum reclaimable
+ * utilization, Uinact is the (per-runqueue) inactive utilization, computed
+ * as the difference between the "total runqueue utilization" and the
+ * runqueue active utilization, and Uextra is the (per runqueue) extra
+ * reclaimable utilization.
+ * Since rq->dl.running_bw and rq->dl.this_bw contain utilizations
+ * multiplied by 2^BW_SHIFT, the result has to be shifted right by
+ * BW_SHIFT.
+ * Since rq->dl.bw_ratio contains 1 / Umax multipled by 2^RATIO_SHIFT,
+ * dl_bw is multiped by rq->dl.bw_ratio and shifted right by RATIO_SHIFT.
+ * Since delta is a 64 bit variable, to have an overflow its value
+ * should be larger than 2^(64 - 20 - 8), which is more than 64 seconds.
+ * So, overflow is not an issue here.
+ */
+static u64 grub_reclaim(u64 delta, struct rq *rq, struct sched_dl_entity *dl_se)
+{
+	u64 u_inact = rq->dl.this_bw - rq->dl.running_bw; /* Utot - Uact */
+	u64 u_act;
+	u64 u_act_min = (dl_se->dl_bw * rq->dl.bw_ratio) >> RATIO_SHIFT;
+	
+	/*
+	 * Instead of computing max{u * bw_ratio, (1 - u_inact - u_extra)},
+	 * we compare u_inact + rq->dl.extra_bw with
+	 * 1 - (u * rq->dl.bw_ratio >> RATIO_SHIFT), because
+	 * u_inact + rq->dl.extra_bw can be larger than
+	 * 1 * (so, 1 - u_inact - rq->dl.extra_bw would be negative
+	 * leading to wrong results)
+	 */
+	if (u_inact + rq->dl.extra_bw > BW_UNIT - u_act_min)
+		u_act = u_act_min;
+	else
+		u_act = BW_UNIT - u_inact - rq->dl.extra_bw;
+
+	return (delta * u_act) >> BW_SHIFT;
+}
+
+/*
  * Update the current task's runtime statistics (provided it is still
  * a -deadline task and has not been removed from the dl_rq).
  */
@@ -858,9 +1175,6 @@ static void update_curr_dl(struct rq *rq)
 	u64 delta_exec, scaled_delta_exec;
 	int cpu = cpu_of(rq);
 	u64 now;
-	
-	unsigned long scale_freq = arch_scale_freq_capacity(cpu);
-	unsigned long scale_cpu = arch_scale_cpu_capacity(cpu);
 
 	if (!dl_task(curr) || !on_dl_rq(dl_se))
 		return;
@@ -875,11 +1189,11 @@ static void update_curr_dl(struct rq *rq)
 	 */
 	now = rq_clock_task(rq);
     delta_exec = now - curr->se.exec_start;
-	if (unlikely((s64)delta_exec <= 0))
+	if (unlikely((s64)delta_exec <= 0)) {
+		if (unlikely(dl_se->dl_yielded))
+			goto throttle;
 		return;
-
-	/* kick cpufreq (see the comment in kernel/sched/sched.h). */
-	cpufreq_update_util(rq, SCHED_CPUFREQ_DL);
+	}
 
 	schedstat_set(curr->se.statistics.exec_max,
 		      max(curr->se.statistics.exec_max, delta_exec));
@@ -889,15 +1203,42 @@ static void update_curr_dl(struct rq *rq)
 
 	curr->se.exec_start = now;
 	cpuacct_charge(curr, delta_exec);
+	
+	if (dl_entity_is_special(dl_se))
+		return;
 
-	scaled_delta_exec = cap_scale(delta_exec, scale_freq);
-	scaled_delta_exec = cap_scale(scaled_delta_exec, scale_cpu);
+	/*
+	 * For tasks that participate in GRUB, we implement GRUB-PA: the
+	 * spare reclaimed bandwidth is used to clock down frequency.
+	 *
+	 * For the others, we still need to scale reservation parameters
+	 * according to current frequency and CPU maximum capacity.
+	 */
+	if (unlikely(dl_se->flags & SCHED_FLAG_RECLAIM)) {
+		scaled_delta_exec = grub_reclaim(delta_exec,
+						 rq,
+						 &curr->dl);
+	} else {
+		unsigned long scale_freq = arch_scale_freq_capacity(cpu);
+		unsigned long scale_cpu = arch_scale_cpu_capacity(cpu);
 
-	dl_se->runtime -= dl_se->dl_yielded ? 0 : delta_exec;
-	if (dl_runtime_exceeded(dl_se)) {
+		scaled_delta_exec = cap_scale(delta_exec, scale_freq);
+		scaled_delta_exec = cap_scale(scaled_delta_exec, scale_cpu);
+	}
+
+	dl_se->runtime -= scaled_delta_exec;
+
+throttle:
+	if (dl_runtime_exceeded(dl_se) || dl_se->dl_yielded) {
 		dl_se->dl_throttled = 1;
+		
+		/* If requested, inform the user about runtime overruns. */
+		if (dl_runtime_exceeded(dl_se) &&
+		    (dl_se->flags & SCHED_FLAG_DL_OVERRUN))
+			dl_se->dl_overrun = 1;
+			
 		__dequeue_task_dl(rq, curr, 0);
-		if (unlikely(dl_se->dl_boosted || !start_dl_timer(curr)))
+		if (unlikely(is_dl_boosted(dl_se) || !start_dl_timer(curr)))
 			enqueue_task_dl(rq, curr, ENQUEUE_REPLENISH);
 
 		if (!is_leftmost(curr, &rq->dl))
@@ -928,6 +1269,56 @@ static void update_curr_dl(struct rq *rq)
 			rt_rq->rt_time += delta_exec;
 		raw_spin_unlock(&rt_rq->rt_runtime_lock);
 	}
+}
+
+static enum hrtimer_restart inactive_task_timer(struct hrtimer *timer)
+{
+	struct sched_dl_entity *dl_se = container_of(timer,
+						     struct sched_dl_entity,
+						     inactive_timer);
+	struct task_struct *p = dl_task_of(dl_se);
+	struct rq_flags rf;
+	struct rq *rq;
+
+	rq = task_rq_lock(p, &rf);
+	
+	sched_clock_tick();
+	update_rq_clock(rq);
+
+	if (!dl_task(p) || p->state == TASK_DEAD) {
+		struct dl_bw *dl_b = dl_bw_of(task_cpu(p));
+		
+		if (p->state == TASK_DEAD && dl_se->dl_non_contending) {
+			sub_running_bw(&p->dl, dl_rq_of_se(&p->dl));
+			sub_rq_bw(&p->dl, dl_rq_of_se(&p->dl));
+			dl_se->dl_non_contending = 0;
+		}
+		
+		raw_spin_lock(&dl_b->lock);
+		__dl_sub(dl_b, p->dl.dl_bw, dl_bw_cpus(task_cpu(p)));
+		raw_spin_unlock(&dl_b->lock);
+		__dl_clear_params(p);
+
+		goto unlock;
+	}
+	if (dl_se->dl_non_contending == 0)
+		goto unlock;
+
+	sub_running_bw(dl_se, &rq->dl);
+	dl_se->dl_non_contending = 0;
+unlock:
+	task_rq_unlock(rq, p, &rf);
+	put_task_struct(p);
+
+	return HRTIMER_NORESTART;
+}
+
+void init_dl_inactive_task_timer(struct sched_dl_entity *dl_se)
+{
+	struct hrtimer *timer = &dl_se->inactive_timer;
+
+	hrtimer_init(timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
+	timer->function = inactive_task_timer;
 }
 
 #ifdef CONFIG_SMP
@@ -1043,8 +1434,7 @@ static void __dequeue_dl_entity(struct sched_dl_entity *dl_se)
 }
 
 static void
-enqueue_dl_entity(struct sched_dl_entity *dl_se,
-		  struct sched_dl_entity *pi_se, int flags)
+enqueue_dl_entity(struct sched_dl_entity *dl_se, int flags)
 {
 	BUG_ON(on_dl_rq(dl_se));
 
@@ -1053,11 +1443,17 @@ enqueue_dl_entity(struct sched_dl_entity *dl_se,
 	 * parameters of the task might need updating. Otherwise,
 	 * we want a replenishment of its runtime.
 	 */
-	if (dl_se->dl_new || flags & ENQUEUE_WAKEUP)
-		update_dl_entity(dl_se, pi_se);
-	else if (flags & ENQUEUE_REPLENISH)
-		replenish_dl_entity(dl_se, pi_se);
-
+	if (flags & ENQUEUE_WAKEUP) {
+		task_contending(dl_se, flags);
+		update_dl_entity(dl_se);
+	} else if (flags & ENQUEUE_REPLENISH) {
+		replenish_dl_entity(dl_se);
+	} else if ((flags & ENQUEUE_RESTORE) &&
+		  dl_time_before(dl_se->deadline,
+				 rq_clock(rq_of_dl_rq(dl_rq_of_se(dl_se))))) {
+		setup_new_dl_entity(dl_se);
+	}
+	
 	__enqueue_dl_entity(dl_se);
 }
 
@@ -1068,17 +1464,7 @@ static void dequeue_dl_entity(struct sched_dl_entity *dl_se)
 
 static void enqueue_task_dl(struct rq *rq, struct task_struct *p, int flags)
 {
-	struct task_struct *pi_task = rt_mutex_get_top_task(p);
-	struct sched_dl_entity *pi_se = &p->dl;
-
-	/*
-	 * Use the scheduling parameters of the top pi-waiter
-	 * task if we have one and its (absolute) deadline is
-	 * smaller than our one... OTW we keep our runtime and
-	 * deadline.
-	 */
-	if (pi_task && p->dl.dl_boosted && dl_prio(pi_task->normal_prio)) {
-		pi_se = &pi_task->dl;
+		if (is_dl_boosted(&p->dl)) {
 		/*
 		 * Because of delays in the detection of the overrun of a
 		 * thread's runtime, it might be the case that a thread
@@ -1114,6 +1500,7 @@ static void enqueue_task_dl(struct rq *rq, struct task_struct *p, int flags)
 		if (!(flags & ENQUEUE_REPLENISH))
 			printk_deferred_once("sched: DL de-boosted task PID %d: REPLENISH flag missing\n",
 					     task_pid_nr(p));
+		
 		return;
 	}
 
@@ -1125,17 +1512,32 @@ static void enqueue_task_dl(struct rq *rq, struct task_struct *p, int flags)
 	 */
 	if (!p->dl.dl_throttled && !dl_is_implicit(&p->dl))
 		dl_check_constrained_dl(&p->dl);
-
+	
+	if (p->on_rq == TASK_ON_RQ_MIGRATING || flags & ENQUEUE_RESTORE) {
+		add_rq_bw(&p->dl, &rq->dl);
+		add_running_bw(&p->dl, &rq->dl);
+	}
+	
 	/*
-	 * If p is throttled, we do nothing. In fact, if it exhausted
+	 * If p is throttled, we do not enqueue it. In fact, if it exhausted
 	 * its budget it needs a replenishment and, since it now is on
 	 * its rq, the bandwidth timer callback (which clearly has not
 	 * run yet) will take care of this.
+	 * However, the active utilization does not depend on the fact
+	 * that the task is on the runqueue or not (but depends on the
+	 * task's state - in GRUB parlance, "inactive" vs "active contending").
+	 * In other words, even if a task is throttled its utilization must
+	 * be counted in the active utilization; hence, we need to call
+	 * add_running_bw().
 	 */
-	if (p->dl.dl_throttled && !(flags & ENQUEUE_REPLENISH))
+	if (p->dl.dl_throttled && !(flags & ENQUEUE_REPLENISH)) {
+		if (flags & ENQUEUE_WAKEUP)
+			task_contending(&p->dl, flags);
+		
 		return;
+	}
 
-	enqueue_dl_entity(&p->dl, pi_se, flags);
+	enqueue_dl_entity(&p->dl, flags);
 
 	if (!task_current(rq, p) && p->nr_cpus_allowed > 1)
 		enqueue_pushable_dl_task(rq, p);
@@ -1151,6 +1553,23 @@ static void dequeue_task_dl(struct rq *rq, struct task_struct *p, int flags)
 {
 	update_curr_dl(rq);
 	__dequeue_task_dl(rq, p, flags);
+	
+	if (p->on_rq == TASK_ON_RQ_MIGRATING || flags & DEQUEUE_SAVE) {
+		sub_running_bw(&p->dl, &rq->dl);
+		sub_rq_bw(&p->dl, &rq->dl);
+	}
+
+	/*
+	 * This check allows to start the inactive timer (or to immediately
+	 * decrease the active utilization, if needed) in two cases:
+	 * when the task blocks and when it is terminating
+	 * (p->state == TASK_DEAD). We can handle the two cases in the same
+	 * way, because from GRUB's point of view the same thing is happening
+	 * (the task moves from "active contending" to "active non contending"
+	 * or "inactive")
+	 */
+	if (flags & DEQUEUE_SLEEP)
+		task_non_contending(p);
 }
 
 /*
@@ -1165,18 +1584,14 @@ static void dequeue_task_dl(struct rq *rq, struct task_struct *p, int flags)
  */
 static void yield_task_dl(struct rq *rq)
 {
-	struct task_struct *p = rq->curr;
-
 	/*
 	 * We make the task go to sleep until its current deadline by
 	 * forcing its runtime to zero. This way, update_curr_dl() stops
 	 * it and the bandwidth timer will wake it up and will give it
 	 * new scheduling parameters (thanks to dl_yielded=1).
 	 */
-	if (p->dl.runtime > 0) {
-		rq->curr->dl.dl_yielded = 1;
-		p->dl.runtime = 0;
-	}
+	rq->curr->dl.dl_yielded = 1;
+	
 	update_rq_clock(rq);
 	update_curr_dl(rq);
 	/*
@@ -1241,6 +1656,38 @@ select_task_rq_dl(struct task_struct *p, int cpu, int sd_flag, int flags,
 
 out:
 	return cpu;
+}
+
+static void migrate_task_rq_dl(struct task_struct *p, int new_cpu __maybe_unused)
+{
+	struct rq *rq;
+
+	if (p->state != TASK_WAKING)
+		return;
+
+	rq = task_rq(p);
+	/*
+	 * Since p->state == TASK_WAKING, set_task_cpu() has been called
+	 * from try_to_wake_up(). Hence, p->pi_lock is locked, but
+	 * rq->lock is not... So, lock it
+	 */
+	raw_spin_lock(&rq->lock);
+	if (p->dl.dl_non_contending) {
+		update_rq_clock(rq);
+		sub_running_bw(&p->dl, &rq->dl);
+		p->dl.dl_non_contending = 0;
+		/*
+		 * If the timer handler is currently running and the
+		 * timer cannot be cancelled, inactive_task_timer()
+		 * will see that dl_not_contending is not set, and
+		 * will not touch the rq's active utilization,
+		 * so we are still safe.
+		 */
+		if (hrtimer_try_to_cancel(&p->dl.inactive_timer) == 1)
+			put_task_struct(p);
+	}
+	sub_rq_bw(&p->dl, &rq->dl);
+	raw_spin_unlock(&rq->lock);
 }
 
 static void check_preempt_equal_dl(struct rq *rq, struct task_struct *p)
@@ -1394,23 +1841,6 @@ static void task_fork_dl(struct task_struct *p)
 	 * SCHED_DEADLINE tasks cannot fork and this is achieved through
 	 * sched_fork()
 	 */
-}
-
-static void task_dead_dl(struct task_struct *p)
-{
-	struct dl_bw *dl_b = dl_bw_of(task_cpu(p));
-	struct dl_rq *dl_rq = dl_rq_of_se(&p->dl);
-	struct rq *rq = rq_of_dl_rq(dl_rq);
-
-	/*
-	 * Since we are TASK_DEAD we won't slip out of the domain!
-	 */
-	raw_spin_lock_irq(&dl_b->lock);
-	/* XXX we should retain the bw until 0-lag */
-	dl_b->total_bw -= p->dl.dl_bw;
-	raw_spin_unlock_irq(&dl_b->lock);
-
-	clear_average_bw(&p->dl, &rq->dl);
 }
 
 #ifdef CONFIG_SMP
@@ -1574,6 +2004,7 @@ static struct rq *find_lock_later_rq(struct task_struct *task, struct rq *rq)
 				     !cpumask_test_cpu(later_rq->cpu,
 				                       &task->cpus_allowed) ||
 				     task_running(rq, task) ||
+				     !dl_task(task) ||
 				     !task_on_rq_queued(task))) {
 				double_unlock_balance(rq, later_rq);
 				later_rq = NULL;
@@ -1667,7 +2098,7 @@ retry:
 		 * then possible that next_task has migrated.
 		 */
 		task = pick_next_pushable_dl_task(rq);
-		if (task_cpu(next_task) == rq->cpu && task == next_task) {
+		if (task == next_task) {
 			/*
 			 * The task is still there. We don't try
 			 * again, some other cpu will pull it when ready.
@@ -1685,7 +2116,6 @@ retry:
 	}
 
 	deactivate_task(rq, next_task, 0);
-	clear_average_bw(&next_task->dl, &rq->dl);
 	set_task_cpu(next_task, later_rq->cpu);
 	
 	/*
@@ -1693,7 +2123,6 @@ retry:
 	 * by the cpufreq_update_util() inside __add_running_bw().
 	 */
 	update_rq_clock(later_rq);
-	add_average_bw(&next_task->dl, &later_rq->dl);
 	activate_task(later_rq, next_task, ENQUEUE_NOCLOCK);
 	ret = 1;
 
@@ -1781,9 +2210,7 @@ static void pull_dl_task(struct rq *this_rq)
 			resched = true;
 
 			deactivate_task(src_rq, p, 0);
-			clear_average_bw(&p->dl, &src_rq->dl);
 			set_task_cpu(p, this_cpu);
-			add_average_bw(&p->dl, &this_rq->dl);
 			activate_task(this_rq, p, 0);
 			dmin = p->dl.deadline;
 
@@ -1839,7 +2266,7 @@ static void set_cpus_allowed_dl(struct task_struct *p,
 		 * until we complete the update.
 		 */
 		raw_spin_lock(&src_dl_b->lock);
-		__dl_clear(src_dl_b, p->dl.dl_bw);
+		__dl_sub(src_dl_b, p->dl.dl_bw, dl_bw_cpus(task_cpu(p)));
 		raw_spin_unlock(&src_dl_b->lock);
 	}
 
@@ -1881,15 +2308,35 @@ void __init init_sched_dl_class(void)
 static void switched_from_dl(struct rq *rq, struct task_struct *p)
 {
 	/*
-	 * Start the deadline timer; if we switch back to dl before this we'll
-	 * continue consuming our current CBS slice. If we stay outside of
-	 * SCHED_DEADLINE until the deadline passes, the timer will reset the
-	 * task.
+	 * task_non_contending() can start the "inactive timer" (if the 0-lag
+	 * time is in the future). If the task switches back to dl before
+	 * the "inactive timer" fires, it can continue to consume its current
+	 * runtime using its current deadline. If it stays outside of
+	 * SCHED_DEADLINE until the 0-lag time passes, inactive_task_timer()
+	 * will reset the task parameters.
 	 */
-	if (!start_dl_timer(p))
-		__dl_clear_params(p);
+	if (task_on_rq_queued(p) && p->dl.dl_runtime)
+		task_non_contending(p);
+	
+	if (!task_on_rq_queued(p)) {
+		/*
+		 * Inactive timer is armed. However, p is leaving DEADLINE and
+		 * might migrate away from this rq while continuing to run on
+		 * some other class. We need to remove its contribution from
+		 * this rq running_bw now, or sub_rq_bw (below) will complain.
+		 */
+		if (p->dl.dl_non_contending)
+			sub_running_bw(&p->dl, &rq->dl);
+		sub_rq_bw(&p->dl, &rq->dl);
+	}
 
-	clear_average_bw(&p->dl, &rq->dl);
+	/*
+	 * We cannot use inactive_task_timer() to invoke sub_running_bw()
+	 * at the 0-lag time, because the task could have been migrated
+	 * while SCHED_OTHER in the meanwhile.
+	 */
+	if (p->dl.dl_non_contending)
+		p->dl.dl_non_contending = 0;
 
 	/*
 	 * Since this might be the only -deadline task on the rq,
@@ -1908,7 +2355,17 @@ static void switched_from_dl(struct rq *rq, struct task_struct *p)
  */
 static void switched_to_dl(struct rq *rq, struct task_struct *p)
 {
-	if (task_on_rq_queued(p) && rq->curr != p) {
+	if (hrtimer_try_to_cancel(&p->dl.inactive_timer) == 1)
+		put_task_struct(p);
+	
+	/* If p is not queued we will update its parameters at next wakeup. */
+	if (!task_on_rq_queued(p)) {
+		add_rq_bw(&p->dl, &rq->dl);
+
+		return;
+	}
+	
+	if (rq->curr != p) {
 #ifdef CONFIG_SMP
 		if (p->nr_cpus_allowed > 1 && rq->dl.overloaded)
 			queue_push_tasks(rq);
@@ -1955,8 +2412,7 @@ static void prio_changed_dl(struct rq *rq, struct task_struct *p,
 		 */
 		resched_curr(rq);
 #endif /* CONFIG_SMP */
-	} else
-		switched_to_dl(rq, p);
+	}
 }
 
 const struct sched_class dl_sched_class
@@ -1974,6 +2430,7 @@ const struct sched_class dl_sched_class
 #ifdef CONFIG_SMP
 	.balance		= balance_dl,
 	.select_task_rq		= select_task_rq_dl,
+	.migrate_task_rq	= migrate_task_rq_dl,
 	.set_cpus_allowed       = set_cpus_allowed_dl,
 	.rq_online              = rq_online_dl,
 	.rq_offline             = rq_offline_dl,
@@ -1982,7 +2439,6 @@ const struct sched_class dl_sched_class
 
 	.task_tick		= task_tick_dl,
 	.task_fork              = task_fork_dl,
-	.task_dead		= task_dead_dl,
 
 	.prio_changed           = prio_changed_dl,
 	.switched_from		= switched_from_dl,

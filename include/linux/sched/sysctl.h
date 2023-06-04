@@ -39,7 +39,6 @@ extern unsigned int sysctl_sched_latency;
 extern unsigned int sysctl_sched_min_granularity;
 extern unsigned int sysctl_sched_wakeup_granularity;
 extern unsigned int sysctl_sched_child_runs_first;
-extern unsigned int sysctl_sched_sync_hint_enable;
 extern unsigned int sysctl_sched_cstate_aware;
 extern unsigned int sysctl_sched_energy_aware;
 #ifdef CONFIG_SCHED_WALT
@@ -79,6 +78,9 @@ int sched_proc_update_handler(struct ctl_table *table, int write,
  */
 extern unsigned int sysctl_sched_rt_period;
 extern int sysctl_sched_rt_runtime;
+
+extern unsigned int sysctl_sched_dl_period_max;
+extern unsigned int sysctl_sched_dl_period_min;
 
 #ifdef CONFIG_CFS_BANDWIDTH
 extern unsigned int sysctl_sched_cfs_bandwidth_slice;

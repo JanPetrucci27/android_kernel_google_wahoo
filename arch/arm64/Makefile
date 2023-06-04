@@ -71,16 +71,6 @@ ifeq ($(CONFIG_COMPAT_VDSO), y)
   endif
 endif
 
-# msm8998 optimizations
-ifeq ($(cc-name),clang)
-OPT_FLAGS := -O3 -march=armv8-a+crc+crypto -mtune=cortex-a53
-else
-OPT_FLAGS := -O3 -march=armv8-a+crc+crypto -mtune=cortex-a73.cortex-a53
-endif
-KBUILD_CFLAGS  += $(OPT_FLAGS)
-KBUILD_AFLAGS  += $(OPT_FLAGS)
-KBUILD_LDFLAGS += $(OPT_FLAGS)
-
 ifeq ($(cc-name),clang)
 KBUILD_CFLAGS	+= -mno-implicit-float
 else
@@ -135,7 +125,6 @@ endif
 
 ifeq ($(cc-name),clang)
 KBUILD_CFLAGS += $(call cc-disable-warning, asm-operand-widths)
-KBUILD_CFLAGS += -mcpu=kryo
 endif
 
 # KASAN_SHADOW_OFFSET = VA_START + (1 << (VA_BITS - 3)) - (1 << 61)

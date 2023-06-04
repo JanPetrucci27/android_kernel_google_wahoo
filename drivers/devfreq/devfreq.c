@@ -981,6 +981,9 @@ static ssize_t min_freq_store(struct device *dev, struct device_attribute *attr,
 	unsigned long value;
 	int ret;
 	unsigned long max;
+	
+	if (!strstr(dev_name(df->dev.parent), "kgsl"))
+		return count;
 
 #ifdef CONFIG_DEVFREQ_BOOST
 	/* Minfreq is managed by devfreq_boost */
@@ -991,6 +994,9 @@ static ssize_t min_freq_store(struct device *dev, struct device_attribute *attr,
 	ret = sscanf(buf, "%lu", &value);
 	if (ret != 1)
 		return -EINVAL;
+	
+	if (value == 257000000)
+		value = 180000000;
 	
 	mutex_lock(&df->event_lock);
 	mutex_lock(&df->lock);
@@ -1015,7 +1021,7 @@ static ssize_t min_freq_show(struct device *dev, struct device_attribute *attr,
 	return sprintf(buf, "%lu\n", to_devfreq(dev)->min_freq);
 }
 
-static ssize_t __maybe_unused max_freq_store(struct device *dev, struct device_attribute *attr,
+static ssize_t max_freq_store(struct device *dev, struct device_attribute *attr,
 			      const char *buf, size_t count)
 {
 	struct devfreq *df = to_devfreq(dev);
@@ -1023,12 +1029,15 @@ static ssize_t __maybe_unused max_freq_store(struct device *dev, struct device_a
 	int ret;
 	unsigned long min;
 	
-	if (likely(task_is_booster(current)))
+	if (!strstr(dev_name(df->dev.parent), "kgsl"))
 		return count;
 
 	ret = sscanf(buf, "%lu", &value);
 	if (ret != 1)
 		return -EINVAL;
+	
+	if (value == 710000000)
+		value = 750000000;
 	
 	mutex_lock(&df->event_lock);
 	mutex_lock(&df->lock);
@@ -1053,7 +1062,7 @@ static ssize_t max_freq_show(struct device *dev, struct device_attribute *attr,
 {
 	return sprintf(buf, "%lu\n", to_devfreq(dev)->max_freq);
 }
-static DEVICE_ATTR_RO(max_freq);
+static DEVICE_ATTR_RW(max_freq);
 
 static ssize_t available_frequencies_show(struct device *d,
 					  struct device_attribute *attr,

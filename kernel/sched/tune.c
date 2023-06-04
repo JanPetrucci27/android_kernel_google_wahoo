@@ -646,11 +646,12 @@ void schedtune_exit_task(struct task_struct *tsk)
 	unlock_rq_of(rq, tsk, &rf);
 }
 
-int schedtune_cpu_boost(int cpu)
+int schedtune_cpu_boost_with(int cpu, struct task_struct *p)
 {
 	struct boost_groups *bg;
 	u64 now;
-
+	int task_boost = p ? schedtune_task_boost(p) : -100;
+	
 	bg = &per_cpu(cpu_boost_groups, cpu);
 	now = sched_clock_cpu(cpu);
 
@@ -658,7 +659,7 @@ int schedtune_cpu_boost(int cpu)
 	if (schedtune_boost_timeout(now, bg->boost_ts))
 		schedtune_cpu_update(cpu, now);
 	
-	return bg->boost_max;
+	return max(bg->boost_max, task_boost);
 }
 
 struct adj_filter_data {
@@ -668,7 +669,7 @@ struct adj_filter_data {
 };
 
 static struct adj_filter_data adj_filter_targets[] __read_mostly = {
-	{ -1, "foreground",	100 /* VISIBLE_APP_ADJ */ }, 
+	// { -1, "foreground",	100 /* VISIBLE_APP_ADJ */ }, 
 	{ -1, "top-app",	100 /* VISIBLE_APP_ADJ */ },
 };
 
@@ -716,8 +717,6 @@ int schedtune_task_boost(struct task_struct *p)
 	/* Get task boost value */
 	rcu_read_lock();
 	st = task_schedtune(p);
-	
-	// task_boost = st->boost;
 	if (!schedtune_task_boost_adj_filter(st->idx, p))
 		task_boost = st->boost;
 	rcu_read_unlock();
@@ -729,7 +728,6 @@ int schedtune_prefer_idle(struct task_struct *p)
 {
 	struct schedtune *st;
 	int prefer_idle;
-
 
 	if (unlikely(!schedtune_initialized))
 		return 0;

@@ -222,6 +222,12 @@ static void cpu_idle_loop(void)
 	int cpu = smp_processor_id();
 	
 	while (1) {
+		
+	   /*
+		* Check if we need to update blocked load
+		*/
+		nohz_run_idle_balance(cpu);
+	
 		/*
 		 * If the arch has a polling bit, we maintain an invariant:
 		 *

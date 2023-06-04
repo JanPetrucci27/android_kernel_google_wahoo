@@ -634,7 +634,6 @@ OPT_FLAGS += -mllvm -polly \
 		   -mllvm -polly-run-inliner \
            -mllvm -polly-isl-arg=--no-schedule-serialize-sccs \
 		   -mllvm -polly-ast-use-context \
-           -mllvm -polly-detect-keep-going \
            -mllvm -polly-position=before-vectorizer \
 		   -mllvm -polly-vectorizer=stripmine \
            -mllvm -polly-detect-profitability-min-per-loop-insts=40 \
@@ -672,8 +671,8 @@ OPT_FLAGS += -march=armv8-a+crc+crypto
 OPT_FLAGS += -mtune=cortex-a73.cortex-a53
 endif
 
-KBUILD_CFLAGS += -O3 $(OPT_FLAGS)
-KBUILD_AFLAGS += -O3 $(OPT_FLAGS)
+KBUILD_CFLAGS += $(OPT_FLAGS)
+KBUILD_AFLAGS += $(OPT_FLAGS)
 KBUILD_LDFLAGS += $(OPT_FLAGS)
 
 # Use store motion pass for gcse
@@ -689,21 +688,6 @@ LD		:= $(LDLLD)
 LLVM_AR		:= llvm-ar
 LLVM_NM		:= llvm-nm
 export LLVM_AR LLVM_NM
-# Set O3 optimization level for LTO
-LDFLAGS		+= --plugin-opt=O3
-endif
-
-ifeq ($(cc-name),clang)
-ifeq ($(ld-name),lld)
-KBUILD_CFLAGS	+= -fuse-ld=lld
-KBUILD_LDFLAGS += -O3 --strip-debug
-LDFLAGS += -O3 --strip-debug
-ifdef CONFIG_LTO_CLANG
-LDFLAGS += --lto-O3
-KBUILD_LDFLAGS	+= --lto-O3
-endif
-endif
-KBUILD_CPPFLAGS	+= -Qunused-arguments
 endif
 
 # The arch Makefile can set ARCH_{CPP,A,C}FLAGS to override the default
@@ -723,31 +707,36 @@ KBUILD_CFLAGS	+= $(call cc-disable-warning, attribute-alias)
 ifdef CONFIG_CC_OPTIMIZE_FOR_SIZE
 KBUILD_CFLAGS	+= -Os $(call cc-disable-warning,maybe-uninitialized,)
 else
-ifdef CONFIG_PROFILE_ALL_BRANCHES
-KBUILD_CFLAGS	+= -fuse-ld=lld -O3 -mllvm -polly
-else
-KBUILD_CFLAGS   += -fuse-ld=lld -O3 -mllvm -polly
+KBUILD_CFLAGS   += -O3 $(call cc-disable-warning,maybe-uninitialized,)
 endif
-endif
+
 ifdef CONFIG_LTO_CLANG
 KBUILD_CFLAG	+= -fwhole-program-vtables
 endif
+
 ifdef CONFIG_INLINE_OPTIMIZATION
 KBUILD_CFLAGS	+= -mllvm -inline-threshold=2500
 KBUILD_CFLAGS	+= -mllvm -inlinehint-threshold=1500
 endif
 
-ifdef CONFIG_CC_WERROR
-KBUILD_CFLAGS	+= -Werror
-endif
-
-CFLAGS += -fuse-ld=lld -O3 -mllvm -polly -march=armv8-a+crc+crypto
-LDFLAGS += -mllvm -polly -z norelro
-
-ifdef CONFIG_CC_WERROR
 ifeq ($(cc-name),clang)
-KBUILD_CFLAGS	+= -Werror
+ifeq ($(ld-name),lld)
+KBUILD_CFLAGS	+= -fuse-ld=lld
+KBUILD_LDFLAGS += --strip-debug
+LDFLAGS += --strip-debug
+ifdef CONFIG_LTO_CLANG
+LDFLAGS += --lto-O3
+KBUILD_LDFLAGS	+= --lto-O3
+else
+KBUILD_LDFLAGS += -O3
+LDFLAGS += -O3
 endif
+endif
+KBUILD_CPPFLAGS	+= -Qunused-arguments
+endif
+
+ifdef CONFIG_CC_WERROR
+KBUILD_CFLAGS	+= -Werror
 endif
 
 # Tell compiler to use pipes instead of temporary files during compilation

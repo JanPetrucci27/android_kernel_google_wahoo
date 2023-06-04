@@ -102,9 +102,10 @@ static void __devfreq_boost_kick_max(struct boost_dev *b,
 		wake_up(&b->boost_waitq);
 }
 
-void devfreq_boost_kick_max(enum df_device device, unsigned int duration_ms)
+void devfreq_boost_kick_max(enum df_device device)
 {
 	struct df_boost_drv *d = &df_boost_drv_g;
+	unsigned int duration_ms = 58;
 
 	__devfreq_boost_kick_max(d->devices + device, duration_ms);
 }

@@ -11,7 +11,6 @@ struct cpu_topology {
 	cpumask_t core_sibling;
 };
 
-extern bool sched_is_energy_aware(void);
 extern struct cpu_topology cpu_topology[NR_CPUS];
 
 #define topology_physical_package_id(cpu)	(cpu_topology[cpu].cluster_id)

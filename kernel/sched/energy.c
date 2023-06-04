@@ -152,7 +152,7 @@ static int sched_energy_probe(struct platform_device *pdev)
 	unsigned long *max_frequencies = NULL;
 	int ret;
 
-	if (!sched_is_energy_aware())
+	if (!static_branch_unlikely(&sched_energy_present))
 		return 0;
 	if (!sge_ready)
 		return -EPROBE_DEFER;

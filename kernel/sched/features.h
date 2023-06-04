@@ -57,17 +57,17 @@
 #define SCHED_FEAT_TTWU_QUEUE 1
 
 /*
+ * When doing wakeups, attempt to limit superfluous scans of the LLC domain.
+ */
+#define SCHED_FEAT_SIS_AVG_CPU 0
+#define SCHED_FEAT_SIS_PROP 1
+
+/*
  * Issue a WARN when we do multiple update_rq_clock() calls
  * in a single rq->lock section. Default disabled because the
  * annotations are not complete.
  */
 #define SCHED_FEAT_WARN_DOUBLE_CLOCK 0
-
-/*
- * When doing wakeups, attempt to limit superfluous scans of the LLC domain.
- */
-#define SCHED_FEAT_SIS_AVG_CPU 0
-#define SCHED_FEAT_SIS_PROP 1
 
 #ifdef HAVE_RT_PUSH_IPI
 /*
@@ -88,6 +88,10 @@
 #define SCHED_FEAT_LB_MIN 0
 #define SCHED_FEAT_ATTACH_AGE_LOAD 1
 
+#define SCHED_FEAT_WA_IDLE 1
+#define SCHED_FEAT_WA_WEIGHT 1
+#define SCHED_FEAT_WA_BIAS 1
+
 /*
  * UtilEstimation. Use estimated CPU utilization.
  */
@@ -96,10 +100,6 @@
 
 #define SCHED_FEAT_ALT_PERIOD 1
 #define SCHED_FEAT_BASE_SLICE 1
-
-#define SCHED_FEAT_WA_IDLE 1
-#define SCHED_FEAT_WA_WEIGHT 1
-#define SCHED_FEAT_WA_BIAS 1
 
 /*
  * Energy aware scheduling. Use platform energy model to guide scheduling
@@ -111,8 +111,6 @@
 #define SCHED_FEAT_ENERGY_AWARE 0
 #endif
 
-#define SCHED_FEAT_HISI_FILTER 1
-
 /*
  * Energy aware scheduling algorithm choices:
  * EAS_PREFER_IDLE
@@ -123,11 +121,9 @@
 #define SCHED_FEAT_EAS_PREFER_IDLE 0
 
 /*
- * Enforce the priority of candidates selected by find_best_target()
- * ON: If the target CPU saves any energy, use that.
- * OFF: Use whichever of target or backup saves most.
+ * Request max frequency from schedutil whenever a RT task is running.
  */
-#define SCHED_FEAT_FBT_STRICT_ORDER 0
+#define SCHED_FEAT_SUGOV_RT_MAX_FREQ 0
 
 /*
  * Use the Simplified Energy Model for EAS accounting only for
@@ -140,7 +136,7 @@
  * generally leads to usage of higher frequencies.
  * If disabled, boosts will only bias tasks to higher-capacity CPUs.
  */
-#define SCHED_FEAT_SCHEDTUNE_BOOST_UTIL 0
+#define SCHED_FEAT_SCHEDTUNE_BOOST_UTIL 1
 
 /*
  * Apply schedtune boost hold to tasks of all sched classes.
