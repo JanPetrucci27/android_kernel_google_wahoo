@@ -26,8 +26,6 @@
 
 #include <linux/atomic.h>
 #include <linux/delay.h>
-#include <linux/devfreq_boost.h>
-#include <linux/fb.h>
 #include <linux/gpio.h>
 #include <linux/interrupt.h>
 #include <linux/kernel.h>
@@ -81,8 +79,6 @@ struct fpc1020_data {
 	struct mutex lock; /* To set/get exported values in sysfs */
 	bool prepared;
 	atomic_t wakeup_enabled; /* Used both in ISR and non-ISR */
-	struct notifier_block fb_notif;
-	bool is_awake;
 };
 
 static int vreg_setup(struct fpc1020_data *fpc1020, const char *name,
@@ -450,9 +446,6 @@ static inline irqreturn_t fpc1020_irq_handler(int irq, void *handle)
 					msecs_to_jiffies(FPC_TTW_HOLD_TIME));
 	}
 
-	if (!READ_ONCE(fpc1020->is_awake))
-		devfreq_boost_kick_max(DEVFREQ_MSM_CPUBW);
-
 	sysfs_notify(&fpc1020->dev->kobj, NULL, dev_attr_irq.attr.name);
 
 	return IRQ_HANDLED;
@@ -479,21 +472,6 @@ static int inline fpc1020_request_named_gpio(struct fpc1020_data *fpc1020,
 	dev_dbg(dev, "%s %d\n", label, *gpio);
 
 	return 0;
-}
-
-
-static int fb_notifier_callback(struct notifier_block *nb, unsigned long event,
-				void *data)
-{
-	struct fpc1020_data *fpc1020 = container_of(nb, typeof(*fpc1020), fb_notif);
-	int *blank = ((struct fb_event *)data)->data;
-
-	if (event != FB_EARLY_EVENT_BLANK)
-		return NOTIFY_OK;
-
-	WRITE_ONCE(fpc1020->is_awake, (*blank == FB_BLANK_UNBLANK) ? true : false);
-
-	return NOTIFY_OK;
 }
 
 static inline int fpc1020_probe(struct platform_device *pdev)
@@ -607,13 +585,6 @@ static inline int fpc1020_probe(struct platform_device *pdev)
 		goto exit;
 	}
 
-	fpc1020->fb_notif.notifier_call = fb_notifier_callback;
-	rc = fb_register_client(&fpc1020->fb_notif);
-	if (rc) {
-		dev_err(dev, "could not register fb notifier\n");
-		goto exit;
-	}
-
 	if (of_property_read_bool(dev->of_node, "fpc,enable-on-boot")) {
 		dev_info(dev, "Enabling hardware\n");
 		(void)device_prepare(fpc1020, true);
@@ -634,7 +605,6 @@ static inline int fpc1020_remove(struct platform_device *pdev)
 	sysfs_remove_group(&pdev->dev.kobj, &attribute_group);
 	mutex_destroy(&fpc1020->lock);
 	wake_lock_destroy(&fpc1020->ttw_wl);
-	fb_unregister_client(&fpc1020->fb_notif);
 	(void)vreg_setup(fpc1020, "vdd_ana", false);
 	(void)vreg_setup(fpc1020, "vdd_io", false);
 	(void)vreg_setup(fpc1020, "vcc_spi", false);
