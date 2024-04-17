@@ -27,8 +27,6 @@ const struct cpumask *cpu_coregroup_mask(int cpu);
 
 #ifdef CONFIG_CPU_FREQ
 #define arch_scale_freq_capacity cpufreq_scale_freq_capacity
-#define arch_scale_max_freq_capacity cpufreq_scale_max_freq_capacity
-#define arch_scale_min_freq_capacity cpufreq_scale_min_freq_capacity
 #endif
 #define arch_scale_cpu_capacity scale_cpu_capacity
 extern unsigned long scale_cpu_capacity(int cpu);
@@ -38,6 +36,9 @@ extern unsigned long topology_get_freq_ref(int cpu);
 #define arch_set_freq_factor topology_set_freq_ref
 extern void topology_set_freq_ref(struct cpumask *cpus,
 			       unsigned long max_freq);
+
+#define arch_scale_throttle_freq topology_get_throttle_freq
+extern unsigned long topology_get_throttle_freq(int cpu);
 
 /* Replace task scheduler's default thermal pressure retrieve API */
 #define arch_scale_thermal_pressure topology_get_thermal_pressure

@@ -44,6 +44,13 @@ static void set_capacity_scale(unsigned int cpu, unsigned long capacity)
 	per_cpu(cpu_scale, cpu) = capacity;
 }
 
+static DEFINE_PER_CPU(unsigned long, throttle_freq) = ULONG_MAX;
+
+unsigned long topology_get_throttle_freq(int cpu)
+{
+	return per_cpu(throttle_freq, cpu);
+}
+
 static DEFINE_PER_CPU(unsigned long, thermal_pressure) = 0;
 
 unsigned long topology_get_thermal_pressure(int cpu)
@@ -93,7 +100,7 @@ void topology_update_thermal_pressure(const struct cpumask *cpus,
 
 	cpu = cpumask_first(cpus);
 	max_capacity = arch_scale_cpu_capacity(cpu);
-	max_freq = arch_scale_freq_ref(cpu);
+	max_freq = topology_get_freq_ref(cpu);
 
 	/*
 	 * Handle properly the boost frequencies, which should simply clean
@@ -106,8 +113,10 @@ void topology_update_thermal_pressure(const struct cpumask *cpus,
 
 	th_pressure = max_capacity - capacity;
 
-	for_each_cpu(cpu, cpus)
+	for_each_cpu(cpu, cpus) {
 		WRITE_ONCE(per_cpu(thermal_pressure, cpu), th_pressure);
+		WRITE_ONCE(per_cpu(throttle_freq, cpu), capped_freq);
+	}
 }
 EXPORT_SYMBOL_GPL(topology_update_thermal_pressure);
 

@@ -4356,16 +4356,9 @@ unsigned long effective_cpu_util(int cpu, unsigned long util_cfs,
 		 * When an RT task is runnable and uclamp is not used, we must
 		 * ensure that the task will run at maximum compute capacity.
 		 */
-		if (!uclamp_is_used() && !is_little && rt_rq_is_runnable(&rq->rt))
+		if (!uclamp_is_used() && rt_rq_is_runnable(&rq->rt))
 			*min = max(*min, scale);
 #endif
-		/*
-		 * Take into account any minimum frequency imposed
-		 * elsewhere which limits the energy states available
-		 * If the MIN_CAPACITY_CAPPING feature is not enabled
-		 * capacity_min_of will return 0 (not capped).
-		 */
-		*min = max(*min, capacity_min_of(cpu));
 	}
 
 	/*

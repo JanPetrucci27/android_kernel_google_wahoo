@@ -215,7 +215,7 @@ static int uid_time_in_state_seq_show(struct seq_file *m, void *v)
 			policy = cpufreq_cpu_get(i);
 			if (!policy)
 				continue;
-			table = cpufreq_frequency_get_table(i);
+			table = policy->freq_table;
 
 			/* Assumes cpus are colocated within a policy */
 			if (table && last_policy != policy) {
@@ -746,7 +746,7 @@ static void cpufreq_stats_free_table(unsigned int cpu)
 	if (!policy)
 		return;
 
-	if (cpufreq_frequency_get_table(policy->cpu))
+	if (policy->freq_table)
 		__cpufreq_stats_free_table(policy);
 
 	cpufreq_cpu_put(policy);
@@ -837,7 +837,7 @@ static void cpufreq_stats_create_table(struct cpufreq_policy *policy)
 	struct cpufreq_frequency_table *table, *pos;
 	int count = 0;
 
-	table = cpufreq_frequency_get_table(policy->cpu);
+	table = policy->freq_table;
 	if (likely(table)) {
 		cpufreq_for_each_valid_entry(pos, table)
 			count++;
@@ -882,7 +882,7 @@ static int cpufreq_stat_notifier_policy(struct notifier_block *nb,
 	struct cpufreq_policy *policy = data;
 	struct cpufreq_frequency_table *table, *pos;
 
-	table = cpufreq_frequency_get_table(policy->cpu);
+	table = policy->freq_table;
 	if (!table)
 		return 0;
 

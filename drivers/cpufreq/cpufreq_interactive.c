@@ -226,7 +226,7 @@ static unsigned int choose_freq(struct cpufreq_interactive_cpuinfo *pcpu,
 	unsigned int freq = pcpu->policy->cur;
 	unsigned int prevfreq, freqmin, freqmax;
 	unsigned int tl;
-	int index;
+	unsigned int index;
 
 	freqmin = 0;
 	freqmax = UINT_MAX;
@@ -240,10 +240,10 @@ static unsigned int choose_freq(struct cpufreq_interactive_cpuinfo *pcpu,
 		 * than or equal to the target load.
 		 */
 
-		if (cpufreq_frequency_table_target(
+		index = cpufreq_frequency_table_target(
 			    pcpu->policy, pcpu->freq_table, loadadjfreq / tl,
-			    CPUFREQ_RELATION_L, &index))
-			break;
+			    CPUFREQ_RELATION_L);
+
 		freq = pcpu->freq_table[index].frequency;
 
 		if (freq > prevfreq) {
@@ -255,11 +255,10 @@ static unsigned int choose_freq(struct cpufreq_interactive_cpuinfo *pcpu,
 				 * Find the highest frequency that is less
 				 * than freqmax.
 				 */
-				if (cpufreq_frequency_table_target(
+				index = cpufreq_frequency_table_target(
 					    pcpu->policy, pcpu->freq_table,
-					    freqmax - 1, CPUFREQ_RELATION_H,
-					    &index))
-					break;
+					    freqmax - 1, CPUFREQ_RELATION_H);
+
 				freq = pcpu->freq_table[index].frequency;
 
 				if (freq == freqmin) {
@@ -282,11 +281,10 @@ static unsigned int choose_freq(struct cpufreq_interactive_cpuinfo *pcpu,
 				 * Find the lowest frequency that is higher
 				 * than freqmin.
 				 */
-				if (cpufreq_frequency_table_target(
+				index = cpufreq_frequency_table_target(
 					    pcpu->policy, pcpu->freq_table,
-					    freqmin + 1, CPUFREQ_RELATION_L,
-					    &index))
-					break;
+					    freqmin + 1, CPUFREQ_RELATION_L);
+
 				freq = pcpu->freq_table[index].frequency;
 
 				/*
@@ -397,12 +395,8 @@ static void cpufreq_interactive_timer(unsigned long data)
 
 	pcpu->loc_hispeed_val_time = now;
 
-	if (cpufreq_frequency_table_target(pcpu->policy, pcpu->freq_table,
-					   new_freq, CPUFREQ_RELATION_L,
-					   &index)) {
-		spin_unlock_irqrestore(&pcpu->target_freq_lock, flags);
-		goto rearm;
-	}
+	index = cpufreq_frequency_table_target(pcpu->policy, pcpu->freq_table,
+					   new_freq, CPUFREQ_RELATION_L);
 
 	new_freq = pcpu->freq_table[index].frequency;
 
@@ -1227,7 +1221,7 @@ static int cpufreq_governor_interactive(struct cpufreq_policy *policy,
 	case CPUFREQ_GOV_START:
 		mutex_lock(&gov_lock);
 
-		freq_table = cpufreq_frequency_get_table(policy->cpu);
+		freq_table = policy->freq_table;
 		if (!tunables->hispeed_freq)
 			tunables->hispeed_freq = policy->max;
 

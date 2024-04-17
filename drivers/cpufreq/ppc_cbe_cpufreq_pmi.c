@@ -103,7 +103,7 @@ static int pmi_notifier(struct notifier_block *nb,
 	if (event == CPUFREQ_START)
 		return 0;
 
-	cbe_freqs = cpufreq_frequency_get_table(policy->cpu);
+	cbe_freqs = policy->freq_table;
 	node = cbe_cpu_to_node(policy->cpu);
 
 	pr_debug("got notified, event=%lu, node=%u\n", event, node);

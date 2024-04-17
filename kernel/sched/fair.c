@@ -9036,9 +9036,6 @@ static unsigned long scale_rt_capacity(int cpu)
 	unsigned long used, free;
 	unsigned long irq;
 
-	max *= arch_scale_max_freq_capacity(cpu);
-	max >>= SCHED_CAPACITY_SHIFT;
-
 	irq = cpu_util_irq(rq);
 
 	if (unlikely(irq >= max))

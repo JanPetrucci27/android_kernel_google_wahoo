@@ -443,13 +443,13 @@ void powernv_cpufreq_work_fn(struct work_struct *work)
 	chip->restore = false;
 	cpumask_copy(mask, &chip->mask);
 	for_each_cpu_and(cpu, mask, cpu_online_mask) {
-		int index, tcpu;
+		int tcpu;
+		unsigned int index,
 		struct cpufreq_policy policy;
 
 		cpufreq_get_policy(&policy, cpu);
-		cpufreq_frequency_table_target(&policy, policy.freq_table,
-					       policy.cur,
-					       CPUFREQ_RELATION_C, &index);
+		index = cpufreq_frequency_table_target(&policy, policy.cur,
+					       CPUFREQ_RELATION_C);
 		powernv_cpufreq_target_index(&policy, index);
 		for_each_cpu(tcpu, policy.cpus)
 			cpumask_clear_cpu(tcpu, mask);

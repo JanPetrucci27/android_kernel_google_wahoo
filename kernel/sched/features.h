@@ -99,11 +99,3 @@
  * Request max frequency from schedutil whenever a RT task is running.
  */
 #define SCHED_FEAT_SUGOV_RT_MAX_FREQ 0
-
-/*
- * Minimum capacity capping. Keep track of minimum capacity factor when
- * minimum frequency available to a policy is modified.
- * If enabled, this can be used to inform the scheduler about capacity
- * restrictions.
- */
-#define SCHED_FEAT_MIN_CAPACITY_CAPPING 1

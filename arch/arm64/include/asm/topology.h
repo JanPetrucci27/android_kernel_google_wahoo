@@ -27,10 +27,6 @@ struct sched_domain;
 #ifdef CONFIG_CPU_FREQ
 #define arch_scale_freq_capacity cpufreq_scale_freq_capacity
 extern unsigned long cpufreq_scale_freq_capacity(int cpu);
-#define arch_scale_max_freq_capacity cpufreq_scale_max_freq_capacity
-extern unsigned long cpufreq_scale_max_freq_capacity(int cpu);
-#define arch_scale_min_freq_capacity cpufreq_scale_min_freq_capacity
-extern unsigned long cpufreq_scale_min_freq_capacity(int cpu);
 #endif
 #define arch_scale_cpu_capacity scale_cpu_capacity
 extern unsigned long scale_cpu_capacity(int cpu);
@@ -43,6 +39,9 @@ extern void topology_set_freq_ref(struct cpumask *cpus,
 
 #define arch_update_cpu_capacity update_cpu_power_capacity
 extern void update_cpu_power_capacity(int cpu);
+
+#define arch_scale_throttle_freq topology_get_throttle_freq
+extern unsigned long topology_get_throttle_freq(int cpu);
 
 /* Replace task scheduler's default thermal pressure retrieve API */
 #define arch_scale_thermal_pressure topology_get_thermal_pressure

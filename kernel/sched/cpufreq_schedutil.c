@@ -136,8 +136,7 @@ static void sugov_deferred_update(struct sugov_policy *sg_policy)
 static __always_inline
 unsigned long get_capacity_ref_freq(struct cpufreq_policy *policy)
 {
-	// unsigned int freq = arch_scale_freq_ref(policy->cpu);
-	unsigned int freq = policy->cpuinfo.max_freq;
+	unsigned int freq = arch_scale_freq_ref(policy->cpu);
 
 	if (freq)
 		return freq;
@@ -179,7 +178,6 @@ static unsigned int get_next_freq(struct sugov_policy *sg_policy,
 {
 	struct cpufreq_policy *policy = sg_policy->policy;
 	unsigned int freq;
-	unsigned int idx, l_freq, h_freq;
 
 	freq = get_capacity_ref_freq(policy);
 	freq = map_util_freq(util, freq, max);
@@ -188,22 +186,7 @@ static unsigned int get_next_freq(struct sugov_policy *sg_policy,
 		return sg_policy->next_freq;
 
 	sg_policy->cached_raw_freq = freq;
-
-	l_freq = cpufreq_driver_resolve_freq(policy, freq);
-	idx = cpufreq_frequency_table_target(policy, freq, CPUFREQ_RELATION_H);
-	h_freq = policy->freq_table[idx].frequency;
-	h_freq = clamp(h_freq, policy->min, policy->max);
-	if (l_freq <= h_freq || l_freq == policy->min)
-		return l_freq;
-
-	/*
-	 * Use the frequency step below if the calculated frequency is <20%
-	 * higher than it.
-	 */
-	if (mult_frac(100, freq - h_freq, l_freq - h_freq) < 20)
-		return h_freq;
-
-	return l_freq;
+	return cpufreq_driver_resolve_freq(policy, freq);
 }
 
 unsigned long sugov_effective_cpu_perf(int cpu, unsigned long actual,
