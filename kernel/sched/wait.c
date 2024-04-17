@@ -12,6 +12,8 @@
 #include <linux/kthread.h>
 #include <linux/poll.h>
 
+#include "sched.h"
+
 void __init_waitqueue_head(wait_queue_head_t *q, const char *name, struct lock_class_key *key)
 {
 	spin_lock_init(&q->lock);
@@ -142,19 +144,15 @@ EXPORT_SYMBOL_GPL(__wake_up_locked_key);
  * changing the task state if and only if any tasks are woken up.
  */
 void __wake_up_sync_key(wait_queue_head_t *q, unsigned int mode,
-			int nr_exclusive, void *key)
+			void *key)
 {
 	unsigned long flags;
-	int wake_flags = 1; /* XXX WF_SYNC */
 
 	if (unlikely(!q))
 		return;
 
-	if (unlikely(nr_exclusive != 1))
-		wake_flags = 0;
-
 	spin_lock_irqsave(&q->lock, flags);
-	__wake_up_common(q, mode, nr_exclusive, wake_flags, key);
+	__wake_up_common(q, mode, 1, WF_SYNC, key);
 	spin_unlock_irqrestore(&q->lock, flags);
 }
 EXPORT_SYMBOL_GPL(__wake_up_sync_key);
@@ -162,9 +160,9 @@ EXPORT_SYMBOL_GPL(__wake_up_sync_key);
 /*
  * __wake_up_sync - see __wake_up_sync_key()
  */
-void __wake_up_sync(wait_queue_head_t *q, unsigned int mode, int nr_exclusive)
+void __wake_up_sync(wait_queue_head_t *q, unsigned int mode)
 {
-	__wake_up_sync_key(q, mode, nr_exclusive, NULL);
+	__wake_up_sync_key(q, mode, NULL);
 }
 EXPORT_SYMBOL_GPL(__wake_up_sync);	/* For internal use only */
 

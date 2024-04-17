@@ -978,16 +978,7 @@ static void sde_rotator_put_hw_resource(struct sde_rot_queue *queue,
 
 static void rotator_thread_priority_worker(struct kthread_work *work)
 {
-	int ret = 0;
-	struct sched_param param = { 0 };
-	struct task_struct *task = current->group_leader;
-
-	param.sched_priority = 5;
-	ret = sched_setscheduler(task, SCHED_FIFO, &param);
-	if (ret)
-		SDEROT_ERR(
-			"pid:%d name:%s priority update failed %d\n",
-			current->tgid, task->comm, ret);
+	sched_set_fifo_low(current->group_leader);
 }
 
 /*
@@ -1412,7 +1403,6 @@ static void sde_rotator_commit_handler(struct kthread_work *work)
 	struct sde_rot_entry_container *request;
 	struct sde_rot_hw_resource *hw;
 	struct sde_rot_mgr *mgr;
-	struct sched_param param = { .sched_priority = 5 };
 	int ret;
 
 	entry = container_of(work, struct sde_rot_entry, commit_work);
@@ -1423,11 +1413,7 @@ static void sde_rotator_commit_handler(struct kthread_work *work)
 		return;
 	}
 
-	ret = sched_setscheduler(entry->fenceq->rot_thread, SCHED_FIFO, &param);
-	if (ret) {
-		SDEROT_WARN("Fail to set kthread priority for fenceq: %d\n",
-				ret);
-	}
+	sched_set_fifo_low(entry->fenceq->rot_thread);
 
 	mgr = entry->private->mgr;
 

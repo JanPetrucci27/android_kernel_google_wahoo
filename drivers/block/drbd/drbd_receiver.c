@@ -5526,11 +5526,8 @@ int drbd_asender(struct drbd_thread *thi)
 	bool ping_timeout_active = false;
 	struct net_conf *nc;
 	int ping_timeo, tcp_cork, ping_int;
-	struct sched_param param = { .sched_priority = 2 };
 
-	rv = sched_setscheduler(current, SCHED_RR, &param);
-	if (rv < 0)
-		drbd_err(connection, "drbd_asender: ERROR set priority, ret=%d\n", rv);
+	sched_set_fifo_low(current);
 
 	while (get_t_state(thi) == RUNNING) {
 		drbd_thread_current_set_cpu(thi);

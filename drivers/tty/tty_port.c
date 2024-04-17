@@ -602,9 +602,9 @@ EXPORT_SYMBOL(tty_port_open);
 
 int tty_port_set_policy(struct tty_port *port, int policy, int sched_priority)
 {
-	struct sched_param param = { .sched_priority = sched_priority };
+	sched_set_fifo_low(port->worker_thread);
 
-	return sched_setscheduler(port->worker_thread, policy, &param);
+	return 0;
 }
 EXPORT_SYMBOL_GPL(tty_port_set_policy);
 

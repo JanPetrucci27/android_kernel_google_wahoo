@@ -372,16 +372,13 @@ static int clamp_thread(void *arg)
 {
 	int cpunr = (unsigned long)arg;
 	DEFINE_TIMER(wakeup_timer, noop_timer, 0, 0);
-	static const struct sched_param param = {
-		.sched_priority = MAX_USER_RT_PRIO/2,
-	};
 	unsigned int count = 0;
 	unsigned int target_ratio;
 
 	set_bit(cpunr, cpu_clamping_mask);
 	set_freezable();
 	init_timer_on_stack(&wakeup_timer);
-	sched_setscheduler(current, SCHED_FIFO, &param);
+	sched_set_fifo(current);
 
 	while (true == clamping && !kthread_should_stop() &&
 		cpu_online(cpunr)) {

@@ -4,16 +4,28 @@
  * Using the avg_vruntime, do the right thing and preserve lag across
  * sleep+wake cycles. EEVDF placement strategy #1, #2 if disabled.
  */
-#define SCHED_FEAT_PLACE_LAG 1
+#define SCHED_FEAT_PLACE_LAG 0
+/*
+ * Give new tasks half a slice to ease into the competition.
+ */
 #define SCHED_FEAT_PLACE_DEADLINE_INITIAL 1
+/*
+ * Inhibit (wakeup) preemption until the current task has either matched the
+ * 0-lag point or until is has exhausted it's slice.
+ */
 #define SCHED_FEAT_RUN_TO_PARITY 1
+
+/*
+ * Allow tasks with a shorter slice to disregard RUN_TO_PARITY
+ */
+#define SCHED_FEAT_PREEMPT_SHORT 1
 
 /*
  * Prefer to schedule the task we woke last (assuming it failed
  * wakeup-preemption), since its likely going to consume data we
  * touched, increases cache locality.
  */
-#define SCHED_FEAT_NEXT_BUDDY 0
+#define SCHED_FEAT_NEXT_BUDDY 1
 
 /*
  * Consider buddies to be cache hot, decreases the likelyness of a
@@ -33,7 +45,7 @@
 /*
  * Decrement CPU capacity based on time not spent running tasks
  */
-#define SCHED_FEAT_NONTASK_CAPACITY 1
+#define SCHED_FEAT_NONTASK_CAPACITY 0
 
 /*
  * Queue remote wakeups on the target CPU and process them
@@ -80,19 +92,8 @@
  * UtilEstimation. Use estimated CPU utilization.
  */
 #define SCHED_FEAT_UTIL_EST 1
-#define SCHED_FEAT_UTIL_EST_FASTUP 1
 
 #define SCHED_FEAT_HZ_BW 1
-
-/*
- * Energy aware scheduling. Use platform energy model to guide scheduling
- * decisions optimizing for energy efficiency.
- */
-#ifdef CONFIG_DEFAULT_USE_ENERGY_AWARE
-#define SCHED_FEAT_ENERGY_AWARE 1
-#else
-#define SCHED_FEAT_ENERGY_AWARE 0
-#endif
 
 /*
  * Request max frequency from schedutil whenever a RT task is running.
@@ -100,8 +101,9 @@
 #define SCHED_FEAT_SUGOV_RT_MAX_FREQ 0
 
 /*
- * Inflate the effective utilization of SchedTune-boosted tasks, which
- * generally leads to usage of higher frequencies.
- * If disabled, boosts will only bias tasks to higher-capacity CPUs.
+ * Minimum capacity capping. Keep track of minimum capacity factor when
+ * minimum frequency available to a policy is modified.
+ * If enabled, this can be used to inform the scheduler about capacity
+ * restrictions.
  */
-#define SCHED_FEAT_SCHEDTUNE_BOOST_UTIL 0
+#define SCHED_FEAT_MIN_CAPACITY_CAPPING 1

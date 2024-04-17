@@ -211,93 +211,171 @@ DEFINE_PER_CPU(bool, cpu_dead_idle);
  *
  * Called with polling cleared.
  */
-static void cpu_idle_loop(void)
+static void do_idle(void)
 {
 	int cpu = smp_processor_id();
-	
-	while (1) {
-		
-	   /*
-		* Check if we need to update blocked load
-		*/
-		nohz_run_idle_balance(cpu);
-	
-		/*
-		 * If the arch has a polling bit, we maintain an invariant:
-		 *
-		 * Our polling bit is clear if we're not scheduled (i.e. if
-		 * rq->curr != rq->idle).  This means that, if rq->idle has
-		 * the polling bit set, then setting need_resched is
-		 * guaranteed to cause the cpu to reschedule.
-		 */
 
-		__current_set_polling();
-		tick_nohz_idle_enter();
+	/*
+	* Check if we need to update blocked load
+	*/
+	nohz_run_idle_balance(cpu);
 
-		while (!need_resched()) {
-			check_pgt_cache();
-			rmb();
+	/*
+	 * If the arch has a polling bit, we maintain an invariant:
+	 *
+	 * Our polling bit is clear if we're not scheduled (i.e. if
+	 * rq->curr != rq->idle).  This means that, if rq->idle has
+	 * the polling bit set, then setting need_resched is
+	 * guaranteed to cause the cpu to reschedule.
+	 */
 
-			if (cpu_is_offline(cpu)) {
-				rcu_cpu_notify(NULL, CPU_DYING_IDLE,
-					       (void *)(long)cpu);
-				smp_mb(); /* all activity before dead. */
-				this_cpu_write(cpu_dead_idle, true);
-				arch_cpu_idle_dead();
-			} else {
-				cpuidle_set_idle_cpu(cpu);
-			}
+	__current_set_polling();
+	tick_nohz_idle_enter();
 
-			local_irq_disable();
-			arch_cpu_idle_enter();
+	while (!need_resched()) {
+		check_pgt_cache();
+		rmb();
 
-			/*
-			 * In poll mode we reenable interrupts and spin.
-			 *
-			 * Also if we detected in the wakeup from idle
-			 * path that the tick broadcast device expired
-			 * for us, we don't want to go deep idle as we
-			 * know that the IPI is going to arrive right
-			 * away
-			 */
-			if (cpu_idle_force_poll || tick_check_broadcast_expired())
-				cpu_idle_poll();
-			else
-				cpuidle_idle_call();
-
-			cpuidle_clear_idle_cpu(cpu);
-			arch_cpu_idle_exit();
+		if (cpu_is_offline(cpu)) {
+			rcu_cpu_notify(NULL, CPU_DYING_IDLE,
+						   (void *)(long)cpu);
+			smp_mb(); /* all activity before dead. */
+			this_cpu_write(cpu_dead_idle, true);
+			arch_cpu_idle_dead();
+		} else {
+			cpuidle_set_idle_cpu(cpu);
 		}
 
 		/*
-		 * Since we fell out of the loop above, we know
-		 * TIF_NEED_RESCHED must be set, propagate it into
-		 * PREEMPT_NEED_RESCHED.
+		 * Interrupts shouldn't be re-enabled from that point on until
+		 * the CPU sleeping instruction is reached. Otherwise an interrupt
+		 * may fire and queue a timer that would be ignored until the CPU
+		 * wakes from the sleeping instruction. And testing need_resched()
+		 * doesn't tell about pending needed timer reprogram.
 		 *
-		 * This is required because for polling idle loops we will
-		 * not have had an IPI to fold the state for us.
+		 * Several cases to consider:
+		 *
+		 * - SLEEP-UNTIL-PENDING-INTERRUPT based instructions such as
+		 *   "wfi" or "mwait" are fine because they can be entered with
+		 *   interrupt disabled.
+		 *
+		 * - sti;mwait() couple is fine because the interrupts are
+		 *   re-enabled only upon the execution of mwait, leaving no gap
+		 *   in-between.
+		 *
+		 * - ROLLBACK based idle handlers with the sleeping instruction
+		 *   called with interrupts enabled are NOT fine. In this scheme
+		 *   when the interrupt detects it has interrupted an idle handler,
+		 *   it rolls back to its beginning which performs the
+		 *   need_resched() check before re-executing the sleeping
+		 *   instruction. This can leak a pending needed timer reprogram.
+		 *   If such a scheme is really mandatory due to the lack of an
+		 *   appropriate CPU sleeping instruction, then a FAST-FORWARD
+		 *   must instead be applied: when the interrupt detects it has
+		 *   interrupted an idle handler, it must resume to the end of
+		 *   this idle handler so that the generic idle loop is iterated
+		 *   again to reprogram the tick.
 		 */
-		preempt_set_need_resched();
-		tick_nohz_idle_exit();
-		__current_clr_polling();
+		local_irq_disable();
+		arch_cpu_idle_enter();
 
 		/*
-		 * We promise to call sched_ttwu_pending and reschedule
-		 * if need_resched is set while polling is set.  That
-		 * means that clearing polling needs to be visible
-		 * before doing these things.
+		 * In poll mode we reenable interrupts and spin.
+		 *
+		 * Also if we detected in the wakeup from idle
+		 * path that the tick broadcast device expired
+		 * for us, we don't want to go deep idle as we
+		 * know that the IPI is going to arrive right
+		 * away
 		 */
-		smp_mb__after_atomic();
-		
-		/*
-		 * RCU relies on this call to be done outside of an RCU read-side
-		 * critical section.
-		 */
-		flush_smp_call_function_from_idle();
-		sched_ttwu_pending();
-		schedule_idle();
+		if (cpu_idle_force_poll || tick_check_broadcast_expired())
+			cpu_idle_poll();
+		else
+			cpuidle_idle_call();
+
+		cpuidle_clear_idle_cpu(cpu);
+		arch_cpu_idle_exit();
 	}
+
+	/*
+	 * Since we fell out of the loop above, we know
+	 * TIF_NEED_RESCHED must be set, propagate it into
+	 * PREEMPT_NEED_RESCHED.
+	 *
+	 * This is required because for polling idle loops we will
+	 * not have had an IPI to fold the state for us.
+	 */
+	preempt_set_need_resched();
+	tick_nohz_idle_exit();
+	__current_clr_polling();
+
+	/*
+	 * We promise to call sched_ttwu_pending and reschedule
+	 * if need_resched is set while polling is set.  That
+	 * means that clearing polling needs to be visible
+	 * before doing these things.
+	 */
+	smp_mb__after_atomic();
+
+	/*
+	 * RCU relies on this call to be done outside of an RCU read-side
+	 * critical section.
+	 */
+	flush_smp_call_function_from_idle();
+	sched_ttwu_pending();
+	schedule_idle();
 }
+
+struct idle_timer {
+	struct hrtimer timer;
+	int done;
+};
+
+static enum hrtimer_restart idle_inject_timer_fn(struct hrtimer *timer)
+{
+	struct idle_timer *it = container_of(timer, struct idle_timer, timer);
+
+	WRITE_ONCE(it->done, 1);
+	set_tsk_need_resched(current);
+
+	return HRTIMER_NORESTART;
+}
+
+void play_idle(unsigned long duration_us)
+{
+	struct idle_timer it;
+
+	/*
+	 * Only FIFO tasks can disable the tick since they don't need the forced
+	 * preemption.
+	 */
+	WARN_ON_ONCE(current->policy != SCHED_FIFO);
+	WARN_ON_ONCE(current->nr_cpus_allowed != 1);
+	WARN_ON_ONCE(!(current->flags & PF_KTHREAD));
+	WARN_ON_ONCE(!(current->flags & PF_NO_SETAFFINITY));
+	WARN_ON_ONCE(!duration_us);
+
+	rcu_sleep_check();
+	preempt_disable();
+	current->flags |= PF_IDLE;
+	cpuidle_use_deepest_state(true);
+
+	it.done = 0;
+	hrtimer_init_on_stack(&it.timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
+	it.timer.function = idle_inject_timer_fn;
+	hrtimer_start(&it.timer, ns_to_ktime(duration_us * NSEC_PER_USEC),
+		      HRTIMER_MODE_REL_PINNED);
+
+	while (!READ_ONCE(it.done))
+		do_idle();
+
+	cpuidle_use_deepest_state(false);
+	current->flags &= ~PF_IDLE;
+
+	preempt_fold_need_resched();
+	preempt_enable();
+}
+EXPORT_SYMBOL_GPL(play_idle);
 
 void cpu_startup_entry(enum cpuhp_state state)
 {
@@ -317,7 +395,8 @@ void cpu_startup_entry(enum cpuhp_state state)
 	boot_init_stack_canary();
 #endif
 	arch_cpu_idle_prepare();
-	cpu_idle_loop();
+	while (1)
+		do_idle();
 }
 
 /*
@@ -329,8 +408,7 @@ void cpu_startup_entry(enum cpuhp_state state)
 
 #ifdef CONFIG_SMP
 static int
-select_task_rq_idle(struct task_struct *p, int cpu, int sd_flag, int flags,
-		    int sibling_count_hint)
+select_task_rq_idle(struct task_struct *p, int cpu, int flags, int sibling_count_hint)
 {
 	return task_cpu(p); /* IDLE tasks as never migrated */
 }
@@ -381,13 +459,15 @@ struct task_struct *pick_next_task_idle(struct rq *rq)
  * It is not legal to sleep in the idle task - print a warning
  * message if some code attempts to do it:
  */
-static void
+static bool
 dequeue_task_idle(struct rq *rq, struct task_struct *p, int flags)
 {
 	raw_spin_unlock_irq(&rq->lock);
 	printk(KERN_ERR "bad: scheduling from the idle thread!\n");
 	dump_stack();
 	raw_spin_lock_irq(&rq->lock);
+
+	return true;
 }
 
 static void task_tick_idle(struct rq *rq, struct task_struct *curr, int queued)

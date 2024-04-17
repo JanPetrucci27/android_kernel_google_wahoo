@@ -35,8 +35,22 @@ extern unsigned long cpufreq_scale_min_freq_capacity(int cpu);
 #define arch_scale_cpu_capacity scale_cpu_capacity
 extern unsigned long scale_cpu_capacity(int cpu);
 
+#define arch_scale_freq_ref topology_get_freq_ref
+extern unsigned long topology_get_freq_ref(int cpu);
+#define arch_set_freq_factor topology_set_freq_ref
+extern void topology_set_freq_ref(struct cpumask *cpus,
+			       unsigned long max_freq);
+
 #define arch_update_cpu_capacity update_cpu_power_capacity
 extern void update_cpu_power_capacity(int cpu);
+
+/* Replace task scheduler's default thermal pressure retrieve API */
+#define arch_scale_thermal_pressure topology_get_thermal_pressure
+extern unsigned long topology_get_thermal_pressure(int cpu);
+
+#define arch_update_thermal_pressure	topology_update_thermal_pressure
+extern void topology_update_thermal_pressure(const struct cpumask *cpus,
+				      unsigned long capped_freq);
 
 #include <asm-generic/topology.h>
 

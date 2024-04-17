@@ -1594,7 +1594,7 @@ static int wake_futex_pi(u32 __user *uaddr, u32 uval, struct futex_pi_state *pi_
 	u32 uninitialized_var(curval), newval;
 	struct rt_mutex_waiter *top_waiter;
 	struct task_struct *new_owner;
-	bool deboost = false;
+	bool postunlock = false;
 	WAKE_Q(wake_q);
 	int ret = 0;
 
@@ -1647,16 +1647,14 @@ static int wake_futex_pi(u32 __user *uaddr, u32 uval, struct futex_pi_state *pi_
 		 * not fail.
 		 */
 		pi_state_update_owner(pi_state, new_owner);
-		deboost = __rt_mutex_futex_unlock(&pi_state->pi_mutex, &wake_q);
+		postunlock = __rt_mutex_futex_unlock(&pi_state->pi_mutex, &wake_q);
 	}
 
 out_unlock:
 	raw_spin_unlock_irq(&pi_state->pi_mutex.wait_lock);
 
-	if (deboost) {
-		wake_up_q(&wake_q);
-		rt_mutex_adjust_prio(current);
-	}
+	if (postunlock)
+		rt_mutex_postunlock(&wake_q);
 
 	return ret;
 }

@@ -2122,18 +2122,15 @@ static int power_unvote(struct glink_transport_if *if_ptr)
 static int rx_rt_vote(struct glink_transport_if *if_ptr)
 {
 	struct edge_info *einfo;
-	struct sched_param param = { .sched_priority = 1 };
-	int ret = 0;
 	unsigned long flags;
 
 	einfo = container_of(if_ptr, struct edge_info, xprt_if);
 	spin_lock_irqsave(&einfo->rt_vote_lock, flags);
 	if (!einfo->rt_votes)
-		ret = sched_setscheduler_nocheck(einfo->task, SCHED_FIFO,
-							&param);
+		sched_set_fifo_low(einfo->task);
 	einfo->rt_votes++;
 	spin_unlock_irqrestore(&einfo->rt_vote_lock, flags);
-	return ret;
+	return 0;
 }
 
 /**
@@ -2145,18 +2142,15 @@ static int rx_rt_vote(struct glink_transport_if *if_ptr)
 static int rx_rt_unvote(struct glink_transport_if *if_ptr)
 {
 	struct edge_info *einfo;
-	struct sched_param param = { .sched_priority = 0 };
-	int ret = 0;
 	unsigned long flags;
 
 	einfo = container_of(if_ptr, struct edge_info, xprt_if);
 	spin_lock_irqsave(&einfo->rt_vote_lock, flags);
 	einfo->rt_votes--;
 	if (!einfo->rt_votes)
-		ret = sched_setscheduler_nocheck(einfo->task, SCHED_NORMAL,
-							&param);
+		sched_set_normal(einfo->task, 0);
 	spin_unlock_irqrestore(&einfo->rt_vote_lock, flags);
-	return ret;
+	return 0;
 }
 
 /**

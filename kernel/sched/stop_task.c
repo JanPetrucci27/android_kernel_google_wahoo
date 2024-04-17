@@ -11,8 +11,7 @@
 
 #ifdef CONFIG_SMP
 static int
-select_task_rq_stop(struct task_struct *p, int cpu, int sd_flag, int flags,
-		    int sibling_count_hint)
+select_task_rq_stop(struct task_struct *p, int cpu, int flags, int sibling_count_hint)
 {
 	return task_cpu(p); /* stop tasks as never migrate */
 }
@@ -59,10 +58,11 @@ enqueue_task_stop(struct rq *rq, struct task_struct *p, int flags)
 	add_nr_running(rq, 1);
 }
 
-static void
+static bool
 dequeue_task_stop(struct rq *rq, struct task_struct *p, int flags)
 {
 	sub_nr_running(rq, 1);
+	return true;
 }
 
 static void yield_task_stop(struct rq *rq)
@@ -72,18 +72,7 @@ static void yield_task_stop(struct rq *rq)
 
 static void put_prev_task_stop(struct rq *rq, struct task_struct *prev)
 {
-	struct task_struct *curr = rq->curr;
-	u64 now, delta_exec;
-
-	now = rq_clock_task(rq);
-	delta_exec = now - curr->se.exec_start;
-	if (unlikely((s64)delta_exec < 0))
-		delta_exec = 0;
-
-	schedstat_set(curr->se.statistics.exec_max,
-			max(curr->se.statistics.exec_max, delta_exec));
-
-	update_current_exec_runtime(curr, now, delta_exec);
+	update_curr_common(rq);
 }
 
 static void task_tick_stop(struct rq *rq, struct task_struct *curr, int queued)

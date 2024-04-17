@@ -44,6 +44,73 @@ static void set_capacity_scale(unsigned int cpu, unsigned long capacity)
 	per_cpu(cpu_scale, cpu) = capacity;
 }
 
+static DEFINE_PER_CPU(unsigned long, thermal_pressure) = 0;
+
+unsigned long topology_get_thermal_pressure(int cpu)
+{
+	return per_cpu(thermal_pressure, cpu);
+}
+
+static DEFINE_PER_CPU(unsigned long, capacity_freq_ref) = 1;
+
+void topology_set_freq_ref(struct cpumask *cpus,
+			       unsigned long max_freq)
+{
+	int cpu;
+
+	for_each_cpu(cpu, cpus)
+		WRITE_ONCE(per_cpu(capacity_freq_ref, cpu), max_freq);
+
+	pr_info("cpus %*pbl : capacity_freq_ref = %lu kHz \n",
+		 cpumask_pr_args(cpus), max_freq);
+}
+
+unsigned long topology_get_freq_ref(int cpu)
+{
+	return per_cpu(capacity_freq_ref, cpu);
+}
+
+/**
+ * topology_update_thermal_pressure() - Update thermal pressure for CPUs
+ * @cpus        : The related CPUs for which capacity has been reduced
+ * @capped_freq : The maximum allowed frequency that CPUs can run at
+ *
+ * Update the value of thermal pressure for all @cpus in the mask. The
+ * cpumask should include all (online+offline) affected CPUs, to avoid
+ * operating on stale data when hot-plug is used for some CPUs. The
+ * @capped_freq reflects the currently allowed max CPUs frequency due to
+ * thermal capping. It might be also a boost frequency value, which is bigger
+ * than the internal 'freq_factor' max frequency. In such case the pressure
+ * value should simply be removed, since this is an indication that there is
+ * no thermal throttling. The @capped_freq must be provided in kHz.
+ */
+void topology_update_thermal_pressure(const struct cpumask *cpus,
+				      unsigned long capped_freq)
+{
+	unsigned long max_capacity, capacity, th_pressure;
+	u32 max_freq;
+	int cpu;
+
+	cpu = cpumask_first(cpus);
+	max_capacity = arch_scale_cpu_capacity(cpu);
+	max_freq = arch_scale_freq_ref(cpu);
+
+	/*
+	 * Handle properly the boost frequencies, which should simply clean
+	 * the thermal pressure value.
+	 */
+	if (max_freq <= capped_freq)
+		capacity = max_capacity;
+	else
+		capacity = mult_frac(max_capacity, capped_freq, max_freq);
+
+	th_pressure = max_capacity - capacity;
+
+	for_each_cpu(cpu, cpus)
+		WRITE_ONCE(per_cpu(thermal_pressure, cpu), th_pressure);
+}
+EXPORT_SYMBOL_GPL(topology_update_thermal_pressure);
+
 static int __init get_cpu_for_node(struct device_node *node)
 {
 	struct device_node *cpu_node;
@@ -276,7 +343,7 @@ static int cpu_cpu_flags(void)
 
 static inline int cpu_corepower_flags(void)
 {
-	return SD_SHARE_PKG_RESOURCES;
+	return SD_SHARE_LLC;
 }
 
 static struct sched_domain_topology_level arm64_topology[] = {

@@ -56,9 +56,6 @@
 #include <linux/kcov.h>
 #include <linux/cpufreq.h>
 #include <linux/kprobes.h>
-
-#include "sched/tune.h"
-
 #include <linux/uaccess.h>
 #include <asm/unistd.h>
 #include <asm/pgtable.h>
@@ -759,8 +756,6 @@ void __noreturn do_exit(long code)
 	}
 
 	exit_signals(tsk);  /* sets PF_EXITING */
-
-	schedtune_exit_task(tsk);
 
 	if (unlikely(in_atomic())) {
 		pr_info("note: %s[%d] exited with preempt_count %d\n",
@@ -1486,7 +1481,7 @@ static int child_wait_callback(wait_queue_t *wait, unsigned mode,
 void __wake_up_parent(struct task_struct *p, struct task_struct *parent)
 {
 	__wake_up_sync_key(&parent->signal->wait_chldexit,
-				TASK_INTERRUPTIBLE, 1, p);
+			   TASK_INTERRUPTIBLE, p);
 }
 
 static long do_wait(struct wait_opts *wo)

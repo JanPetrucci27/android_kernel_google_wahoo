@@ -2873,15 +2873,10 @@ static int dsi_event_thread(void *data)
 	struct dsi_event_q *evq;
 	struct mdss_dsi_ctrl_pdata *ctrl;
 	unsigned long flag;
-	struct sched_param param;
 	u32 todo = 0, ln_status, force_clk_ln_hs;
 	u32 arg;
-	int ret;
 
-	param.sched_priority = 16;
-	ret = sched_setscheduler_nocheck(current, SCHED_FIFO, &param);
-	if (ret)
-		pr_err("%s: set priority failed\n", __func__);
+	sched_set_fifo(current);
 
 	ev = (struct mdss_dsi_event *)data;
 	/* event */

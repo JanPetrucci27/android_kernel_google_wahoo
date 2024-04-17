@@ -66,6 +66,7 @@ struct power_table {
  *	registered.
  * @cool_dev: thermal_cooling_device pointer to keep track of the
  *	registered cooling device.
+ * @policy: cpufreq policy.
  * @cpufreq_state: integer value representing the current state of cpufreq
  *	cooling	devices.
  * @clipped_freq: integer value representing the absolute value of the clipped
@@ -90,6 +91,7 @@ struct power_table {
 struct cpufreq_cooling_device {
 	int id;
 	struct thermal_cooling_device *cool_dev;
+	struct cpufreq_policy *policy;
 	unsigned int cpufreq_state;
 	unsigned int clipped_freq;
 	unsigned int max_level;
@@ -534,6 +536,7 @@ static int cpufreq_set_cur_state(struct thermal_cooling_device *cdev,
 	struct cpufreq_cooling_device *cpufreq_device = cdev->devdata;
 	unsigned int cpu = cpumask_any(&cpufreq_device->allowed_cpus);
 	unsigned int clip_freq;
+	struct cpumask *cpus;
 
 	/* Request state should be less than max_level */
 	if (WARN_ON(state > cpufreq_device->max_level))
@@ -546,6 +549,9 @@ static int cpufreq_set_cur_state(struct thermal_cooling_device *cdev,
 	clip_freq = cpufreq_device->freq_table[state];
 	cpufreq_device->cpufreq_state = state;
 	cpufreq_device->clipped_freq = clip_freq;
+
+	cpus = cpufreq_device->policy->related_cpus;
+	arch_update_thermal_pressure(cpus, clip_freq);
 
 	/* Check if the device has a platform mitigation function that
 	 * can handle the CPU freq mitigation, if not, notify cpufreq
@@ -809,23 +815,36 @@ __cpufreq_cooling_register(struct device_node *np,
 			get_static_t plat_static_func,
 			struct cpu_cooling_ops *plat_ops)
 {
+	struct cpufreq_policy *policy;
 	struct thermal_cooling_device *cool_dev;
 	struct cpufreq_cooling_device *cpufreq_dev;
 	char dev_name[THERMAL_NAME_LENGTH];
 	struct cpufreq_frequency_table *pos, *table;
+	struct cpumask temp_mask;
 	unsigned int freq, i, num_cpus;
 	int ret;
 
-	table = cpufreq_frequency_get_table(cpumask_first(clip_cpus));
-	if (!table) {
-		pr_debug("%s: CPUFreq table not found\n", __func__);
+	cpumask_and(&temp_mask, clip_cpus, cpu_online_mask);
+	policy = cpufreq_cpu_get(cpumask_first(&temp_mask));
+	if (!policy) {
+		pr_debug("%s: CPUFreq policy not found\n", __func__);
 		return ERR_PTR(-EPROBE_DEFER);
 	}
 
-	cpufreq_dev = kzalloc(sizeof(*cpufreq_dev), GFP_KERNEL);
-	if (!cpufreq_dev)
-		return ERR_PTR(-ENOMEM);
+	table = policy->freq_table;
+	if (!table) {
+		pr_debug("%s: CPUFreq table not found\n", __func__);
+		cool_dev = ERR_PTR(-ENODEV);
+		goto put_policy;
+	}
 
+	cpufreq_dev = kzalloc(sizeof(*cpufreq_dev), GFP_KERNEL);
+	if (!cpufreq_dev) {
+		cool_dev = ERR_PTR(-ENOMEM);
+		goto put_policy;
+	}
+
+	cpufreq_dev->policy = policy;
 	num_cpus = cpumask_weight(clip_cpus);
 	cpufreq_dev->time_in_idle = kcalloc(num_cpus,
 					    sizeof(*cpufreq_dev->time_in_idle),
@@ -916,7 +935,7 @@ __cpufreq_cooling_register(struct device_node *np,
 					  CPUFREQ_POLICY_NOTIFIER);
 	mutex_unlock(&cooling_cpufreq_lock);
 
-	return cool_dev;
+	goto put_policy;
 
 remove_idr:
 	release_idr(&cpufreq_idr, cpufreq_dev->id);
@@ -930,6 +949,8 @@ free_time_in_idle:
 	kfree(cpufreq_dev->time_in_idle);
 free_cdev:
 	kfree(cpufreq_dev);
+put_policy:
+	cpufreq_cpu_put(policy);
 
 	return cool_dev;
 }

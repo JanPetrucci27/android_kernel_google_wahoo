@@ -70,7 +70,7 @@ DECLARE_EVENT_CLASS(sched_wakeup_template,
 	TP_fast_assign(
 		memcpy(__entry->comm, p->comm, TASK_COMM_LEN);
 		__entry->pid		= p->pid;
-		__entry->prio		= p->prio;
+		__entry->prio		= p->prio; /* XXX SCHED_DEADLINE */
 		__entry->success	= 1; /* rudiment, kill when possible */
 		__entry->target_cpu	= task_cpu(p);
 	),
@@ -147,6 +147,7 @@ TRACE_EVENT(sched_switch,
 		memcpy(__entry->prev_comm, prev->comm, TASK_COMM_LEN);
 		__entry->next_pid	= next->pid;
 		__entry->next_prio	= next->prio;
+		/* XXX SCHED_DEADLINE */
 	),
 
 	TP_printk("prev_comm=%s prev_pid=%d prev_prio=%d prev_state=%s%s ==> next_comm=%s next_pid=%d next_prio=%d",
@@ -181,7 +182,7 @@ TRACE_EVENT(sched_migrate_task,
 	TP_fast_assign(
 		memcpy(__entry->comm, p->comm, TASK_COMM_LEN);
 		__entry->pid		= p->pid;
-		__entry->prio		= p->prio;
+		__entry->prio		= p->prio; /* XXX SCHED_DEADLINE */
 		__entry->orig_cpu	= task_cpu(p);
 		__entry->dest_cpu	= dest_cpu;
 	),
@@ -231,7 +232,7 @@ DECLARE_EVENT_CLASS(sched_process_template,
 	TP_fast_assign(
 		memcpy(__entry->comm, p->comm, TASK_COMM_LEN);
 		__entry->pid		= p->pid;
-		__entry->prio		= p->prio;
+		__entry->prio		= p->prio; /* XXX SCHED_DEADLINE */
 	),
 
 	TP_printk("comm=%s pid=%d prio=%d",
@@ -297,7 +298,7 @@ TRACE_EVENT(sched_process_wait,
 	TP_fast_assign(
 		memcpy(__entry->comm, current->comm, TASK_COMM_LEN);
 		__entry->pid		= pid_nr(pid);
-		__entry->prio		= current->prio;
+		__entry->prio		= current->prio; /* XXX SCHED_DEADLINE */
 	),
 
 	TP_printk("comm=%s pid=%d prio=%d",
@@ -447,15 +448,14 @@ TRACE_EVENT(sched_blocked_reason,
  */
 DECLARE_EVENT_CLASS(sched_stat_runtime,
 
-	TP_PROTO(struct task_struct *tsk, u64 runtime, u64 vruntime),
+	TP_PROTO(struct task_struct *tsk, u64 runtime),
 
-	TP_ARGS(tsk, __perf_count(runtime), vruntime),
+	TP_ARGS(tsk, __perf_count(runtime)),
 
 	TP_STRUCT__entry(
 		__array( char,	comm,	TASK_COMM_LEN	)
 		__field( pid_t,	pid			)
 		__field( u64,	runtime			)
-		__field( u64,	vruntime			)
 	),
 
 	TP_fast_assign(
@@ -465,15 +465,14 @@ DECLARE_EVENT_CLASS(sched_stat_runtime,
 		__entry->vruntime	= vruntime;
 	),
 
-	TP_printk("comm=%s pid=%d runtime=%Lu [ns] vruntime=%Lu [ns]",
+	TP_printk("comm=%s pid=%d runtime=%Lu [ns]",
 			__entry->comm, __entry->pid,
-			(unsigned long long)__entry->runtime,
-			(unsigned long long)__entry->vruntime)
+			(unsigned long long)__entry->runtime)
 );
 
 DEFINE_EVENT(sched_stat_runtime, sched_stat_runtime,
-	     TP_PROTO(struct task_struct *tsk, u64 runtime, u64 vruntime),
-	     TP_ARGS(tsk, runtime, vruntime));
+	     TP_PROTO(struct task_struct *tsk, u64 runtime),
+	     TP_ARGS(tsk, runtime));
 
 /*
  * Tracepoint for showing priority inheritance modifying a tasks
@@ -481,9 +480,9 @@ DEFINE_EVENT(sched_stat_runtime, sched_stat_runtime,
  */
 TRACE_EVENT(sched_pi_setprio,
 
-	TP_PROTO(struct task_struct *tsk, int newprio),
+	TP_PROTO(struct task_struct *tsk, struct task_struct *pi_task),
 
-	TP_ARGS(tsk, newprio),
+	TP_ARGS(tsk, pi_task),
 
 	TP_STRUCT__entry(
 		__array( char,	comm,	TASK_COMM_LEN	)
@@ -496,7 +495,8 @@ TRACE_EVENT(sched_pi_setprio,
 		memcpy(__entry->comm, tsk->comm, TASK_COMM_LEN);
 		__entry->pid		= tsk->pid;
 		__entry->oldprio	= tsk->prio;
-		__entry->newprio	= newprio;
+		__entry->newprio	= pi_task ? pi_task->prio : tsk->prio;
+		/* XXX SCHED_DEADLINE bits missing */
 	),
 
 	TP_printk("comm=%s pid=%d oldprio=%d newprio=%d",
@@ -968,6 +968,10 @@ TRACE_EVENT(sched_overutilized,
 	TP_printk("overutilized=%d",
 		__entry->overutilized ? 1 : 0)
 );
+
+DECLARE_TRACE(pelt_thermal_tp,
+	TP_PROTO(struct rq *rq),
+	TP_ARGS(rq));
 
 #endif /* CONFIG_SMP */
 

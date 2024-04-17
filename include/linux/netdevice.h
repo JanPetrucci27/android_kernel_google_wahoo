@@ -322,6 +322,7 @@ struct napi_struct {
 	struct list_head	dev_list;
 	struct hlist_node	napi_hash_node;
 	unsigned int		napi_id;
+	struct task_struct	*thread;
 };
 
 enum {
@@ -329,6 +330,8 @@ enum {
 	NAPI_STATE_DISABLE,	/* Disable pending */
 	NAPI_STATE_NPSVC,	/* Netpoll - don't dequeue from poll_list */
 	NAPI_STATE_HASHED,	/* In NAPI hash */
+	NAPI_STATE_THREADED,		/* The poll is performed inside its own thread*/
+	NAPI_STATE_SCHED_THREADED,/* Napi is currently scheduled in threaded mode */
 };
 
 enum gro_result {
@@ -462,6 +465,8 @@ static inline void napi_complete(struct napi_struct *n)
 	return napi_complete_done(n, 0);
 }
 
+int dev_set_threaded(struct net_device *dev, bool threaded);
+
 /**
  *	napi_by_id - lookup a NAPI by napi_id
  *	@napi_id: hashed napi_id
@@ -497,20 +502,7 @@ void napi_hash_del(struct napi_struct *napi);
  */
 void napi_disable(struct napi_struct *n);
 
-/**
- *	napi_enable - enable NAPI scheduling
- *	@n: napi context
- *
- * Resume NAPI from being scheduled on this context.
- * Must be paired with napi_disable.
- */
-static inline void napi_enable(struct napi_struct *n)
-{
-	BUG_ON(!test_bit(NAPI_STATE_SCHED, &n->state));
-	smp_mb__before_atomic();
-	clear_bit(NAPI_STATE_SCHED, &n->state);
-	clear_bit(NAPI_STATE_NPSVC, &n->state);
-}
+void napi_enable(struct napi_struct *n);
 
 /**
  *	napi_synchronize - wait until NAPI is not running
@@ -1583,6 +1575,8 @@ enum netdev_priv_flags {
  *			switch driver and used to set the phys state of the
  *			switch port.
  *
+ *	@threaded:	napi threaded mode is enabled
+ *
  *	FIXME: cleanup struct net_device such that network protocol info
  *	moves out.
  */
@@ -1857,6 +1851,7 @@ struct net_device {
 	struct phy_device *phydev;
 	struct lock_class_key *qdisc_tx_busylock;
 	bool proto_down;
+	unsigned		threaded:1;
 };
 #define to_net_dev(d) container_of(d, struct net_device, dev)
 
@@ -2694,7 +2689,7 @@ struct softnet_data {
 
 #ifdef CONFIG_RPS
 	/* Elements below can be accessed between CPUs for RPS */
-	struct call_single_data	csd ____cacheline_aligned_in_smp;
+	call_single_data_t	csd ____cacheline_aligned_in_smp;
 	struct softnet_data	*rps_ipi_next;
 	unsigned int		cpu;
 	unsigned int		input_queue_head;

@@ -13,10 +13,11 @@
 struct nullb_cmd {
 	struct list_head list;
 	struct llist_node ll_list;
-	struct call_single_data csd;
+	struct __call_single_data csd;
 	struct request *rq;
 	struct bio *bio;
 	unsigned int tag;
+
 	struct nullb_queue *nq;
 	struct hrtimer timer;
 };
