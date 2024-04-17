@@ -296,10 +296,11 @@ static int cluster_select(struct lpm_cluster *cluster, bool from_idle)
 					&level->num_cpu_votes))
 			continue;
 
-		if (from_idle && latency_us <= pwr_params->latency_us)
+		if (from_idle && latency_us < pwr_params->exit_latency)
 			break;
 
-		if (sleep_us < pwr_params->time_overhead_us)
+		if (sleep_us < (pwr_params->exit_latency +
+						pwr_params->entry_latency))
 			break;
 
 		if (suspend_in_progress && from_idle && level->notify_rpm)
@@ -341,12 +342,12 @@ static int cluster_configure(struct lpm_cluster *cluster, int idx,
 		return -EPERM;
 	}
 
-	if (idx != cluster->default_level) {
-		trace_cluster_enter(cluster->cluster_name, idx,
-			cluster->num_children_in_sync.bits[0],
-			cluster->child_cpus.bits[0], from_idle);
-		lpm_stats_cluster_enter(cluster->stats, idx);
-	}
+	// if (idx != cluster->default_level) {
+		// trace_cluster_enter(cluster->cluster_name, idx,
+			// cluster->num_children_in_sync.bits[0],
+			// cluster->child_cpus.bits[0], from_idle);
+		// lpm_stats_cluster_enter(cluster->stats, idx);
+	// }
 
 	for (i = 0; i < cluster->ndevices; i++) {
 		ret = set_device_mode(cluster, i, level);
@@ -489,7 +490,7 @@ static void cluster_unprepare(struct lpm_cluster *cluster,
 	if (cluster->stats->sleep_time)
 		cluster->stats->sleep_time = end_time -
 			cluster->stats->sleep_time;
-	lpm_stats_cluster_exit(cluster->stats, cluster->last_level, true);
+	// lpm_stats_cluster_exit(cluster->stats, cluster->last_level, true);
 
 	level = &cluster->levels[cluster->last_level];
 	if (level->notify_rpm) {
@@ -507,9 +508,9 @@ static void cluster_unprepare(struct lpm_cluster *cluster,
 			suspend_wake_time = 0;
 	}
 
-	trace_cluster_exit(cluster->cluster_name, cluster->last_level,
-			cluster->num_children_in_sync.bits[0],
-			cluster->child_cpus.bits[0], from_idle);
+	// trace_cluster_exit(cluster->cluster_name, cluster->last_level,
+			// cluster->num_children_in_sync.bits[0],
+			// cluster->child_cpus.bits[0], from_idle);
 
 	last_level = cluster->last_level;
 	cluster->last_level = cluster->default_level;
@@ -681,6 +682,9 @@ static int lpm_cpuidle_select(struct cpuidle_driver *drv,
 static int lpm_cpuidle_enter(struct cpuidle_device *dev,
 		struct cpuidle_driver *drv, int idx)
 {
+	if (need_resched())
+		return idx;
+
 	wfi();
 	return idx;
 }
@@ -763,14 +767,10 @@ static int cluster_cpuidle_register(struct lpm_cluster *cl)
 		struct lpm_cpu_level *cpu_level = &cl->cpu->levels[i];
 		snprintf(st->name, CPUIDLE_NAME_LEN, "C%u\n", i);
 		snprintf(st->desc, CPUIDLE_DESC_LEN, cpu_level->name);
-		// st->flags = 0;
-		// st->exit_latency = cpu_level->pwr.latency_us;
-		// st->target_residency = 0;
 		if (cpu_level->pwr.local_timer_stop)
 			st->flags |= CPUIDLE_FLAG_TIMER_STOP;
-		st->exit_latency = cpu_level->pwr.latency_us;
+		st->exit_latency = cpu_level->pwr.entry_latency + cpu_level->pwr.exit_latency;
 		st->target_residency = cpu_level->pwr.min_residency;
-		st->power_usage = cpu_level->pwr.ss_power;
 		st->enter = lpm_cpuidle_enter;
 	}
 
@@ -869,7 +869,7 @@ static int lpm_suspend_prepare(void)
 {
 	suspend_in_progress = true;
 	msm_mpm_suspend_prepare();
-	lpm_stats_suspend_enter();
+	// lpm_stats_suspend_enter();
 
 	return 0;
 }
@@ -878,7 +878,7 @@ static void lpm_suspend_wake(void)
 {
 	suspend_in_progress = false;
 	msm_mpm_suspend_wake();
-	lpm_stats_suspend_exit();
+	// lpm_stats_suspend_exit();
 }
 
 static int lpm_suspend_enter(suspend_state_t state)
@@ -909,7 +909,7 @@ static int lpm_suspend_enter(suspend_state_t state)
 	 */
 	// clock_debug_print_enabled();
 
-	BUG_ON(!use_psci);
+	// BUG_ON(!use_psci);
 	psci_enter_sleep(cluster, idx, true);
 
 	cluster_unprepare(cluster, cpumask, idx, false, 0);
@@ -1060,7 +1060,7 @@ enum msm_pm_l2_scm_flag lpm_cpu_pre_pc_cb(unsigned int cpu)
 	 * It must be acquired before releasing the cluster lock.
 	 */
 unlock_and_return:
-	trace_pre_pc_cb(retflag);
+	// trace_pre_pc_cb(retflag);
 	remote_spin_lock_rlock_id(&scm_handoff_lock,
 				  REMOTE_SPINLOCK_TID_START + cpu);
 	raw_spin_unlock(&cluster->sync_lock);

@@ -59,14 +59,10 @@ Required properties:
 	- qcom,min-child-idx: The minimum level that a child CPU should be in
 	before this level can be chosen. This property is required for all
         non-default level.
-	- qcom,latency-us: The latency in handling the interrupt if this level
-	was chosen, in uSec
-	- qcom,ss-power: The steady state power expelled when the processor is
-	in this level in mWatts
-	- qcom,energy-overhead: The energy used up in entering and exiting
-	this level in mWatts.uSec
-	- qcom,time-overhead: The time spent in entering and exiting this
-	level in uS
+	- qcom,entry-latency-us: The latency to enter LPM level, in uSec
+	- qcom,exit-latency-us: The latency to exit LPM level, in uSec
+	- qcom,min-residency-us: The minimum residency value from which entering
+	to low power mode is beneficial, in uSec
  Optional properties:
 	- qcom,notify-rpm: When set, the driver flushes the RPM sleep set and
 	configures the virtual MPM driver in prepration for a RPM assisted
@@ -116,14 +112,10 @@ qcom,pm-cpu-levels.
 		"retention" - Retention
 		"standalone_pc" - Standalone power collapse
 		"pc" - Power Collapse
-	- qcom,latency-us: The latency in handling the interrupt if this level
-	was chosen, in uSec
-	- qcom,ss-power: The steady state power expelled when the processor is
-	in this level in mWatts
-	- qcom,energy-overhead: The energy used up in entering and exiting
-	this level in mWatts.uSec
-	- qcom,time-overhead: The time spent in entering and exiting this
-	level in uS
+	- qcom,entry-latency-us: The latency to enter LPM level, in uSec
+	- qcom,exit-latency-us: The latency to exit LPM level, in uSec
+	- qcom,min-residency-us: The minimum residency value from which entering
+	to low power mode is beneficial, in uSec
 	- qcom,use-broadcast-timer: Indicates that the timer gets reset during
 	power collapse and the cpu relies on Broadcast timer for scheduled
 	wakeups. Required only for states where the CPUs internal timer state

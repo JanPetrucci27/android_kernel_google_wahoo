@@ -25,6 +25,7 @@ bool use_psci;
 enum lpm_type {
 	IDLE = 0,
 	SUSPEND,
+	LATENCY,
 	LPM_TYPE_NR
 };
 
@@ -36,10 +37,9 @@ struct lpm_type_str {
 static const struct lpm_type_str lpm_types[] = {
 	{IDLE, "idle_enabled"},
 	{SUSPEND, "suspend_enabled"},
+	{LATENCY, "exit_latency_us"},
 };
 
-static DEFINE_PER_CPU(uint32_t *, max_residency);
-static DEFINE_PER_CPU(uint32_t *, min_residency);
 static struct lpm_level_avail *cpu_level_available[NR_CPUS];
 static struct platform_device *lpm_pdev;
 
@@ -67,102 +67,34 @@ static struct lpm_level_avail *get_avail_ptr(struct kobject *kobj,
 	else if (!strcmp(attr->attr.name, lpm_types[SUSPEND].str))
 		avail = container_of(attr, struct lpm_level_avail,
 					suspend_enabled_attr);
+	else if (!strcmp(attr->attr.name, lpm_types[LATENCY].str))
+		avail = container_of(attr, struct lpm_level_avail,
+					latency_attr);
 
 	return avail;
 }
 
-static void set_optimum_cpu_residency(struct lpm_cpu *cpu, int cpu_id,
-		bool probe_time)
+static ssize_t lpm_latency_show(struct kobject *kobj,
+		struct kobj_attribute *attr, char *buf)
 {
-	int i, j;
-	bool mode_avail;
-	uint32_t *maximum_residency = per_cpu(max_residency, cpu_id);
-	uint32_t *minimum_residency = per_cpu(min_residency, cpu_id);
+	int ret = 0;
+	struct kernel_param kp;
+	struct lpm_level_avail *avail = get_avail_ptr(kobj, attr);
 
-	for (i = 0; i < cpu->nlevels; i++) {
-		struct power_params *pwr = &cpu->levels[i].pwr;
+	if (WARN_ON(!avail))
+		return -EINVAL;
 
-		mode_avail = probe_time ||
-			lpm_cpu_mode_allow(cpu_id, i, true);
+	kp.arg = &avail->exit_latency;
 
-		if (!mode_avail) {
-			maximum_residency[i] = 0;
-			minimum_residency[i] = 0;
-			continue;
-		}
-
-		maximum_residency[i] = ~0;
-		for (j = i + 1; j < cpu->nlevels; j++) {
-			mode_avail = probe_time ||
-					lpm_cpu_mode_allow(cpu_id, j, true);
-
-			if (mode_avail &&
-				(maximum_residency[i] > pwr->residencies[j]) &&
-				(pwr->residencies[j] != 0))
-				maximum_residency[i] = pwr->residencies[j];
-		}
-
-		minimum_residency[i] = pwr->time_overhead_us;
-		for (j = i-1; j >= 0; j--) {
-			if (probe_time || lpm_cpu_mode_allow(cpu_id, j, true)) {
-				minimum_residency[i] = maximum_residency[j] + 1;
-				break;
-			}
-		}
+	ret = param_get_uint(buf, &kp);
+	if (ret > 0) {
+		strlcat(buf, "\n", PAGE_SIZE);
+		ret++;
 	}
+
+	return ret;
 }
 
-static void set_optimum_cluster_residency(struct lpm_cluster *cluster,
-		bool probe_time)
-{
-	int i, j;
-	bool mode_avail;
-
-	for (i = 0; i < cluster->nlevels; i++) {
-		struct power_params *pwr = &cluster->levels[i].pwr;
-
-		mode_avail = probe_time ||
-			lpm_cluster_mode_allow(cluster, i,
-					true);
-
-		if (!mode_avail) {
-			pwr->max_residency = 0;
-			pwr->min_residency = 0;
-			continue;
-		}
-
-		pwr->max_residency = ~0;
-		for (j = i+1; j < cluster->nlevels; j++) {
-			mode_avail = probe_time ||
-					lpm_cluster_mode_allow(cluster, j,
-							true);
-			if (mode_avail &&
-				(pwr->max_residency > pwr->residencies[j]) &&
-				(pwr->residencies[j] != 0))
-				pwr->max_residency = pwr->residencies[j];
-		}
-
-		pwr->min_residency = pwr->time_overhead_us;
-		for (j = i-1;  j >= 0; j--) {
-			if (probe_time ||
-				lpm_cluster_mode_allow(cluster, j, true)) {
-				pwr->min_residency =
-				  cluster->levels[j].pwr.max_residency + 1;
-				break;
-			}
-		}
-	}
-}
-
-uint32_t *get_per_cpu_max_residency(int cpu)
-{
-	return per_cpu(max_residency, cpu);
-}
-
-uint32_t *get_per_cpu_min_residency(int cpu)
-{
-	return per_cpu(min_residency, cpu);
-}
 ssize_t lpm_enable_show(struct kobject *kobj, struct kobj_attribute *attr,
 				char *buf)
 {
@@ -191,11 +123,6 @@ ssize_t lpm_enable_store(struct kobject *kobj, struct kobj_attribute *attr,
 		return -EINVAL;
 	kp.arg = get_enabled_ptr(attr, avail);
 	ret = param_set_bool(buf, &kp);
-
-	if (avail->cpu_node)
-		set_optimum_cpu_residency(avail->data, avail->idx, false);
-	else
-		set_optimum_cluster_residency(avail->data, false);
 
 	return ret ? ret : len;
 }
@@ -239,9 +166,16 @@ static int create_lvl_avail_nodes(const char *name,
 	avail->suspend_enabled_attr.show = lpm_enable_show;
 	avail->suspend_enabled_attr.store = lpm_enable_store;
 
+	sysfs_attr_init(&avail->latency_attr.attr);
+	avail->latency_attr.attr.name = lpm_types[LATENCY].str;
+	avail->latency_attr.attr.mode = 0444;
+	avail->latency_attr.show = lpm_latency_show;
+	avail->latency_attr.store = NULL;
+
 	attr[0] = &avail->idle_enabled_attr.attr;
 	attr[1] = &avail->suspend_enabled_attr.attr;
-	attr[2] = NULL;
+	attr[2] = &avail->latency_attr.attr;
+	attr[3] = NULL;
 	attr_group->attrs = attr;
 
 	ret = sysfs_create_group(kobj, attr_group);
@@ -296,7 +230,8 @@ static int create_cpu_lvl_nodes(struct lpm_cluster *p, struct kobject *parent)
 		}
 
 		for (i = 0; i < p->cpu->nlevels; i++) {
-
+			level_list[i].exit_latency =
+					p->levels[i].pwr.exit_latency;
 			ret = create_lvl_avail_nodes(p->cpu->levels[i].name,
 					cpu_kobj[cpu_idx], &level_list[i],
 					(void *)p->cpu, cpu, true);
@@ -332,6 +267,8 @@ int create_cluster_lvl_nodes(struct lpm_cluster *p, struct kobject *kobj)
 		return -ENOMEM;
 
 	for (i = 0; i < p->nlevels; i++) {
+		p->levels[i].available.exit_latency =
+					p->levels[i].pwr.exit_latency;
 		ret = create_lvl_avail_nodes(p->levels[i].level_name,
 				cluster_kobj, &p->levels[i].available,
 				(void *)p, 0, false);
@@ -522,23 +459,18 @@ static int parse_power_params(struct device_node *node,
 	char *key;
 	int ret;
 
-	key = "qcom,latency-us";
-	ret  = of_property_read_u32(node, key, &pwr->latency_us);
+	key = "qcom,entry-latency-us";
+	ret  = of_property_read_u32(node, key, &pwr->entry_latency);
 	if (ret)
 		goto fail;
 
-	key = "qcom,ss-power";
-	ret = of_property_read_u32(node, key, &pwr->ss_power);
+	key = "qcom,exit-latency-us";
+	ret  = of_property_read_u32(node, key, &pwr->exit_latency);
 	if (ret)
 		goto fail;
 
-	key = "qcom,energy-overhead";
-	ret = of_property_read_u32(node, key, &pwr->energy_overhead);
-	if (ret)
-		goto fail;
-
-	key = "qcom,time-overhead";
-	ret = of_property_read_u32(node, key, &pwr->time_overhead_us);
+	key = "qcom,min-residency-us";
+	ret = of_property_read_u32(node, key, &pwr->min_residency);
 	if (ret)
 		goto fail;
 
@@ -736,32 +668,11 @@ static int get_cpumask_for_node(struct device_node *node, struct cpumask *mask)
 	return 0;
 }
 
-static int calculate_residency(struct power_params *base_pwr,
-					struct power_params *next_pwr)
-{
-	int32_t residency = (int32_t)(next_pwr->energy_overhead -
-						base_pwr->energy_overhead) -
-		((int32_t)(next_pwr->ss_power * next_pwr->time_overhead_us)
-		- (int32_t)(base_pwr->ss_power * base_pwr->time_overhead_us));
-
-	if (base_pwr->ss_power != next_pwr->ss_power)
-		residency /= (int32_t)(base_pwr->ss_power  - next_pwr->ss_power);
-
-	if (residency < 0) {
-		pr_err("%s: residency < 0 for LPM\n",
-				__func__);
-		return next_pwr->time_overhead_us;
-	}
-
-	return residency < next_pwr->time_overhead_us ?
-				next_pwr->time_overhead_us : residency;
-}
-
 static int parse_cpu_levels(struct device_node *node, struct lpm_cluster *c)
 {
 	struct device_node *n;
 	int ret = -ENOMEM;
-	int i, j;
+	int i;
 	char *key;
 
 	c->cpu = devm_kzalloc(&lpm_pdev->dev, sizeof(*c->cpu), GFP_KERNEL);
@@ -818,21 +729,12 @@ static int parse_cpu_levels(struct device_node *node, struct lpm_cluster *c)
 		else if (ret)
 			goto failed;
 	}
-	for (i = 0; i < c->cpu->nlevels; i++) {
-		for (j = 0; j < c->cpu->nlevels; j++) {
-			if (i >= j) {
-				c->cpu->levels[i].pwr.residencies[j] = 0;
-				continue;
-			}
 
-			c->cpu->levels[i].pwr.residencies[j] =
-				calculate_residency(&c->cpu->levels[i].pwr,
-					&c->cpu->levels[j].pwr);
+	for (i = 1; i < c->cpu->nlevels; i++)
+		c->cpu->levels[i-1].pwr.max_residency =
+			c->cpu->levels[i].pwr.min_residency - 1;
 
-			pr_err("%s: idx %d %u\n", __func__, j,
-					c->cpu->levels[i].pwr.residencies[j]);
-		}
-	}
+	c->cpu->levels[i-1].pwr.max_residency = UINT_MAX;
 
 	return 0;
 failed:
@@ -864,8 +766,7 @@ struct lpm_cluster *parse_cluster(struct device_node *node,
 	struct lpm_cluster *c;
 	struct device_node *n;
 	char *key;
-	int ret = 0;
-	int i, j;
+	int ret = 0, i;
 
 	c = devm_kzalloc(&lpm_pdev->dev, sizeof(*c), GFP_KERNEL);
 	if (!c)
@@ -924,22 +825,6 @@ struct lpm_cluster *parse_cluster(struct device_node *node,
 				goto failed_parse_cluster;
 
 			c->aff_level = 1;
-
-			for_each_cpu(i, &c->child_cpus) {
-				per_cpu(max_residency, i) = devm_kzalloc(
-					&lpm_pdev->dev,
-					sizeof(uint32_t) * c->cpu->nlevels,
-					GFP_KERNEL);
-				if (!per_cpu(max_residency, i))
-					return ERR_PTR(-ENOMEM);
-				per_cpu(min_residency, i) = devm_kzalloc(
-					&lpm_pdev->dev,
-					sizeof(uint32_t) * c->cpu->nlevels,
-					GFP_KERNEL);
-				if (!per_cpu(min_residency, i))
-					return ERR_PTR(-ENOMEM);
-				set_optimum_cpu_residency(c->cpu, i, true);
-			}
 		}
 	}
 
@@ -948,17 +833,12 @@ struct lpm_cluster *parse_cluster(struct device_node *node,
 	else
 		c->last_level = c->nlevels-1;
 
-	for (i = 0; i < c->nlevels; i++) {
-		for (j = 0; j < c->nlevels; j++) {
-			if (i >= j) {
-				c->levels[i].pwr.residencies[j] = 0;
-				continue;
-			}
-			c->levels[i].pwr.residencies[j] = calculate_residency(
-				&c->levels[i].pwr, &c->levels[j].pwr);
-		}
-	}
-	set_optimum_cluster_residency(c, true);
+	for (i = 1; i < c->nlevels; i++)
+		c->levels[i-1].pwr.max_residency =
+			c->levels[i].pwr.min_residency - 1;
+
+	c->levels[i-1].pwr.max_residency = UINT_MAX;
+
 	return c;
 
 failed_parse_cluster:

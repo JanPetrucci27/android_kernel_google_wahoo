@@ -35,24 +35,6 @@ static int enabled_devices;
 static int off __read_mostly;
 static int initialized __read_mostly;
 
-#ifdef CONFIG_SMP
-static atomic_t idled = ATOMIC_INIT(0);
-
-#if NR_CPUS > 32
-#error idled CPU mask not big enough for NR_CPUS
-#endif
-
-void cpuidle_set_idle_cpu(unsigned int cpu)
-{
-	atomic_or(BIT(cpu), &idled);
-}
-
-void cpuidle_clear_idle_cpu(unsigned int cpu)
-{
-	atomic_andnot(BIT(cpu), &idled);
-}
-#endif
-
 int cpuidle_disabled(void)
 {
 	return off;
@@ -229,7 +211,7 @@ int cpuidle_enter_state(struct cpuidle_device *dev, struct cpuidle_driver *drv,
 	/* Take note of the planned idle state. */
 	sched_idle_set_state(target_state, index);
 
-	trace_cpu_idle_rcuidle(index, dev->cpu);
+	// trace_cpu_idle_rcuidle(index, dev->cpu);
 	time_start = ns_to_ktime(local_clock());
 
 	stop_critical_timings();
@@ -238,7 +220,7 @@ int cpuidle_enter_state(struct cpuidle_device *dev, struct cpuidle_driver *drv,
 	
 	sched_clock_idle_wakeup_event();
 	time_end = ns_to_ktime(local_clock());
-	trace_cpu_idle_rcuidle(PWR_EVENT_EXIT, dev->cpu);
+	// trace_cpu_idle_rcuidle(PWR_EVENT_EXIT, dev->cpu);
 
 	/* The cpu is no longer idle or about to enter idle. */
 	sched_idle_set_state(NULL, -1);
@@ -250,7 +232,7 @@ int cpuidle_enter_state(struct cpuidle_device *dev, struct cpuidle_driver *drv,
 		tick_broadcast_exit();
 	}
 
-	if (!cpuidle_state_is_coupled(drv, index))
+	if (likely(!cpuidle_state_is_coupled(drv, index)))
 		local_irq_enable();
 
 	if (entered_state >= 0) {
@@ -341,7 +323,7 @@ int cpuidle_enter(struct cpuidle_driver *drv, struct cpuidle_device *dev,
 	 */
 	WRITE_ONCE(dev->next_hrtimer, tick_nohz_get_next_hrtimer());
 	
-	if (cpuidle_state_is_coupled(drv, index))
+	if (unlikely(cpuidle_state_is_coupled(drv, index)))
 		ret = cpuidle_enter_state_coupled(dev, drv, index);
 	else
 		ret = cpuidle_enter_state(dev, drv, index);
@@ -712,11 +694,6 @@ EXPORT_SYMBOL_GPL(cpuidle_register);
 static int cpuidle_latency_notify(struct notifier_block *b,
 		unsigned long l, void *v)
 {
-	unsigned long cpus = atomic_read(&idled) & *cpumask_bits(to_cpumask(v));
-
-	if (cpus)
-		arch_send_wakeup_ipi_mask(to_cpumask(&cpus));
-
 	return NOTIFY_OK;
 }
 

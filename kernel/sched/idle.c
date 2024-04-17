@@ -242,8 +242,6 @@ static void do_idle(void)
 			smp_mb(); /* all activity before dead. */
 			this_cpu_write(cpu_dead_idle, true);
 			arch_cpu_idle_dead();
-		} else {
-			cpuidle_set_idle_cpu(cpu);
 		}
 
 		/*
@@ -293,7 +291,6 @@ static void do_idle(void)
 		else
 			cpuidle_idle_call();
 
-		cpuidle_clear_idle_cpu(cpu);
 		arch_cpu_idle_exit();
 	}
 
