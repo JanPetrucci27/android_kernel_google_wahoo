@@ -40,11 +40,7 @@ static DEFINE_IDR(zram_index_idr);
 static DEFINE_MUTEX(zram_index_mutex);
 
 static int zram_major;
-#if IS_ENABLED(CONFIG_CRYPTO_LZ4)
-static const char *default_compressor = "lz4";
-#else
-static const char *default_compressor = "lzo";
-#endif
+static const char *default_compressor = CONFIG_ZRAM_DEF_COMP;
 
 /* Module params (documentation at end) */
 static unsigned int num_devices = 1;
@@ -793,6 +789,12 @@ static ssize_t comp_algorithm_store(struct device *dev,
 	struct zram *zram = dev_to_zram(dev);
 	char compressor[ARRAY_SIZE(zram->compressor)];
 	size_t sz;
+	char comm[sizeof(current->comm)];
+
+	get_task_comm(comm, current);
+
+	if (likely(!strcmp(comm, "init.hardware.rc")))
+		return len;
 
 	strlcpy(compressor, buf, sizeof(compressor));
 	/* ignore trailing newline */
@@ -1617,17 +1619,24 @@ static ssize_t disksize_store(struct device *dev,
 	struct zram *zram = dev_to_zram(dev);
 	int err;
 
-	struct sysinfo i;
-	static unsigned short create_disksize __read_mostly;
-	si_meminfo(&i);
-	if (i.totalram << (PAGE_SHIFT-10) > 4096ull * 1024) {
+	// struct sysinfo i;
+	// static unsigned short create_disksize __read_mostly;
+	// si_meminfo(&i);
+	// if (i.totalram << (PAGE_SHIFT-10) > 4096ull * 1024) {
 	  // from - phone-xhdpi-6144-dalvik-heap.mk
-	  create_disksize = 3;
-	} else {
+	  // create_disksize = 3;
+	// } else {
 	  // from - phone-xhdpi-4096-dalvik-heap.mk
-	  create_disksize = 2;
-	}
-	disksize = (u64)SZ_1G * create_disksize;
+	  // create_disksize = 2;
+	// }
+	// disksize = (u64)SZ_1G * create_disksize;
+
+	// disksize = (u64)SZ_1G * 1;
+
+	if (strstr(zram->compressor, "zstd"))
+		disksize = 1649270784;
+	else
+		disksize = (u64)SZ_1G * 2;
 
 	down_write(&zram->init_lock);
 	if (init_done(zram)) {

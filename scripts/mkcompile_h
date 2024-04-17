@@ -6,6 +6,9 @@ SMP=$3
 PREEMPT=$4
 CC=$5
 
+KBUILD_BUILD_USER="JanPetrucci27"
+KBUILD_BUILD_HOST="ryzenpc"
+
 vecho() { [ "${quiet}" = "silent_" ] || echo "$@" ; }
 
 # If compile.h exists already and we don't own autoconf.h

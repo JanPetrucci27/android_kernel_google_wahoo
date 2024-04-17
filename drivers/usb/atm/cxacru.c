@@ -930,7 +930,7 @@ reschedule:
 	mutex_unlock(&instance->poll_state_serialize);
 
 	if (keep_polling)
-		queue_delayed_work(system_power_efficient_wq, &instance->poll_work,
+		schedule_delayed_work(&instance->poll_work,
 				round_jiffies_relative(POLL_INTERVAL*HZ));
 }
 

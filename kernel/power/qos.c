@@ -311,7 +311,8 @@ static inline void pm_qos_set_value_for_cpus(struct pm_qos_request *new_req,
 		for_each_cpu(cpu, to_cpumask(&affected_cpus)) {
 			if (c->target_per_cpu[cpu] != req->node.prio) {
 				c->target_per_cpu[cpu] = req->node.prio;
-				*cpus |= BIT(cpu);
+				if (cpus)
+					*cpus |= BIT(cpu);
 			}
 		}
 		
@@ -322,7 +323,8 @@ static inline void pm_qos_set_value_for_cpus(struct pm_qos_request *new_req,
 	for_each_cpu(cpu, to_cpumask(&new_req_cpus)) {
 		if (c->target_per_cpu[cpu] != PM_QOS_CPU_DMA_LAT_DEFAULT_VALUE) {
 			c->target_per_cpu[cpu] = PM_QOS_CPU_DMA_LAT_DEFAULT_VALUE;
-			*cpus |= BIT(cpu);
+			if (cpus)
+				*cpus |= BIT(cpu);
 		}
 	}
 }
@@ -592,7 +594,8 @@ void pm_qos_add_request(struct pm_qos_request *req,
 
 	switch (req->type) {
 	case PM_QOS_REQ_AFFINE_CORES:
-		if (!cmpxchg_relaxed(&req->cpus_affine, 0, CPUMASK_ALL)) {
+		if (!req->cpus_affine) {
+			req->cpus_affine = CPUMASK_ALL;
 			req->type = PM_QOS_REQ_ALL_CORES;
 			WARN(1, KERN_ERR "Affine cores not set for request with affinity flag\n");
 		}

@@ -769,7 +769,7 @@ static void failsafe(struct tas2557_priv *pTAS2557)
 		pTAS2557->failsafe_retry++;
 		msleep(100);
 		dev_err(pTAS2557->dev, "I2C COMM error, restart SmartAmp.\n");
-		queue_delayed_work(system_power_efficient_wq, &pTAS2557->irq_work,
+		schedule_delayed_work(&pTAS2557->irq_work,
 				      msecs_to_jiffies(100));
 		return;
 	} else {
@@ -972,7 +972,7 @@ int tas2557_enable(struct tas2557_priv *pTAS2557, bool bEnable)
 	struct TConfiguration *pConfiguration;
 	unsigned int nValue;
 
-	dev_info(pTAS2557->dev, "Enable: %d\n", bEnable);
+	dev_dbg(pTAS2557->dev, "Enable: %d\n", bEnable);
 
 	if ((pTAS2557->mpFirmware->mnPrograms == 0)
 		|| (pTAS2557->mpFirmware->mnConfigurations == 0)) {
@@ -2176,7 +2176,7 @@ static int tas2557_load_data(struct tas2557_priv *pTAS2557, struct TData *pData,
 	unsigned int nBlock;
 	struct TBlock *pBlock;
 
-	dev_info(pTAS2557->dev,
+	dev_dbg(pTAS2557->dev,
 		"TAS2557 load data: %s, Blocks = %d, Block Type = %d\n", pData->mpName, pData->mnBlocks, nType);
 
 	for (nBlock = 0; nBlock < pData->mnBlocks; nBlock++) {

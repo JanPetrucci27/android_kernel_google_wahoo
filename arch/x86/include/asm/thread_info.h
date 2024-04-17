@@ -276,6 +276,9 @@ static inline int arch_within_stack_frames(const void * const stack,
  * have to worry about atomic accesses.
  */
 #define TS_COMPAT		0x0002	/* 32bit syscall active (64BIT)*/
+#ifdef CONFIG_COMPAT
+#define TS_I386_REGS_POKED	0x0004	/* regs poked by 32-bit ptracer */
+#endif
 #define TS_RESTORE_SIGMASK	0x0008	/* restore signal mask in do_signal() */
 
 #ifndef __ASSEMBLY__
@@ -303,7 +306,7 @@ static inline bool test_and_clear_restore_sigmask(void)
 	return true;
 }
 
-static inline bool is_ia32_task(void)
+static inline bool in_ia32_syscall(void)
 {
 #ifdef CONFIG_X86_32
 	return true;

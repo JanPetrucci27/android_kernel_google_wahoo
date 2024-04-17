@@ -80,7 +80,7 @@ static inline int cpu_idle_poll(void)
 void __weak arch_cpu_idle_prepare(void) { }
 void __weak arch_cpu_idle_enter(void) { }
 void __weak arch_cpu_idle_exit(void) { }
-void __weak arch_cpu_idle_dead(void) { }
+void __weak arch_cpu_idle_dead(void) { while (1); }
 void __weak arch_cpu_idle(void)
 {
 	cpu_idle_force_poll = 1;
@@ -106,18 +106,12 @@ void default_idle_call(void)
 static int call_cpuidle(struct cpuidle_driver *drv, struct cpuidle_device *dev,
 		      int next_state)
 {
-	/* Fall back to the default arch idle method on errors. */
-	if (next_state < 0) {
-		default_idle_call();
-		return next_state;
-	}
-
 	/*
 	 * The idle task must be scheduled, it is pointless to go to idle, just
 	 * update no idle residency and return.
 	 */
 	if (current_clr_polling_and_test()) {
-		dev->last_residency = 0;
+		dev->last_residency_ns = 0;
 		local_irq_enable();
 		return -EBUSY;
 	}
@@ -250,6 +244,8 @@ static void cpu_idle_loop(void)
 				smp_mb(); /* all activity before dead. */
 				this_cpu_write(cpu_dead_idle, true);
 				arch_cpu_idle_dead();
+			} else {
+				cpuidle_set_idle_cpu(cpu);
 			}
 
 			local_irq_disable();
@@ -269,6 +265,7 @@ static void cpu_idle_loop(void)
 			else
 				cpuidle_idle_call();
 
+			cpuidle_clear_idle_cpu(cpu);
 			arch_cpu_idle_exit();
 		}
 
@@ -348,7 +345,7 @@ balance_idle(struct rq *rq, struct task_struct *prev, struct rq_flags *rf)
 /*
  * Idle tasks are unconditionally rescheduled:
  */
-static void check_preempt_curr_idle(struct rq *rq, struct task_struct *p, int flags)
+static void wakeup_preempt_idle(struct rq *rq, struct task_struct *p, int flags)
 {
 	resched_curr(rq);
 }
@@ -363,6 +360,13 @@ static void set_next_task_idle(struct rq *rq, struct task_struct *next, bool fir
 	update_idle_core(rq);
 	schedstat_inc(rq->sched_goidle);
 }
+
+#ifdef CONFIG_SMP
+static struct task_struct *pick_task_idle(struct rq *rq)
+{
+	return rq->idle;
+}
+#endif
 
 struct task_struct *pick_next_task_idle(struct rq *rq)
 {
@@ -415,7 +419,7 @@ const struct sched_class idle_sched_class
 	/* dequeue is not valid, we print a debug message there: */
 	.dequeue_task		= dequeue_task_idle,
 
-	.check_preempt_curr	= check_preempt_curr_idle,
+	.wakeup_preempt		= wakeup_preempt_idle,
 
 	.pick_next_task		= pick_next_task_idle,
 	.put_prev_task		= put_prev_task_idle,
@@ -423,6 +427,7 @@ const struct sched_class idle_sched_class
 
 #ifdef CONFIG_SMP
 	.balance		= balance_idle,
+	.pick_task		= pick_task_idle,
 	.select_task_rq		= select_task_rq_idle,
 	.set_cpus_allowed	= set_cpus_allowed_common,
 #endif

@@ -61,7 +61,7 @@ static unsigned int counter_delta(struct kgsl_device *device,
 
 static struct devfreq_msm_adreno_tz_data adreno_tz_data = {
 	.bus = {
-		.max = 1200,
+		.max = 350,
 	},
 	.device_id = KGSL_DEVICE_3D0,
 };
@@ -94,8 +94,9 @@ static struct adreno_device device_3d0 = {
 	.fast_hang_detect = 1,
 	.long_ib_detect = 1,
 	.pwrctrl_flag = BIT(ADRENO_SPTP_PC_CTRL) | BIT(ADRENO_PPD_CTRL) |
-		BIT(ADRENO_LM_CTRL) | BIT(ADRENO_HWCG_CTRL) |
-		BIT(ADRENO_THROTTLING_CTRL),
+		BIT(ADRENO_LM_CTRL) | BIT(ADRENO_HWCG_CTRL),
+		// BIT(ADRENO_LM_CTRL) | BIT(ADRENO_HWCG_CTRL) |
+		// BIT(ADRENO_THROTTLING_CTRL),
 	.profile.enabled = false,
 	.active_list = LIST_HEAD_INIT(device_3d0.active_list),
 	.active_list_lock = __SPIN_LOCK_UNLOCKED(device_3d0.active_list_lock),
@@ -1153,9 +1154,6 @@ static int _adreno_start(struct adreno_device *adreno_dev)
 
 	regulator_left_on = regulators_left_on(device);
 
-	/* Clear any GPU faults that might have been left over */
-	adreno_clear_gpu_fault(adreno_dev);
-
 	/* Put the GPU in a responsive state */
 	status = kgsl_pwrctrl_change_state(device, KGSL_STATE_AWARE);
 	if (status)
@@ -1167,6 +1165,14 @@ static int _adreno_start(struct adreno_device *adreno_dev)
 	/* Soft reset the GPU if a regulator is stuck on*/
 	if (regulator_left_on)
 		_soft_reset(adreno_dev);
+
+	/*
+	 * Observed race between timeout fault (long IB detection) and
+	 * MISC hang (hard fault). MISC hang can be set while in recovery from
+	 * timeout fault. If fault flag is set in start path CP init fails.
+	 * Clear gpu fault to avoid such race.
+	 */
+	adreno_clear_gpu_fault(adreno_dev);
 
 	adreno_ringbuffer_set_global(adreno_dev, 0);
 

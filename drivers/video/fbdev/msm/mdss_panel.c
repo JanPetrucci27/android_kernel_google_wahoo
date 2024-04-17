@@ -494,7 +494,7 @@ int mdss_panel_debugfs_init(struct mdss_panel_info *panel_info,
 	pdata = container_of(panel_info, struct mdss_panel_data, panel_info);
 	parent = debugfs_create_dir(panel_name, NULL);
 	if (IS_ERR_OR_NULL(parent)) {
-		pr_err("Debugfs create dir failed with error: %ld\n",
+		pr_debug("Debugfs create dir failed with error: %ld\n",
 			PTR_ERR(parent));
 		return -ENODEV;
 	}

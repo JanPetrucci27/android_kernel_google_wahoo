@@ -327,8 +327,6 @@ struct fts_ts_info {
 	bool enabled;
 #if defined(CONFIG_FB)
 	struct notifier_block fb_notif;
-	struct work_struct resume_work;
-	struct work_struct suspend_work;
 #endif
 #ifdef FEATURE_FTS_PRODUCTION_CODE
 	struct device *pdc_dev_ts;
@@ -418,8 +416,7 @@ struct fts_ts_info {
 
 	struct delayed_work psy_work;
 
-	struct pm_qos_request pm_i2c_req;
-	struct pm_qos_request pm_touch_req;
+	struct pm_qos_request pm_qos_req;
 
 	int (*stop_device)(struct fts_ts_info *info);
 	int (*start_device)(struct fts_ts_info *info);

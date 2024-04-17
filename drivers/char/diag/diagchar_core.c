@@ -33,7 +33,9 @@
 #include "diagfwd.h"
 #include "diagfwd_cntl.h"
 #include "diag_dci.h"
+#ifdef CONFIG_DEBUG_FS
 #include "diag_debugfs.h"
+#endif
 #include "diag_masks.h"
 #include "diagfwd_bridge.h"
 #include "diag_usb.h"
@@ -3287,7 +3289,7 @@ static ssize_t diagchar_write(struct file *file, const char __user *buf,
 	return err;
 }
 
-void diag_ws_init()
+void diag_ws_init(void)
 {
 	driver->dci_ws.ref_count = 0;
 	driver->dci_ws.copy_count = 0;
@@ -3313,7 +3315,7 @@ static void diag_stats_init(void)
 	driver->event_stats.drop_count = 0;
 }
 
-void diag_ws_on_notify()
+void diag_ws_on_notify(void)
 {
 	/*
 	 * Do not deal with reference count here as there can be spurious
@@ -3458,7 +3460,7 @@ void diag_ws_reset(int type)
 	diag_ws_release();
 }
 
-void diag_ws_release()
+void diag_ws_release(void)
 {
 	if (driver->dci_ws.ref_count == 0 && driver->md_ws.ref_count == 0)
 		pm_relax(driver->diag_dev);
@@ -3651,9 +3653,11 @@ static int __init diagchar_init(void)
 	ret = diag_real_time_info_init();
 	if (ret)
 		goto fail;
+#ifdef CONFIG_DEBUG_FS
 	ret = diag_debugfs_init();
 	if (ret)
 		goto fail;
+#endif
 	ret = diag_masks_init();
 	if (ret)
 		goto fail;
@@ -3703,7 +3707,9 @@ static int __init diagchar_init(void)
 
 fail:
 	pr_err("diagchar is not initialized, ret: %d\n", ret);
+#ifdef CONFIG_DEBUG_FS
 	diag_debugfs_cleanup();
+#endif
 	diagchar_cleanup();
 	diag_mux_exit();
 	diagfwd_peripheral_exit();
@@ -3729,7 +3735,9 @@ static void diagchar_exit(void)
 	diag_masks_exit();
 	diag_md_session_exit();
 	diag_remote_exit();
+#ifdef CONFIG_DEBUG_FS
 	diag_debugfs_cleanup();
+#endif
 	diagchar_cleanup();
 	printk(KERN_INFO "done diagchar exit\n");
 }

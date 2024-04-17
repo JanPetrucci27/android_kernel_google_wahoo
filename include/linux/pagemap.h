@@ -396,14 +396,16 @@ static inline struct page *read_mapping_page(struct address_space *mapping,
 	return read_cache_page(mapping, index, filler, data);
 }
 
+extern pgoff_t hugetlb_basepage_index(struct page *page);
+
 /*
- * Get the offset in PAGE_SIZE.
- * (TODO: hugepage should have ->index in PAGE_SIZE)
+ * Get the offset in PAGE_SIZE (even for hugetlb pages).
+ * (TODO: hugetlb pages should have ->index in PAGE_SIZE)
  */
 static inline pgoff_t page_to_pgoff(struct page *page)
 {
-	if (unlikely(PageHeadHuge(page)))
-		return page->index << compound_order(page);
+	if (unlikely(PageHuge(page)))
+		return hugetlb_basepage_index(page);
 	else
 		return page->index << (PAGE_CACHE_SHIFT - PAGE_SHIFT);
 }

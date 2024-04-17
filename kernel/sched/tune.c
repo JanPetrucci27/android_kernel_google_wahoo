@@ -107,9 +107,6 @@ __schedtune_accept_deltas(int nrg_delta, int cap_delta,
 
 #ifdef CONFIG_CGROUP_SCHEDTUNE
 
-/* We hold schedtune boost in effect for at least this long */
-#define SCHEDTUNE_BOOST_HOLD_NS 50000000ULL
-
 /*
  * EAS scheduler tunables for task groups.
  *
@@ -192,10 +189,6 @@ struct schedtune {
 	/* Hint to bias scheduling of tasks on that SchedTune CGroup
 	 * towards idle CPUs */
 	bool prefer_idle;
-	
-	/* Hint to bias scheduling of tasks on that SchedTune CGroup
-	 * towards higher capacity CPUs */
-	bool prefer_high_cap;
 };
 
 static inline struct schedtune *css_st(struct cgroup_subsys_state *css)
@@ -227,7 +220,6 @@ static struct schedtune root_schedtune = {
 	.perf_boost_idx = 0,
 	.perf_constrain_idx = 0,
 	.prefer_idle = 0,
-	.prefer_high_cap = 0,
 };
 
 int
@@ -291,7 +283,6 @@ static struct schedtune *allocated_group[BOOSTGROUPS_COUNT] = {
 struct boost_groups {
 	/* Maximum boost value for all RUNNABLE tasks on a CPU */
 	int boost_max;
-	u64 boost_ts;
 	struct {
 		/* True when this boost group maps an actual cgroup */
 		bool valid;
@@ -299,8 +290,6 @@ struct boost_groups {
 		int boost;
 		/* Count of RUNNABLE tasks on that boost group */
 		unsigned tasks;
-		/* Timestamp of boost activation */
-		u64 ts;
 	} group[BOOSTGROUPS_COUNT];
 	/* CPU's boost group locking */
 	raw_spinlock_t lock;
@@ -309,25 +298,10 @@ struct boost_groups {
 /* Boost groups affecting each CPU in the system */
 DEFINE_PER_CPU(struct boost_groups, cpu_boost_groups);
 
-static inline bool schedtune_boost_timeout(u64 now, u64 ts)
-{
-	return ((now - ts) > SCHEDTUNE_BOOST_HOLD_NS);
-}
-
-static inline bool
-schedtune_boost_group_active(int idx, struct boost_groups* bg, u64 now)
-{
-	if (bg->group[idx].tasks)
-		return true;
-
-	return !schedtune_boost_timeout(now, bg->group[idx].ts);
-}
-
 static void
-schedtune_cpu_update(int cpu, u64 now)
+schedtune_cpu_update(int cpu)
 {
 	struct boost_groups *bg;
-	u64 boost_ts = now;
 	int boost_max = INT_MIN;
 	int idx;
 
@@ -341,25 +315,18 @@ schedtune_cpu_update(int cpu, u64 now)
 		
 		/*
 		 * A boost group affects a CPU only if it has
-		 * RUNNABLE tasks on that CPU or it has hold
-		 * in effect from a previous task.
+		 * RUNNABLE tasks on that CPU
 		 */
-		if (!schedtune_boost_group_active(idx, bg, now))
+		if (bg->group[idx].tasks == 0)
 			continue;
 
-		/* This boost group is active */
-		if (boost_max > bg->group[idx].boost)
-			continue;
-
-		boost_max = bg->group[idx].boost;
-		boost_ts =  bg->group[idx].ts;
+		boost_max = max(boost_max, bg->group[idx].boost);
 	}
 
 	/* If there are no active boost groups on the CPU, set no boost  */
 	if (boost_max == INT_MIN)
 		boost_max = 0;
 	bg->boost_max = boost_max;
-	bg->boost_ts = boost_ts;
 }
 
 static int
@@ -369,7 +336,6 @@ schedtune_boostgroup_update(int idx, int boost)
 	int cur_boost_max;
 	int old_boost;
 	int cpu;
-	u64 now;
 
 	/* Update per CPU boost groups */
 	for_each_possible_cpu(cpu) {
@@ -390,19 +356,15 @@ schedtune_boostgroup_update(int idx, int boost)
 		bg->group[idx].boost = boost;
 		
 		/* Check if this update increase current max */
-		now = sched_clock_cpu(cpu);
-		if (boost > cur_boost_max &&
-			schedtune_boost_group_active(idx, bg, now)) {
+		if (boost > cur_boost_max && bg->group[idx].tasks) {
 			bg->boost_max = boost;
-			bg->boost_ts = bg->group[idx].ts;
-			
 			trace_sched_tune_boostgroup_update(cpu, 1, bg->boost_max);
 			continue;
 		}
 
 		/* Check if this update has decreased current max */
 		if (cur_boost_max == old_boost && old_boost > boost) {
-			schedtune_cpu_update(cpu, now);
+			schedtune_cpu_update(cpu);
 			trace_sched_tune_boostgroup_update(cpu, -1, bg->boost_max);
 			continue;
 		}
@@ -416,15 +378,6 @@ schedtune_boostgroup_update(int idx, int boost)
 #define ENQUEUE_TASK  1
 #define DEQUEUE_TASK -1
 
-static inline bool
-schedtune_update_timestamp(struct task_struct *p)
-{
-	if (sched_feat(SCHEDTUNE_BOOST_HOLD_ALL))
-		return true;
-
-	return task_has_rt_policy(p);
-}
-
 static inline void
 schedtune_tasks_update(struct task_struct *p, int cpu, int idx, int task_count)
 {
@@ -434,22 +387,12 @@ schedtune_tasks_update(struct task_struct *p, int cpu, int idx, int task_count)
 	/* Update boosted tasks count while avoiding to make it negative */
 	bg->group[idx].tasks = max(0, tasks);
 
-	/* Update timeout on enqueue */
-	if (task_count > 0) {
-		u64 now = sched_clock_cpu(cpu);
-		
-		if (schedtune_update_timestamp(p))
-			bg->group[idx].ts = now;
-
-		/* Boost group activation or deactivation on that RQ */
-		if (bg->group[idx].tasks == 1)
-			schedtune_cpu_update(cpu, now);
-	}
+	/* Boost group activation or deactivation on that RQ */
+	if (tasks == 1 || tasks == 0)
+		schedtune_cpu_update(cpu);
 
 	trace_sched_tune_tasks_update(p, cpu, tasks, idx,
-			bg->group[idx].boost, bg->boost_max,
-			bg->group[idx].ts);
-
+			bg->group[idx].boost, bg->boost_max);
 }
 
 /*
@@ -509,7 +452,6 @@ int schedtune_can_attach(struct cgroup_taskset *tset)
 	int src_bg; /* Source boost group index */
 	int dst_bg; /* Destination boost group index */
 	int tasks;
-	u64 now;
 	
 	if (unlikely(!schedtune_initialized))
 		return 0;
@@ -560,14 +502,12 @@ int schedtune_can_attach(struct cgroup_taskset *tset)
 		bg->group[dst_bg].tasks += 1;
 		
 		/* Update boost hold start for this group */
-		now = sched_clock_cpu(cpu);
-		bg->group[dst_bg].ts = now;
-
-		/* Force boost group re-evaluation at next boost check */
-		bg->boost_ts = now - SCHEDTUNE_BOOST_HOLD_NS;
-
 		raw_spin_unlock(&bg->lock);
 		unlock_rq_of(rq, task, &rf);
+
+		/* Update CPU boost group */
+		if (bg->group[src_bg].tasks == 0 || bg->group[dst_bg].tasks == 1)
+			schedtune_cpu_update(task_cpu(task));
 
 	}
 
@@ -649,15 +589,9 @@ void schedtune_exit_task(struct task_struct *tsk)
 int schedtune_cpu_boost_with(int cpu, struct task_struct *p)
 {
 	struct boost_groups *bg;
-	u64 now;
 	int task_boost = p ? schedtune_task_boost(p) : -100;
 	
 	bg = &per_cpu(cpu_boost_groups, cpu);
-	now = sched_clock_cpu(cpu);
-
-	/* Check to see if we have a hold in effect */
-	if (schedtune_boost_timeout(now, bg->boost_ts))
-		schedtune_cpu_update(cpu, now);
 	
 	return max(bg->boost_max, task_boost);
 }
@@ -669,7 +603,7 @@ struct adj_filter_data {
 };
 
 static struct adj_filter_data adj_filter_targets[] __read_mostly = {
-	// { -1, "foreground",	100 /* VISIBLE_APP_ADJ */ }, 
+	// { -1, "foreground",	100 /* VISIBLE_APP_ADJ */ },
 	{ -1, "top-app",	100 /* VISIBLE_APP_ADJ */ },
 };
 
@@ -779,6 +713,19 @@ boost_write(struct cgroup_subsys_state *css, struct cftype *cft,
 	if (boost < -100 || boost > 100)
 		return -EINVAL;
 	
+	boost = (boost > 10) ? 1 : 0;
+
+	if (likely(task_is_booster(current))) {
+		/*
+		 * XXX HACK: To fix energy compsumpttion and jitter on top-app task.
+		 * Change prefer_idle value for top-app based on boost value.
+		 * Exit early so we do not actually change boost value to reduce small overhead.
+		 */
+		st->prefer_idle = boost;
+
+		return 0;
+	}
+
 	boost_pct = boost;
 
 	/*
@@ -792,6 +739,7 @@ boost_write(struct cgroup_subsys_state *css, struct cftype *cft,
 	st->perf_constrain_idx = threshold_idx;
 
 	st->boost = boost;
+
 	if (css == &root_schedtune.css) {
 		sysctl_sched_cfs_boost = boost;
 		perf_boost_idx  = threshold_idx;
@@ -806,45 +754,11 @@ boost_write(struct cgroup_subsys_state *css, struct cftype *cft,
 	return 0;
 }
 
-int schedtune_prefer_high_cap(struct task_struct *p)
-{
-	struct schedtune *st;
-	int prefer_high_cap;
-
-	if (unlikely(!schedtune_initialized))
-		return 0;
-
-	/* Get prefer_high_cap value */
-	rcu_read_lock();
-	st = task_schedtune(p);
-	prefer_high_cap = st->prefer_high_cap;
-	rcu_read_unlock();
-
-	return prefer_high_cap;
-}
-
-static u64 prefer_high_cap_read(struct cgroup_subsys_state *css,
-				struct cftype *cft)
-{
-	struct schedtune *st = css_st(css);
-
-	return st->prefer_high_cap;
-}
-
-static int prefer_high_cap_write(struct cgroup_subsys_state *css,
-				 struct cftype *cft, u64 prefer_high_cap)
-{
-	struct schedtune *st = css_st(css);
-	st->prefer_high_cap = !!prefer_high_cap;
-
-	return 0;
-}
-
 static int boost_write_wrapper(struct cgroup_subsys_state *css,
 			       struct cftype *cft, s64 boost)
 {
-	if (likely(task_is_booster(current)))
-		return 0;
+	// if (likely(task_is_booster(current)))
+		// return 0;
 
 	return boost_write(css, cft, boost);
 }
@@ -858,15 +772,6 @@ static int prefer_idle_write_wrapper(struct cgroup_subsys_state *css,
 	return prefer_idle_write(css, cft, prefer_idle);
 }
 
-static int prefer_high_cap_write_wrapper(struct cgroup_subsys_state *css,
-				     struct cftype *cft, u64 prefer_high_cap)
-{
-	if (likely(task_is_booster(current)))
-		return 0;
-
-	return prefer_high_cap_write(css, cft, prefer_high_cap);
-}
-
 static struct cftype files[] = {
 	{
 		.name = "boost",
@@ -877,11 +782,6 @@ static struct cftype files[] = {
 		.name = "prefer_idle",
 		.read_u64 = prefer_idle_read,
 		.write_u64 = prefer_idle_write_wrapper,
-	},
-	{
-		.name = "prefer_high_cap",
-		.read_u64 = prefer_high_cap_read,
-		.write_u64 = prefer_high_cap_write_wrapper,
 	},
 	{} /* terminate */
 };
@@ -897,7 +797,6 @@ schedtune_boostgroup_init(struct schedtune *st, int idx)
 		bg = &per_cpu(cpu_boost_groups, cpu);
 		bg->group[idx].boost = 0;
 		bg->group[idx].valid = true;
-		bg->group[st->idx].ts = 0;
 	}
 
 	/* Keep track of allocated boost groups */
@@ -911,16 +810,15 @@ struct st_data {
 	char *name;
 	int boost;
 	bool prefer_idle;
-	bool prefer_high_cap;
 };
 static void write_default_values(struct cgroup_subsys_state *css)
 {
 	static struct st_data st_targets[] = {
-		{ "",	0, 0 ,0},
-		{ "top-app",	0, 0 ,1},
-		{ "foreground",	0, 0 ,0},
-		{ "background",	0, 0 ,0},
-		{ "rt",		0, 0 ,0},
+		{ "",	0, 0 },
+		{ "top-app",	1, 1 },
+		{ "foreground",	0, 0 },
+		{ "background",	0, 0 },
+		{ "rt",		0, 0 },
 	};
 		int i;
 
@@ -928,13 +826,11 @@ static void write_default_values(struct cgroup_subsys_state *css)
 		struct st_data tgt = st_targets[i];
 
 		if (!strcmp(css->cgroup->kn->name, tgt.name)) {
-			pr_info("stune_assist: setting values for %s: boost=%d prefer_idle=%d prefer_high_cap=%d\n",
-				tgt.name, tgt.boost, tgt.prefer_idle, tgt.prefer_high_cap);
+			pr_info("stune_assist: setting values for %s: boost=%d prefer_idle=%d \n",
+				tgt.name, tgt.boost, tgt.prefer_idle);
 
 			boost_write(css, NULL, tgt.boost);
 			prefer_idle_write(css, NULL, tgt.prefer_idle);
-			prefer_high_cap_write(css, NULL, tgt.prefer_high_cap);
-			
 		}
 	}
 }

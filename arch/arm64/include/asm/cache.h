@@ -18,7 +18,7 @@
 
 #include <asm/cachetype.h>
 
-#define L1_CACHE_SHIFT		6
+#define L1_CACHE_SHIFT		(6)
 #define L1_CACHE_BYTES		(1 << L1_CACHE_SHIFT)
 
 /*
@@ -28,7 +28,7 @@
  * cause parts of the buffer to be read into the cache before the
  * transfer is done, causing old data to be seen by the CPU.
  */
-#define ARCH_DMA_MINALIGN	(128)
+#define ARCH_DMA_MINALIGN	L1_CACHE_BYTES
 
 #ifndef __ASSEMBLY__
 

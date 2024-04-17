@@ -102,7 +102,7 @@ module_param_named(
  */
 s32 msm_cpuidle_get_deep_idle_latency(void)
 {
-	return 100;
+	return 10;
 }
 EXPORT_SYMBOL(msm_cpuidle_get_deep_idle_latency);
 
@@ -120,140 +120,6 @@ void lpm_suspend_wake_time(uint64_t wakeup_time)
 		suspend_wake_time = wakeup_time;
 }
 EXPORT_SYMBOL(lpm_suspend_wake_time);
-
-static uint32_t least_cluster_latency(struct lpm_cluster *cluster,
-					struct latency_level *lat_level)
-{
-	struct list_head *list;
-	struct lpm_cluster_level *level;
-	struct lpm_cluster *n;
-	struct power_params *pwr_params;
-	uint32_t latency = 0;
-	int i;
-
-	if (list_empty(&cluster->list)) {
-		for (i = 0; i < cluster->nlevels; i++) {
-			level = &cluster->levels[i];
-			pwr_params = &level->pwr;
-			if (lat_level->reset_level == level->reset_level) {
-				if ((latency > pwr_params->latency_us)
-						|| (!latency))
-					latency = pwr_params->latency_us;
-				break;
-			}
-		}
-	} else {
-		list_for_each(list, &cluster->parent->child) {
-			n = list_entry(list, typeof(*n), list);
-			if (lat_level->level_name) {
-				if (strcmp(lat_level->level_name,
-						 n->cluster_name))
-					continue;
-			}
-			for (i = 0; i < n->nlevels; i++) {
-				level = &n->levels[i];
-				pwr_params = &level->pwr;
-				if (lat_level->reset_level ==
-						level->reset_level) {
-					if ((latency > pwr_params->latency_us)
-								|| (!latency))
-						latency =
-						pwr_params->latency_us;
-					break;
-				}
-			}
-		}
-	}
-	return latency;
-}
-
-static uint32_t least_cpu_latency(struct list_head *child,
-				struct latency_level *lat_level)
-{
-	struct list_head *list;
-	struct lpm_cpu_level *level;
-	struct power_params *pwr_params;
-	struct lpm_cpu *cpu;
-	struct lpm_cluster *n;
-	uint32_t latency = 0;
-	int i;
-
-	list_for_each(list, child) {
-		n = list_entry(list, typeof(*n), list);
-		if (lat_level->level_name) {
-			if (strcmp(lat_level->level_name, n->cluster_name))
-				continue;
-		}
-		cpu = n->cpu;
-		for (i = 0; i < cpu->nlevels; i++) {
-			level = &cpu->levels[i];
-			pwr_params = &level->pwr;
-			if (lat_level->reset_level == level->reset_level) {
-				if ((latency > pwr_params->latency_us)
-							|| (!latency))
-					latency = pwr_params->latency_us;
-				break;
-			}
-		}
-	}
-	return latency;
-}
-
-static struct lpm_cluster *cluster_aff_match(struct lpm_cluster *cluster,
-							int affinity_level)
-{
-	struct lpm_cluster *n;
-
-	if ((cluster->aff_level == affinity_level)
-		|| ((cluster->cpu) && (affinity_level == 0)))
-		return cluster;
-	else if (!cluster->cpu) {
-		n =  list_entry(cluster->child.next, typeof(*n), list);
-		return cluster_aff_match(n, affinity_level);
-	} else
-		return NULL;
-}
-
-int lpm_get_latency(struct latency_level *level, uint32_t *latency)
-{
-	struct lpm_cluster *cluster;
-	uint32_t val;
-
-	if (!lpm_root_node) {
-		pr_err("%s: lpm_probe not completed\n", __func__);
-		return -EAGAIN;
-	}
-
-	if ((level->affinity_level < 0)
-		|| (level->affinity_level > lpm_root_node->aff_level)
-		|| (level->reset_level < LPM_RESET_LVL_RET)
-		|| (level->reset_level > LPM_RESET_LVL_PC)
-		|| !latency)
-		return -EINVAL;
-
-	cluster = cluster_aff_match(lpm_root_node, level->affinity_level);
-	if (!cluster) {
-		pr_err("%s:No matching cluster found for affinity_level:%d\n",
-					__func__, level->affinity_level);
-		return -EINVAL;
-	}
-
-	if (level->affinity_level == 0)
-		val = least_cpu_latency(&cluster->parent->child, level);
-	else
-		val = least_cluster_latency(cluster, level);
-
-	if (!val) {
-		pr_err("%s:No mode with affinity_level:%d reset_level:%d\n",
-			__func__, level->affinity_level, level->reset_level);
-		return -EINVAL;
-	}
-
-	*latency = val;
-
-	return 0;
-}
-EXPORT_SYMBOL(lpm_get_latency);
 
 static int lpm_cpu_callback(struct notifier_block *cpu_nb,
 	unsigned long action, void *hcpu)
@@ -757,9 +623,7 @@ static bool psci_enter_sleep(struct lpm_cluster *cluster, int idx, bool from_idl
 	 * idx = 0 is the default LPM state
 	 */
 	if (!idx) {
-		stop_critical_timings();
-		cpu_do_idle();
-		start_critical_timings();
+		wfi();
 		return 1;
 	} else {
 		int affinity_level = 0;
@@ -769,18 +633,14 @@ static bool psci_enter_sleep(struct lpm_cluster *cluster, int idx, bool from_idl
 		bool success = false;
 
 		if (cluster->cpu->levels[idx].hyp_psci) {
-			stop_critical_timings();
 			__invoke_psci_fn_smc(0xC4000021, 0, 0, 0);
-			start_critical_timings();
 			return 1;
 		}
 
 		affinity_level = PSCI_AFFINITY_LEVEL(affinity_level);
 		state_id |= (power_state | affinity_level
 			| cluster->cpu->levels[idx].psci_id);
-		stop_critical_timings();
 		success = !arm_cpuidle_suspend(state_id);
-		start_critical_timings();
 		return success;
 	}
 }
@@ -788,9 +648,7 @@ static bool psci_enter_sleep(struct lpm_cluster *cluster, int idx, bool from_idl
 static bool psci_enter_sleep(struct lpm_cluster *cluster, int idx, bool from_idle)
 {
 	if (!idx) {
-		stop_critical_timings();
-		cpu_do_idle();
-		start_critical_timings();
+		wfi();
 		return 1;
 	} else {
 		int affinity_level = 0;
@@ -802,9 +660,7 @@ static bool psci_enter_sleep(struct lpm_cluster *cluster, int idx, bool from_idl
 		affinity_level = PSCI_AFFINITY_LEVEL(affinity_level);
 		state_id |= (power_state | affinity_level
 			| cluster->cpu->levels[idx].psci_id);
-		stop_critical_timings();
 		success = !arm_cpuidle_suspend(state_id);
-		start_critical_timings();
 		return success;
 	}
 }
@@ -825,12 +681,7 @@ static int lpm_cpuidle_select(struct cpuidle_driver *drv,
 static int lpm_cpuidle_enter(struct cpuidle_device *dev,
 		struct cpuidle_driver *drv, int idx)
 {
-	if (!need_resched())
-		wfi();
-	
-	cpuidle_set_idle_cpu(dev->cpu);
-	cpuidle_clear_idle_cpu(dev->cpu);
-	
+	wfi();
 	return idx;
 }
 
@@ -912,10 +763,14 @@ static int cluster_cpuidle_register(struct lpm_cluster *cl)
 		struct lpm_cpu_level *cpu_level = &cl->cpu->levels[i];
 		snprintf(st->name, CPUIDLE_NAME_LEN, "C%u\n", i);
 		snprintf(st->desc, CPUIDLE_DESC_LEN, cpu_level->name);
-		st->flags = 0;
+		// st->flags = 0;
+		// st->exit_latency = cpu_level->pwr.latency_us;
+		// st->target_residency = 0;
+		if (cpu_level->pwr.local_timer_stop)
+			st->flags |= CPUIDLE_FLAG_TIMER_STOP;
 		st->exit_latency = cpu_level->pwr.latency_us;
+		st->target_residency = cpu_level->pwr.min_residency;
 		st->power_usage = cpu_level->pwr.ss_power;
-		st->target_residency = 0;
 		st->enter = lpm_cpuidle_enter;
 	}
 

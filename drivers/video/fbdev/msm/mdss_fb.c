@@ -46,6 +46,7 @@
 #include <linux/file.h>
 #include <linux/kthread.h>
 #include <linux/dma-buf.h>
+#include <linux/cpu_input_boost.h>
 #include <linux/devfreq_boost.h>
 #include <sync.h>
 #include <sw_sync.h>
@@ -1761,12 +1762,7 @@ void mdss_fb_set_backlight(struct msm_fb_data_type *mfd, u32 bkl_lvl)
 		if (!IS_CALIB_MODE_BL(mfd))
 			mdss_fb_scale_bl(mfd, &temp);
 #ifdef CONFIG_FB_MSM_MDSS_FLICKER_FREE
-		if (mfd->op_enable == 0)
-			mdss_fb_update_last_screen_on(true);
-		/* Update flicker free */
-		mdss_fb_update_last_screen_on_tmp();
-		if (mdss_fb_get_last_screen_on())
-			mdss_fb_update_flicker_free(mfd, temp);
+		mdss_fb_update_flicker_free(mfd, temp);
 #endif
 		/*
 		 * Even though backlight has been scaled, want to show that
@@ -1814,12 +1810,7 @@ void mdss_fb_update_backlight(struct msm_fb_data_type *mfd)
 				(*mfd->mdp.ad_calc_bl)(mfd, temp, &temp,
 								&bl_notify);
 #ifdef CONFIG_FB_MSM_MDSS_FLICKER_FREE
-			if (mfd->op_enable == 0)
-				mdss_fb_update_last_screen_on(true);
-			/* Update flicker free */
-			mdss_fb_update_last_screen_on_tmp();
-			if (mdss_fb_get_last_screen_on())
-				mdss_fb_update_flicker_free(mfd, temp);
+			mdss_fb_update_flicker_free(mfd, temp);
 #endif
 			if (bl_notify)
 				mdss_fb_bl_update_notify(mfd,
@@ -1844,7 +1835,7 @@ static int mdss_fb_start_disp_thread(struct msm_fb_data_type *mfd)
 	mdss_fb_get_split(mfd);
 
 	atomic_set(&mfd->commits_pending, 0);
-	mfd->disp_thread = kthread_run_perf_critical(cpu_lp_mask, __mdss_fb_display_thread,
+	mfd->disp_thread = kthread_run(__mdss_fb_display_thread,
 				mfd, "mdss_fb%d", mfd->index);
 
 	if (IS_ERR(mfd->disp_thread)) {
@@ -2062,7 +2053,7 @@ static int mdss_fb_blank_sub(int blank_mode, struct fb_info *info,
 	if (mfd->dcm_state == DCM_ENTER)
 		return -EPERM;
 
-	pr_info("%pS mode:%d\n", __builtin_return_address(0),
+	pr_debug("%pS mode:%d\n", __builtin_return_address(0),
 		blank_mode);
 
 	snprintf(trace_buffer, sizeof(trace_buffer), "fb%d blank %d",
@@ -2176,16 +2167,6 @@ static int mdss_fb_blank(int blank_mode, struct fb_info *info)
 	pr_debug("mode: %d\n", blank_mode);
 
 	pdata = dev_get_platdata(&mfd->pdev->dev);
-
-#ifdef CONFIG_FB_MSM_MDSS_FLICKER_FREE
-	if (blank_mode == 0) {
-		mdss_fb_update_last_screen_on(true);
-	} else {
-		mdss_fb_update_last_screen_on(false);
-	}
-
-	mdss_fb_update_last_screen_on_tmp();
-#endif
 
 	if (pdata->panel_info.is_lpm_mode &&
 			blank_mode == FB_BLANK_UNBLANK) {
@@ -5020,7 +5001,9 @@ int mdss_fb_do_ioctl(struct fb_info *info, unsigned int cmd,
 		ret = mdss_fb_mode_switch(mfd, dsi_mode);
 		break;
 	case MSMFB_ATOMIC_COMMIT:
+		cpu_input_boost_kick();
 		devfreq_boost_kick(DEVFREQ_MSM_CPUBW);
+
 		ret = mdss_fb_atomic_commit_ioctl(info, argp, file);
 		break;
 

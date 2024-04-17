@@ -276,8 +276,7 @@ static int cpu_cpu_flags(void)
 
 static inline int cpu_corepower_flags(void)
 {
-	return SD_SHARE_PKG_RESOURCES  | SD_SHARE_POWERDOMAIN | \
-	       SD_SHARE_CAP_STATES;
+	return SD_SHARE_PKG_RESOURCES;
 }
 
 static struct sched_domain_topology_level arm64_topology[] = {
@@ -288,7 +287,7 @@ static struct sched_domain_topology_level arm64_topology[] = {
 	{ NULL, },
 };
 
-static void update_cpu_capacity(unsigned int cpu)
+void update_cpu_power_capacity(int cpu)
 {
 	unsigned long capacity = SCHED_CAPACITY_SCALE;
 
@@ -299,13 +298,8 @@ static void update_cpu_capacity(unsigned int cpu)
 
 	set_capacity_scale(cpu, capacity);
 
-	pr_debug("CPU%d: update cpu_capacity %lu\n",
+	pr_info("CPU%d: update cpu_capacity %lu\n",
 		cpu, arch_scale_cpu_capacity(cpu));
-}
-
-void update_cpu_power_capacity(int cpu)
-{
-	update_cpu_capacity(cpu);
 }
 
 static void update_siblings_masks(unsigned int cpuid)

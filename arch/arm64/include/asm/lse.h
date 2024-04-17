@@ -3,18 +3,17 @@
 
 #if defined(CONFIG_AS_LSE) && defined(CONFIG_ARM64_LSE_ATOMICS)
 
+#define __LSE_PREAMBLE	".arch_extension lse\n"
+
+#include <linux/compiler.h>
+#include <linux/export.h>
 #include <linux/stringify.h>
 #include <asm/alternative.h>
-#include <asm/cpufeature.h>
+#include <asm/cpucaps.h>
 
 #ifdef __ASSEMBLER__
 
-#ifdef CONFIG_LTO_CLANG
-#define __LSE_PREAMBLE	".arch armv8-a+lse\n"
-#else
 .arch_extension	lse
-#define __LSE_PREAMBLE
-#endif
 
 .macro alt_lse, llsc, lse
 	alternative_insn "\llsc", "\lse", ARM64_HAS_LSE_ATOMICS
@@ -22,10 +21,8 @@
 
 #else	/* __ASSEMBLER__ */
 
-__asm__(".arch_extension	lse");
-
 /* Move the ll/sc atomics out-of-line */
-#define __LL_SC_INLINE
+#define __LL_SC_INLINE		notrace
 #define __LL_SC_PREFIX(x)	__ll_sc_##x
 #define __LL_SC_EXPORT(x)	EXPORT_SYMBOL(__LL_SC_PREFIX(x))
 

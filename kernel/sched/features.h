@@ -1,35 +1,19 @@
-/*
- * Only give sleepers 50% of their service deficit. This allows
- * them to run sooner, but does not allow tons of sleepers to
- * rip the spread apart.
- */
-#define SCHED_FEAT_GENTLE_FAIR_SLEEPERS 1
+/* SPDX-License-Identifier: GPL-2.0 */
 
 /*
- * Place new tasks ahead so that they do not starve already running
- * tasks
+ * Using the avg_vruntime, do the right thing and preserve lag across
+ * sleep+wake cycles. EEVDF placement strategy #1, #2 if disabled.
  */
-#define SCHED_FEAT_START_DEBIT 1
+#define SCHED_FEAT_PLACE_LAG 1
+#define SCHED_FEAT_PLACE_DEADLINE_INITIAL 1
+#define SCHED_FEAT_RUN_TO_PARITY 1
 
 /*
  * Prefer to schedule the task we woke last (assuming it failed
  * wakeup-preemption), since its likely going to consume data we
  * touched, increases cache locality.
  */
-#define SCHED_FEAT_NEXT_BUDDY 1
-
-/*
- * skip buddy i.e task called yield() is always skipped and the
- * next entity is selected to run irrespective of the vruntime
- */
-#define SCHED_FEAT_STRICT_SKIP_BUDDY 0
-
-/*
- * Prefer to schedule the task that ran last (when we did
- * wake-preempt) as that likely will touch the same data, increases
- * cache locality.
- */
-#define SCHED_FEAT_LAST_BUDDY 1
+#define SCHED_FEAT_NEXT_BUDDY 0
 
 /*
  * Consider buddies to be cache hot, decreases the likelyness of a
@@ -43,24 +27,24 @@
 #define SCHED_FEAT_WAKEUP_PREEMPTION 1
 
 #define SCHED_FEAT_HRTICK 0
+#define SCHED_FEAT_HRTICK_DL 0
 #define SCHED_FEAT_DOUBLE_TICK 0
 
 /*
  * Decrement CPU capacity based on time not spent running tasks
  */
-#define SCHED_FEAT_NONTASK_CAPACITY 0
+#define SCHED_FEAT_NONTASK_CAPACITY 1
 
 /*
  * Queue remote wakeups on the target CPU and process them
  * using the scheduler IPI. Reduces rq->lock contention/bounces.
  */
-#define SCHED_FEAT_TTWU_QUEUE 1
+#define SCHED_FEAT_TTWU_QUEUE 0
 
 /*
  * When doing wakeups, attempt to limit superfluous scans of the LLC domain.
  */
-#define SCHED_FEAT_SIS_AVG_CPU 0
-#define SCHED_FEAT_SIS_PROP 1
+#define SCHED_FEAT_SIS_UTIL 1
 
 /*
  * Issue a WARN when we do multiple update_rq_clock() calls
@@ -98,8 +82,7 @@
 #define SCHED_FEAT_UTIL_EST 1
 #define SCHED_FEAT_UTIL_EST_FASTUP 1
 
-#define SCHED_FEAT_ALT_PERIOD 1
-#define SCHED_FEAT_BASE_SLICE 1
+#define SCHED_FEAT_HZ_BW 1
 
 /*
  * Energy aware scheduling. Use platform energy model to guide scheduling
@@ -112,39 +95,13 @@
 #endif
 
 /*
- * Energy aware scheduling algorithm choices:
- * EAS_PREFER_IDLE
- *   Direct tasks in a schedtune.prefer_idle=1 group through
- *   the EAS path for wakeup task placement. Otherwise, put
- *   those tasks through the mainline slow path.
- */
-#define SCHED_FEAT_EAS_PREFER_IDLE 0
-
-/*
  * Request max frequency from schedutil whenever a RT task is running.
  */
 #define SCHED_FEAT_SUGOV_RT_MAX_FREQ 0
-
-/*
- * Use the Simplified Energy Model for EAS accounting only for
- * active costs of CPUs.
- */
-#define SCHED_FEAT_EAS_SIMPLIFIED_EM 1
 
 /*
  * Inflate the effective utilization of SchedTune-boosted tasks, which
  * generally leads to usage of higher frequencies.
  * If disabled, boosts will only bias tasks to higher-capacity CPUs.
  */
-#define SCHED_FEAT_SCHEDTUNE_BOOST_UTIL 1
-
-/*
- * Apply schedtune boost hold to tasks of all sched classes.
- * If enabled, schedtune will hold the boost applied to a CPU
- * for 50ms regardless of task activation - if the task is
- * still running 50ms later, the boost hold expires and schedtune
- * boost will expire immediately the task stops.
- * If disabled, this behaviour will only apply to tasks of the
- * RT class.
- */
-#define SCHED_FEAT_SCHEDTUNE_BOOST_HOLD_ALL 0
+#define SCHED_FEAT_SCHEDTUNE_BOOST_UTIL 0

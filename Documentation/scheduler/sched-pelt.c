@@ -74,7 +74,7 @@ void calc_converged_max(const int halflife)
 	n--;
 	printf("#define LOAD_AVG_PERIOD %d\n", halflife);
 	printf("#define LOAD_AVG_MAX %ld\n", max);
-	printf("#define LOAD_AVG_MAX_N %d\n\n", n);
+	// printf("#define LOAD_AVG_MAX_N %d\n\n", n);
 }
 
 void calc_accumulated_sum_32(const int halflife)

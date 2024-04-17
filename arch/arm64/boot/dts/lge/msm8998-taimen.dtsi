@@ -231,19 +231,5 @@
 			mnt_flags = "nosuid,nodev,noatime,barrier=1";
 			fsmgr_flags = "wait";
 		};
-		product {
-			compatible = "android,product";
-            dev = "/dev/block/platform/soc/1da4000.ufshc/by-name/product";
-            type = "ext4";
-            mnt_flags = "ro,barrier=1";
-            fsmgr_flags = "wait,slotselect";
-        };
-        system_ext {
-            compatible = "android,system_ext";
-            dev = "/dev/block/platform/soc/1da4000.ufshc/by-name/system_ext";
-            type = "ext4";
-            mnt_flags = "ro,barrier=1";
-            fsmgr_flags = "wait,slotselect";
-        };
 	};
 };

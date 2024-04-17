@@ -5,6 +5,7 @@
 #include <linux/jump_label.h>
 #include <linux/kobject.h>
 #include <linux/rcupdate.h>
+#include <linux/sched.h>
 
 // Dependencies were only split to sched/cpufreq.h after linux 4.10
 #include <linux/version.h>
@@ -32,7 +33,6 @@ struct em_cap_state {
  * em_perf_domain - Performance domain
  * @table:		List of capacity states, in ascending order
  * @nr_cap_states:	Number of capacity states
- * @kobj:		Kobject used to expose the domain in sysfs
  * @cpus:		Cpumask covering the CPUs of the domain
  *
  * A "performance domain" represents a group of CPUs whose performance is
@@ -43,7 +43,6 @@ struct em_cap_state {
 struct em_perf_domain {
 	struct em_cap_state *table;
 	int nr_cap_states;
-	struct kobject kobj;
 	unsigned long cpus[0];
 };
 
@@ -97,6 +96,8 @@ int em_register_perf_domain(cpumask_t *span, unsigned int nr_states,
  * @pd		: performance domain for which energy has to be estimated
  * @max_util	: highest utilization among CPUs of the domain
  * @sum_util	: sum of the utilization of all CPUs in the domain
+ * @allowed_cpu_cap	: maximum allowed CPU capacity for the @pd, which
+			  might reflect reduced frequency (due to thermal)
  *
  * This function must be used only for CPU devices. There is no validation,
  * i.e. if the EM is a CPU type and has cpumask allocated. It is called from
@@ -106,7 +107,8 @@ int em_register_perf_domain(cpumask_t *span, unsigned int nr_states,
  * a capacity state satisfying the max utilization of the domain.
  */
 static inline unsigned long em_cpu_energy(struct em_perf_domain *pd,
-				unsigned long max_util, unsigned long sum_util)
+				unsigned long max_util, unsigned long sum_util,
+				unsigned long allowed_cpu_cap)
 {
 	unsigned long freq, scale_cpu;
 	struct em_cap_state *cs;
@@ -118,11 +120,17 @@ static inline unsigned long em_cpu_energy(struct em_perf_domain *pd,
 	/*
 	 * In order to predict the capacity state, map the utilization of the
 	 * most utilized CPU of the performance domain to a requested frequency,
-	 * like schedutil.
+	 * like schedutil. Take also into account that the real
+	 * frequency might be set lower (due to thermal capping). Thus, clamp
+	 * max utilization to the allowed CPU capacity before calculating
+	 * effective frequency.
 	 */
 	cpu = cpumask_first(to_cpumask(pd->cpus));
 	scale_cpu = arch_scale_cpu_capacity(cpu);
 	cs = &pd->table[pd->nr_cap_states - 1];
+
+	max_util = map_util_perf(max_util);
+	max_util = min(max_util, allowed_cpu_cap);
 	freq = map_util_freq(max_util, cs->frequency, scale_cpu);
 
 	/*
@@ -203,7 +211,8 @@ static inline struct em_perf_domain *em_cpu_get(int cpu)
 	return NULL;
 }
 static inline unsigned long em_cpu_energy(struct em_perf_domain *pd,
-			unsigned long max_util, unsigned long sum_util)
+			unsigned long max_util, unsigned long sum_util,
+			unsigned long allowed_cpu_cap)
 {
 	return 0;
 }

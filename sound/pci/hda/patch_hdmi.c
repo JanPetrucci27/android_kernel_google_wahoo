@@ -1584,7 +1584,7 @@ static bool hdmi_present_sense(struct hdmi_spec_per_pin *per_pin, int repoll)
 			update_eld = true;
 		}
 		else if (repoll) {
-			queue_delayed_work(system_power_efficient_wq, &per_pin->work,
+			schedule_delayed_work(&per_pin->work,
 					      msecs_to_jiffies(300));
 			goto unlock;
 		}

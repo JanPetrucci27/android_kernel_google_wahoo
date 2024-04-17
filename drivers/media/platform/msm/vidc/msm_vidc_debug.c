@@ -16,7 +16,7 @@
 #include "msm_vidc_debug.h"
 #include "vidc_hfi_api.h"
 
-int msm_vidc_debug = 0;
+int msm_vidc_debug = VIDC_ERR | VIDC_WARN;
 EXPORT_SYMBOL(msm_vidc_debug);
 
 int msm_vidc_debug_out = VIDC_OUT_PRINTK;
@@ -142,7 +142,7 @@ static const struct file_operations ssr_fops = {
 struct dentry *msm_vidc_debugfs_init_drv(void)
 {
 	bool ok = false;
-	struct dentry *dir;
+	struct dentry *dir = NULL;
 
 	mutex_init(&debugfs_lock);
 	dir = debugfs_create_dir("msm_vidc", NULL);
@@ -155,7 +155,7 @@ struct dentry *msm_vidc_debugfs_init_drv(void)
 	struct dentry *f = debugfs_create_##__type(__name, S_IRUGO | S_IWUSR, \
 		dir, __value);                                                \
 	if (IS_ERR_OR_NULL(f)) {                                              \
-		dprintk(VIDC_ERR, "Failed creating debugfs file '%pd/%s'\n",  \
+		dprintk(VIDC_DBG, "Failed creating debugfs file '%pd/%s'\n",  \
 			dir, __name);                                         \
 		f = NULL;                                                     \
 	}                                                                     \
@@ -206,7 +206,7 @@ void msm_vidc_debugfs_deinit_drv(void)
 struct dentry *msm_vidc_debugfs_init_core(struct msm_vidc_core *core,
 		struct dentry *parent)
 {
-	struct dentry *dir = NULL;
+	struct dentry *dir;
 	char debugfs_name[MAX_DEBUGFS_NAME];
 	if (!core) {
 		dprintk(VIDC_ERR, "Invalid params, core: %pK\n", core);

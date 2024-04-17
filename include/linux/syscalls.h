@@ -61,6 +61,7 @@ struct compat_stat;
 struct compat_timeval;
 struct robust_list_head;
 struct getcpu_cache;
+struct futex_waitv;
 struct old_linux_dirent;
 struct perf_event_attr;
 struct file_handle;
@@ -819,6 +820,10 @@ asmlinkage long sys_get_robust_list(int pid,
 				    size_t __user *len_ptr);
 asmlinkage long sys_set_robust_list(struct robust_list_head __user *head,
 				    size_t len);
+asmlinkage long sys_futex_waitv(struct futex_waitv *waiters,
+				unsigned int nr_futexes, unsigned int flags,
+				struct timespec __user *timeout, clockid_t clockid);
+
 asmlinkage long sys_getcpu(unsigned __user *cpu, unsigned __user *node, struct getcpu_cache __user *cache);
 asmlinkage long sys_signalfd(int ufd, sigset_t __user *user_mask, size_t sizemask);
 asmlinkage long sys_signalfd4(int ufd, sigset_t __user *user_mask, size_t sizemask, int flags);

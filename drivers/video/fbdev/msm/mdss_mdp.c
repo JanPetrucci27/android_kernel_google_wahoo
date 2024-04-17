@@ -1861,8 +1861,7 @@ static int mdss_mdp_irq_clk_setup(struct mdss_data_type *mdata)
 	pr_debug("max mdp clk rate=%d\n", mdata->max_mdp_clk_rate);
 
 	ret = devm_request_irq(&mdata->pdev->dev, mdss_mdp_hw.irq_info->irq,
-				mdss_irq_handler,
-				IRQF_PERF_CRITICAL, "MDSS", mdata);
+				mdss_irq_handler, 0x0, "MDSS", mdata);
 	if (ret) {
 		pr_err("mdp request_irq() failed!\n");
 		return ret;
@@ -4855,7 +4854,7 @@ struct mdss_panel_cfg *mdss_panel_intf_type(int intf_val)
 }
 EXPORT_SYMBOL(mdss_panel_intf_type);
 
-struct irq_info *mdss_intr_line()
+struct irq_info *mdss_intr_line(void)
 {
 	return mdss_mdp_hw.irq_info;
 }

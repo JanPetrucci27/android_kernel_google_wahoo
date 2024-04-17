@@ -16,9 +16,7 @@ struct target_nrg {
 
 int schedtune_cpu_boost_with(int cpu, struct task_struct *p);
 int schedtune_task_boost(struct task_struct *tsk);
-
 int schedtune_prefer_idle(struct task_struct *tsk);
-int schedtune_prefer_high_cap(struct task_struct *tsk);
 
 void schedtune_exit_task(struct task_struct *tsk);
 
@@ -45,9 +43,7 @@ int schedtune_accept_deltas(int nrg_delta, int cap_delta,
 
 #define schedtune_cpu_boost_with(cpu, p)  0
 #define schedtune_task_boost(tsk) 0
-
 #define schedtune_prefer_idle(tsk) 0
-#define schedtune_prefer_high_cap(tsk) 0
 
 #define schedtune_exit_task(task) do { } while (0)
 

@@ -34,7 +34,7 @@
 
 	chosen {
 		stdout-path = "serial0";
-		bootargs = "quiet rcupdate.rcu_expedited=1 noirqdebug nodebugmon nosoftlockup rcu_nocbs=0-7 mce=ignore_ce cgroup_disable=pressure,memory";
+		bootargs = "quiet rcupdate.rcu_expedited=1 noirqdebug nodebugmon rcu_nocbs=0-7 pelt=16 mce=ignore_ce cgroup_disable=pressure,memory";
 	};
 
 	cpus {
@@ -43,15 +43,15 @@
 
 		CPU0: cpu@0 {
 			device_type = "cpu";
-			compatible = "arm,armv8";
+			compatible = "qcom,kryo280";
 			reg = <0x0 0x0>;
 			clock-frequency = <2035200000>;
 			qcom,limits-info = <&mitigation_profile0>;
 			qcom,lmh-dcvs = <&lmh_dcvs0>;
 			enable-method = "psci";
 			cpu-idle-states = <&LITTLE_CPU_SLEEP_0 &LITTLE_CPU_SLEEP_1>;
-			efficiency = <718>;
-			capacity-dmips-mhz = <718>;
+			efficiency = <526>;
+			capacity-dmips-mhz = <526>;
 			sched-energy-costs = <&CPU_COST_0 &CLUSTER_COST_0>;
 			next-level-cache = <&L2_0>;
 			qcom,ea = <&ea0>;
@@ -75,15 +75,15 @@
 
 		CPU1: cpu@1 {
 			device_type = "cpu";
-			compatible = "arm,armv8";
+			compatible = "qcom,kryo280";
 			reg = <0x0 0x1>;
 			clock-frequency = <2035200000>;
 			qcom,limits-info = <&mitigation_profile1>;
 			qcom,lmh-dcvs = <&lmh_dcvs0>;
 			enable-method = "psci";
 			cpu-idle-states = <&LITTLE_CPU_SLEEP_0 &LITTLE_CPU_SLEEP_1>;
-			efficiency = <718>;
-			capacity-dmips-mhz = <718>;
+			efficiency = <526>;
+			capacity-dmips-mhz = <526>;
 			sched-energy-costs = <&CPU_COST_0 &CLUSTER_COST_0>;
 			next-level-cache = <&L2_0>;
 			qcom,ea = <&ea1>;
@@ -102,15 +102,15 @@
 
 		CPU2: cpu@2 {
 			device_type = "cpu";
-			compatible = "arm,armv8";
+			compatible = "qcom,kryo280";
 			reg = <0x0 0x2>;
 			clock-frequency = <2035200000>;
 			qcom,limits-info = <&mitigation_profile2>;
 			qcom,lmh-dcvs = <&lmh_dcvs0>;
 			enable-method = "psci";
 			cpu-idle-states = <&LITTLE_CPU_SLEEP_0 &LITTLE_CPU_SLEEP_1>;
-			efficiency = <718>;
-			capacity-dmips-mhz = <718>;
+			efficiency = <526>;
+			capacity-dmips-mhz = <526>;
 			sched-energy-costs = <&CPU_COST_0 &CLUSTER_COST_0>;
 			next-level-cache = <&L2_0>;
 			qcom,ea = <&ea2>;
@@ -129,15 +129,15 @@
 
 		CPU3: cpu@3 {
 			device_type = "cpu";
-			compatible = "arm,armv8";
+			compatible = "qcom,kryo280";
 			reg = <0x0 0x3>;
 			clock-frequency = <2035200000>;
 			qcom,limits-info = <&mitigation_profile3>;
 			qcom,lmh-dcvs = <&lmh_dcvs0>;
 			enable-method = "psci";
 			cpu-idle-states = <&LITTLE_CPU_SLEEP_0 &LITTLE_CPU_SLEEP_1>;
-			efficiency = <718>;
-			capacity-dmips-mhz = <718>;
+			efficiency = <526>;
+			capacity-dmips-mhz = <526>;
 			sched-energy-costs = <&CPU_COST_0 &CLUSTER_COST_0>;
 			next-level-cache = <&L2_0>;
 			qcom,ea = <&ea3>;
@@ -156,9 +156,9 @@
 
 		CPU4: cpu@100 {
 			device_type = "cpu";
-			compatible = "arm,armv8";
+			compatible = "qcom,kryo280";
 			reg = <0x0 0x100>;
-			clock-frequency = <2208000000>;
+			clock-frequency = <2361600000>;
 			qcom,limits-info = <&mitigation_profile4>;
 			qcom,lmh-dcvs = <&lmh_dcvs1>;
 			enable-method = "psci";
@@ -187,9 +187,9 @@
 
 		CPU5: cpu@101 {
 			device_type = "cpu";
-			compatible = "arm,armv8";
+			compatible = "qcom,kryo280";
 			reg = <0x0 0x101>;
-			clock-frequency = <2208000000>;
+			clock-frequency = <2361600000>;
 			qcom,limits-info = <&mitigation_profile5>;
 			qcom,lmh-dcvs = <&lmh_dcvs1>;
 			enable-method = "psci";
@@ -214,9 +214,9 @@
 
 		CPU6: cpu@102 {
 			device_type = "cpu";
-			compatible = "arm,armv8";
+			compatible = "qcom,kryo280";
 			reg = <0x0 0x102>;
-			clock-frequency = <2208000000>;
+			clock-frequency = <2361600000>;
 			qcom,limits-info = <&mitigation_profile6>;
 			qcom,lmh-dcvs = <&lmh_dcvs1>;
 			enable-method = "psci";
@@ -241,9 +241,9 @@
 
 		CPU7: cpu@103 {
 			device_type = "cpu";
-			compatible = "arm,armv8";
+			compatible = "qcom,kryo280";
 			reg = <0x0 0x103>;
-			clock-frequency = <2208000000>;
+			clock-frequency = <2361600000>;
 			qcom,limits-info = <&mitigation_profile7>;
 			qcom,lmh-dcvs = <&lmh_dcvs1>;
 			enable-method = "psci";
@@ -352,10 +352,19 @@
 		
 		energy-costs {
 			compatible = "sched-energy";
-			
+
 			CPU_COST_0: core-cost0 {
 				busy-cost-data = <
-					549  530
+					748800	39
+					960000	52
+					1171200	70
+					1248000	75
+					1324800	85
+					1555200	108
+					1747200	145
+					1824000	159
+					1900800	185
+					2035200 156
 				>;
 				idle-cost-data = <
 					4 4 0 0
@@ -363,10 +372,18 @@
 			};
 			CPU_COST_1: core-cost1 {
 				busy-cost-data = <
-					497  314
-					561  366
-					720  593
-					944  1149
+					499200	66
+					979200	131
+					1190400	161
+					1344000	187
+					1420800	218
+					1728000	303
+					1804800	334
+					1881600	375
+					2035200	498
+					2208000	588
+					2265600	716
+					2361600	775
 				>;
 				idle-cost-data = <
 					10 10 0 0
@@ -374,7 +391,16 @@
 			};
 			CLUSTER_COST_0: cluster-cost0 {
 				busy-cost-data = <
-					549  85
+					748800	23
+					960000	29
+					1171200	33
+					1248000	35
+					1324800	38
+					1555200	46
+					1747200	53
+					1824000	59
+					1900800	66
+					2035200 69
 				>;
 				idle-cost-data = <
 					31 31 31 0
@@ -382,10 +408,18 @@
 			};
 			CLUSTER_COST_1: cluster-cost1 {
 				busy-cost-data = <
-					497  46
-					561  54
-					720  80
-					944  171
+					499200	29
+					979200	40
+					1190400	46
+					1344000	54
+					1420800	60
+					1728000	80
+					1804800	87
+					1881600	96
+					2035200	120
+					2208000	171
+					2265600	178
+					2361600	202
 				>;
 				idle-cost-data = <
 					50 50 50 0
@@ -740,7 +774,7 @@
 
 	memlat_cpu0: qcom,memlat-cpu0 {
 		compatible = "qcom,devbw";
-		governor = "mem_latency";
+		governor = "powersave";
 		qcom,src-dst-ports = <1 512>;
 		qcom,active-only;
 		qcom,bw-tbl =
@@ -760,7 +794,7 @@
 
 	memlat_cpu4: qcom,memlat-cpu4 {
 		compatible = "qcom,devbw";
-		governor = "mem_latency";
+		governor = "powersave";
 		qcom,src-dst-ports = <1 512>;
 		qcom,active-only;
 		status = "ok";
@@ -2779,7 +2813,7 @@
 					0x9ac 0x00 0x00
 					0x8a0 0x01 0x00
 					0x9e0 0x00 0x00
-					0x9dc 0x20 0x00
+					0x9dc 0x01 0x00
 					0x9a8 0x00 0x00
 					0x8a4 0x01 0x00
 					0x8a8 0x73 0x00

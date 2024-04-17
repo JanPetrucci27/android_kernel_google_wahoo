@@ -477,21 +477,11 @@ static int msm_load(struct drm_device *dev, unsigned long flags)
 		priv->disp_thread[i].crtc_id = priv->crtcs[i]->base.id;
 		init_kthread_worker(&priv->disp_thread[i].worker);
 		priv->disp_thread[i].dev = dev;
-		/* Only pin actual display thread to big cluster */
-		if (i == 0) {
-			priv->disp_thread[i].thread =
-				kthread_run_perf_critical(cpu_perf_mask,
-					kthread_worker_fn,
-					&priv->disp_thread[i].worker,
-					"crtc_commit:%d", priv->disp_thread[i].crtc_id);
-			pr_info("%i to big cluster", priv->disp_thread[i].crtc_id);
-		} else {
-			priv->disp_thread[i].thread =
-				kthread_run_perf_critical(cpu_lp_mask, kthread_worker_fn,
-					&priv->disp_thread[i].worker,
-					"crtc_commit:%d", priv->disp_thread[i].crtc_id);
-			pr_info("%i to little cluster", priv->disp_thread[i].crtc_id);
-		}
+		priv->disp_thread[i].thread =
+			kthread_run(kthread_worker_fn,
+				&priv->disp_thread[i].worker,
+				"crtc_commit:%d",
+				priv->disp_thread[i].crtc_id);
 
 		if (IS_ERR(priv->disp_thread[i].thread)) {
 			dev_err(dev->dev, "failed to create kthread\n");
@@ -1940,6 +1930,7 @@ static struct platform_driver msm_platform_driver = {
 		.name   = "msm_drm",
 		.of_match_table = dt_match,
 		.pm     = &msm_pm_ops,
+		.probe_type = PROBE_PREFER_ASYNCHRONOUS,
 	},
 	.id_table   = msm_id,
 };

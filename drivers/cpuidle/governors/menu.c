@@ -19,22 +19,12 @@
 #include <linux/sched.h>
 #include <linux/math64.h>
 
-/*
- * Please note when changing the tuning values:
- * If (MAX_INTERESTING-1) * RESOLUTION > UINT_MAX, the result of
- * a scaling operation multiplication may overflow on 32 bit platforms.
- * In that case, #define RESOLUTION as ULL to get 64 bit result:
- * #define RESOLUTION 1024ULL
- *
- * The default values do not overflow.
- */
 #define BUCKETS 12
 #define INTERVAL_SHIFT 3
 #define INTERVALS (1UL << INTERVAL_SHIFT)
 #define RESOLUTION 1024
 #define DECAY 8
-#define MAX_INTERESTING 50000
-
+#define MAX_INTERESTING (50000 * NSEC_PER_USEC)
 
 /*
  * Concepts and ideas behind the menu governor
@@ -118,16 +108,16 @@
 
 struct menu_device {
 	int             needs_update;
+	int             tick_wakeup;
 
-	unsigned int	next_timer_us;
-	unsigned int	predicted_us;
+	u64		next_timer_ns;
 	unsigned int	bucket;
 	unsigned int	correction_factor[BUCKETS];
 	unsigned int	intervals[INTERVALS];
 	int		interval_ptr;
 };
 
-static inline int which_bucket(unsigned int duration, unsigned long nr_iowaiters)
+static inline int which_bucket(u64 duration_ns, unsigned int nr_iowaiters)
 {
 	int bucket = 0;
 
@@ -140,15 +130,15 @@ static inline int which_bucket(unsigned int duration, unsigned long nr_iowaiters
 	if (nr_iowaiters)
 		bucket = BUCKETS/2;
 
-	if (duration < 10)
+	if (duration_ns < 10ULL * NSEC_PER_USEC)
 		return bucket;
-	if (duration < 100)
+	if (duration_ns < 100ULL * NSEC_PER_USEC)
 		return bucket + 1;
-	if (duration < 1000)
+	if (duration_ns < 1000ULL * NSEC_PER_USEC)
 		return bucket + 2;
-	if (duration < 10000)
+	if (duration_ns < 10000ULL * NSEC_PER_USEC)
 		return bucket + 3;
-	if (duration < 100000)
+	if (duration_ns < 100000ULL * NSEC_PER_USEC)
 		return bucket + 4;
 	return bucket + 5;
 }
@@ -160,7 +150,7 @@ static inline int which_bucket(unsigned int duration, unsigned long nr_iowaiters
  * to be, the higher this multiplier, and thus the higher
  * the barrier to go to an expensive C state.
  */
-static inline int performance_multiplier(unsigned long nr_iowaiters)
+static inline int performance_multiplier(unsigned int nr_iowaiters)
 {
 	/* for IO wait tasks (per cpu!) we add 10x each */
 	return 1 + 2 * nr_iowaiters;
@@ -176,10 +166,11 @@ static void menu_update(struct cpuidle_driver *drv, struct cpuidle_device *dev);
  * of points is below a threshold. If it is... then use the
  * average of these 8 points as the estimated value.
  */
-static unsigned int get_typical_interval(struct menu_device *data)
+static unsigned int get_typical_interval(struct menu_device *data,
+					 unsigned int predicted_us)
 {
 	int i, divisor;
-	unsigned int max, thresh, avg;
+	unsigned int min, max, thresh, avg;
 	uint64_t sum, variance;
 
 	thresh = INT_MAX; /* Discard outliers above this value */
@@ -187,6 +178,7 @@ static unsigned int get_typical_interval(struct menu_device *data)
 again:
 
 	/* First calculate the average of past intervals */
+	min = UINT_MAX;
 	max = 0;
 	sum  = 0;
 	divisor = 0;
@@ -197,8 +189,19 @@ again:
 			divisor++;
 			if (value > max)
 				max = value;
+
+			if (value < min)
+				min = value;
 		}
 	}
+
+	/*
+	 * If the result of the computation is going to be discarded anyway,
+	 * avoid the computation altogether.
+	 */
+	if (min >= predicted_us)
+		return UINT_MAX;
+
 	if (divisor == INTERVALS)
 		avg = sum >> INTERVAL_SHIFT;
 	else
@@ -261,94 +264,123 @@ again:
 static int menu_select(struct cpuidle_driver *drv, struct cpuidle_device *dev)
 {
 	struct menu_device *data = this_cpu_ptr(&menu_devices);
-	int latency_req = cpuidle_governor_latency_req(dev->cpu);
-	int i;
-	int first_idx;
-	int idx;
-	unsigned int interactivity_req;
-	unsigned int expected_interval;
-	unsigned long nr_iowaiters;
+	s64 latency_req = cpuidle_governor_latency_req(dev->cpu);
+	unsigned int predicted_us;
+	u64 predicted_ns;
+	u64 interactivity_req;
+	unsigned int nr_iowaiters;
+	int i, idx;
 	if (data->needs_update) {
 		menu_update(drv, dev);
 		data->needs_update = 0;
 	}
 
 	/* Special case when user has set very strict latency requirement */
-	if (unlikely(latency_req == 0))
+	if (unlikely(latency_req == 0)) {
 		return 0;
+	}
 
 	/* determine the expected residency time, round up */
-	data->next_timer_us = ktime_to_us(tick_nohz_get_sleep_length());
+	data->next_timer_ns = ktime_to_us(ktime_to_us(tick_nohz_get_sleep_length()));
 
 	nr_iowaiters = nr_iowait_cpu(dev->cpu);
-	data->bucket = which_bucket(data->next_timer_us, nr_iowaiters);
+	data->next_timer_ns = tick_nohz_get_sleep_length(&delta_next);
 
-	/*
-	 * Force the result of multiplication to be 64 bits even if both
-	 * operands are 32 bits.
-	 * Make sure to round up for half microseconds.
-	 */
-	data->predicted_us = DIV_ROUND_CLOSEST_ULL((uint64_t)data->next_timer_us *
-					 data->correction_factor[data->bucket],
-					 RESOLUTION * DECAY);
-
-	expected_interval = get_typical_interval(data);
-	expected_interval = min(expected_interval, data->next_timer_us);
-
-	if (CPUIDLE_DRIVER_STATE_START > 0) {
-		struct cpuidle_state *s = &drv->states[CPUIDLE_DRIVER_STATE_START];
-		unsigned int polling_threshold;
+	if (unlikely(drv->state_count <= 1) ||
+	    ((data->next_timer_ns < drv->states[1].target_residency_ns ||
+	      latency_req < drv->states[1].exit_latency_ns) &&
+	     !drv->states[0].disabled && !dev->states_usage[0].disable)) {
 		/*
-		 * We want to default to C1 (hlt), not to busy polling
-		 * unless the timer is happening really really soon, or
-		 * C1's exit latency exceeds the user configured limit.
+		 * In this case state[0] will be used no matter what, so return
+		 * it right away.
 		 */
-		polling_threshold = max_t(unsigned int, 20, s->target_residency);
-		if (data->next_timer_us > polling_threshold &&
-		    latency_req > s->exit_latency && !s->disabled &&
-		    !dev->states_usage[CPUIDLE_DRIVER_STATE_START].disable)
-			first_idx = CPUIDLE_DRIVER_STATE_START;
-		else
-			first_idx = CPUIDLE_DRIVER_STATE_START - 1;
-		} else {
-			first_idx = 0;
-		}
-	
-	/*
-	 * Use the lowest expected idle interval to pick the idle state.
-	 */
-	data->predicted_us = min(data->predicted_us, expected_interval);
+		return 0;
+	}
 
-	/*
-	 * Use the performance multiplier and the user-configurable
-	 * latency_req to determine the maximum exit latency.
-	 */
-	interactivity_req = data->predicted_us / performance_multiplier(nr_iowaiters);
-	if (latency_req > interactivity_req)
-		latency_req = interactivity_req;
+	/* Round up the result for half microseconds. */
+	predicted_us = div_u64(data->next_timer_ns *
+			       data->correction_factor[data->bucket] +
+			       (RESOLUTION * DECAY * NSEC_PER_USEC) / 2,
+			       RESOLUTION * DECAY * NSEC_PER_USEC);
+	/* Use the lowest expected idle interval to pick the idle state. */
+	predicted_ns = (u64)min(predicted_us,
+				get_typical_interval(data, predicted_us)) *
+				NSEC_PER_USEC;
+
+	if (tick_nohz_tick_stopped()) {
+		/*
+		 * If the tick is already stopped, the cost of possible short
+		 * idle duration misprediction is much higher, because the CPU
+		 * may be stuck in a shallow idle state for a long time as a
+		 * result of it.  In that case say we might mispredict and try
+		 * to force the CPU into a state for which we would have stopped
+		 * the tick, unless a timer is going to expire really soon
+		 * anyway.
+		 */
+		if (predicted_ns < TICK_NSEC)
+			predicted_ns = delta_next;
+	} else {
+		/*
+		 * Use the performance multiplier and the user-configurable
+		 * latency_req to determine the maximum exit latency.
+		 */
+		interactivity_req = div64_u64(predicted_ns,
+					      performance_multiplier(nr_iowaiters));
+		if (latency_req > interactivity_req)
+			latency_req = interactivity_req;
+	}
 	
 	/*
 	 * Find the idle state with the lowest power while satisfying
 	 * our constraints.
 	 */
 	idx = -1;
-	for (i = first_idx; i < drv->state_count; i++) {
+	for (i = 0; i < drv->state_count; i++) {
 		struct cpuidle_state *s = &drv->states[i];
 
 		if (dev->states_usage[i].disable)
 			continue;
+
 		if (idx == -1)
 			idx = i; /* first enabled state */
-		if (s->target_residency > data->predicted_us)
-			break;
-		if (s->exit_latency > latency_req)
-			break;
 
+		if (s->target_residency_ns > predicted_ns) {
+			/*
+			 * Use a physical idle state, not busy polling, unless
+			 * a timer is going to trigger soon enough.
+			 */
+			if ((drv->states[idx].flags & CPUIDLE_FLAG_POLLING) &&
+			    s->exit_latency_ns <= latency_req &&
+			    s->target_residency_ns <= data->next_timer_ns) {
+				predicted_ns = s->target_residency_ns;
+				idx = i;
+				break;
+			}
+			break;
+		}
+		if (s->exit_latency_ns > latency_req) {
+			/*
+			 * If we break out of the loop for latency reasons, use
+			 * the target residency of the selected state as the
+			 * expected idle duration so that the tick is retained
+			 * as long as that target residency is low enough.
+			 */
+			predicted_ns = drv->states[idx].target_residency_ns;
+			break;
+		}
 		idx = i;
 	}
 	
 	if (idx == -1)
 		idx = 0; /* No states enabled. Must use 0. */
+
+	/*
+	 * Don't stop the tick if the selected state is a polling one or if the
+	 * expected idle duration is shorter than the tick period length.
+	 */
+	// if ((drv->states[idx].flags & CPUIDLE_FLAG_POLLING) ||
+	    // predicted_ns < TICK_USEC)
+		// *stop_tick = false;
 
 	dev->last_state_idx = idx;
 
@@ -369,6 +401,7 @@ static void menu_reflect(struct cpuidle_device *dev, int index)
 
 	dev->last_state_idx = index;
 	data->needs_update = 1;
+	data->tick_wakeup = tick_nohz_idle_got_tick();
 }
 
 /**
@@ -381,7 +414,7 @@ static void menu_update(struct cpuidle_driver *drv, struct cpuidle_device *dev)
 	struct menu_device *data = this_cpu_ptr(&menu_devices);
 	int last_idx = dev->last_state_idx;
 	struct cpuidle_state *target = &drv->states[last_idx];
-	unsigned int measured_us;
+	u64 measured_ns;
 	unsigned int new_factor;
 
 	/*
@@ -399,25 +432,39 @@ static void menu_update(struct cpuidle_driver *drv, struct cpuidle_device *dev)
 	 * assume the state was never reached and the exit latency is 0.
 	 */
 
-	/* measured value */
-	measured_us = cpuidle_get_last_residency(dev);
+	if (data->tick_wakeup && data->next_timer_ns > TICK_NSEC) {
+		/*
+		 * The nohz code said that there wouldn't be any events within
+		 * the tick boundary (if the tick was stopped), but the idle
+		 * duration predictor had a differing opinion.  Since the CPU
+		 * was woken up by a tick (that wasn't stopped after all), the
+		 * predictor was not quite right, so assume that the CPU could
+		 * have been idle long (but not forever) to help the idle
+		 * duration predictor do a better job next time.
+		 */
+		measured_ns = 9 * MAX_INTERESTING / 10;
+	} else {
+		/* measured value */
+		measured_ns = dev->last_residency_ns;
 
-	/* Deduct exit latency */
-	if (measured_us > 2 * target->exit_latency)
-		measured_us -= target->exit_latency;
-	else
-		measured_us /= 2;
+		/* Deduct exit latency */
+		if (measured_ns > 2 * target->exit_latency_ns)
+			measured_ns -= target->exit_latency_ns;
+		else
+			measured_ns /= 2;
+	}
 
 	/* Make sure our coefficients do not exceed unity */
-	if (measured_us > data->next_timer_us)
-		measured_us = data->next_timer_us;
+	if (measured_ns > data->next_timer_ns)
+		measured_ns = data->next_timer_ns;
 
 	/* Update our correction ratio */
 	new_factor = data->correction_factor[data->bucket];
 	new_factor -= new_factor / DECAY;
 
-	if (data->next_timer_us > 0 && measured_us < MAX_INTERESTING)
-		new_factor += RESOLUTION * measured_us / data->next_timer_us;
+	if (data->next_timer_ns > 0 && measured_ns < MAX_INTERESTING)
+		new_factor += div64_u64(RESOLUTION * measured_ns,
+					data->next_timer_ns);
 	else
 		/*
 		 * we were idle so long that we count it as a perfect
@@ -428,7 +475,7 @@ static void menu_update(struct cpuidle_driver *drv, struct cpuidle_device *dev)
 	/*
 	 * We don't want 0 as factor; we always want at least
 	 * a tiny bit of estimated time. Fortunately, due to rounding,
-	 * new_factor will stay nonzero regardless of measured_us values
+	 * new_factor will stay nonzero regardless of measured_ns values
 	 * and the compiler can eliminate this test as long as DECAY > 1.
 	 */
 	if (DECAY == 1 && unlikely(new_factor == 0))
@@ -437,7 +484,7 @@ static void menu_update(struct cpuidle_driver *drv, struct cpuidle_device *dev)
 	data->correction_factor[data->bucket] = new_factor;
 
 	/* update the repeating-pattern data */
-	data->intervals[data->interval_ptr++] = measured_us;
+	data->intervals[data->interval_ptr++] = ktime_to_us(measured_ns);
 	if (data->interval_ptr >= INTERVALS)
 		data->interval_ptr = 0;
 }

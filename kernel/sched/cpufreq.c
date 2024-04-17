@@ -13,7 +13,7 @@
 
 #include "sched.h"
 
-DEFINE_PER_CPU(struct update_util_data *, cpufreq_update_util_data);
+DEFINE_PER_CPU(struct update_util_data __rcu *, cpufreq_update_util_data);
 
 /**
  * cpufreq_add_update_util_hook - Populate the CPU's update_util_data pointer.
@@ -75,11 +75,7 @@ EXPORT_SYMBOL_GPL(cpufreq_remove_update_util_hook);
  */
 bool cpufreq_this_cpu_can_update(struct cpufreq_policy *policy)
 {
-	/*
-	 * Allow remote callbacks if:
-	 * - dvfs_possible_from_any_cpu flag is set
-	 * - the local and remote CPUs share cpufreq policy
-	 */
-	return policy->dvfs_possible_from_any_cpu ||
-		cpumask_test_cpu(smp_processor_id(), policy->cpus);
+	return cpumask_test_cpu(smp_processor_id(), policy->cpus) ||
+		(policy->dvfs_possible_from_any_cpu &&
+		 rcu_dereference_sched(*this_cpu_ptr(&cpufreq_update_util_data)));
 }

@@ -605,6 +605,8 @@ void __ext4_msg(struct super_block *sb,
 	struct va_format vaf;
 	va_list args;
 
+	return;
+
 	if (!___ratelimit(&(EXT4_SB(sb)->s_msg_ratelimit_state), "EXT4-fs"))
 		return;
 
@@ -2662,6 +2664,7 @@ static int ext4_feature_set_ok(struct super_block *sb, int readonly)
  */
 static void print_daily_error_info(unsigned long arg)
 {
+#ifdef CONFIG_DEBUG_FS
 	struct super_block *sb = (struct super_block *) arg;
 	struct ext4_sb_info *sbi;
 	struct ext4_super_block *es;
@@ -2702,6 +2705,7 @@ static void print_daily_error_info(unsigned long arg)
 		printk("\n");
 	}
 	mod_timer(&sbi->s_err_report, jiffies + 24*60*60*HZ);  /* Once a day */
+#endif
 }
 
 /* Find next suitable group and run ext4_init_inode_table */

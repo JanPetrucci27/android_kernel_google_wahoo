@@ -1994,11 +1994,11 @@ static int dwc3_msm_suspend(struct dwc3_msm *mdwc)
 
 	dbg_event(0xFF, "Ctl Sus", atomic_read(&dwc->in_lpm));
 
-	dev_info(mdwc->dev, "%s: Calling suspend %d\n", __func__, __LINE__);
+	dev_dbg(mdwc->dev, "%s: Calling suspend %d\n", __func__, __LINE__);
 
 	mutex_lock(&mdwc->suspend_resume_mutex);
 	if (atomic_read(&dwc->in_lpm)) {
-		dev_info(mdwc->dev, "%s: Already suspended\n", __func__);
+		dev_dbg(mdwc->dev, "%s: Already suspended\n", __func__);
 		mutex_unlock(&mdwc->suspend_resume_mutex);
 		return 0;
 	}
@@ -2305,7 +2305,7 @@ static int dwc3_msm_resume(struct dwc3_msm *mdwc)
 	dwc3_pwr_event_handler(mdwc);
 
 	if (pm_qos_request_active(&mdwc->pm_qos_req_dma))
-		queue_delayed_work(system_power_efficient_wq, &mdwc->perf_vote_work,
+		schedule_delayed_work(&mdwc->perf_vote_work,
 			msecs_to_jiffies(1000 * PM_QOS_SAMPLE_SEC));
 
 	dbg_event(0xFF, "Ctl Res", atomic_read(&dwc->in_lpm));
@@ -3393,7 +3393,7 @@ static void msm_dwc3_perf_vote_work(struct work_struct *w)
 
 	last_irq_cnt = dwc->irq_cnt;
 	msm_dwc3_perf_vote_update(mdwc, in_perf_mode);
-	queue_delayed_work(system_power_efficient_wq, &mdwc->perf_vote_work,
+	schedule_delayed_work(&mdwc->perf_vote_work,
 			msecs_to_jiffies(1000 * PM_QOS_SAMPLE_SEC));
 }
 
@@ -3510,7 +3510,7 @@ static int dwc3_otg_start_host(struct dwc3_msm *mdwc, int on)
 				PM_QOS_CPU_DMA_LATENCY, PM_QOS_DEFAULT_VALUE);
 		/* start in perf mode for better performance initially */
 		msm_dwc3_perf_vote_update(mdwc, true);
-		queue_delayed_work(system_power_efficient_wq, &mdwc->perf_vote_work,
+		schedule_delayed_work(&mdwc->perf_vote_work,
 				msecs_to_jiffies(1000 * PM_QOS_SAMPLE_SEC));
 	} else {
 		dev_dbg(mdwc->dev, "%s: turn off host\n", __func__);
@@ -3616,7 +3616,7 @@ static int dwc3_otg_start_peripheral(struct dwc3_msm *mdwc, int on)
 				PM_QOS_CPU_DMA_LATENCY, PM_QOS_DEFAULT_VALUE);
 		/* start in perf mode for better performance initially */
 		msm_dwc3_perf_vote_update(mdwc, true);
-		queue_delayed_work(system_power_efficient_wq, &mdwc->perf_vote_work,
+		schedule_delayed_work(&mdwc->perf_vote_work,
 				msecs_to_jiffies(1000 * PM_QOS_SAMPLE_SEC));
 	} else {
 		dev_dbg(mdwc->dev, "%s: turn off gadget %s\n",
@@ -3859,7 +3859,7 @@ static void dwc3_otg_sm_work(struct work_struct *w)
 	}
 
 	if (work)
-		queue_delayed_work(system_power_efficient_wq, &mdwc->sm_work, delay);
+		queue_delayed_work(system_freezable_wq, &mdwc->sm_work, delay);
 
 ret:
 	return;

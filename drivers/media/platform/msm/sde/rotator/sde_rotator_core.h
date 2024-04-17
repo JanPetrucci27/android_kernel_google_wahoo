@@ -1,5 +1,5 @@
 /* Copyright (c) 2015-2017, The Linux Foundation. All rights reserved.
- *
+ * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
  * only version 2 as published by the Free Software Foundation.
@@ -262,6 +262,7 @@ struct sde_rot_mgr {
 	atomic_t device_suspended;
 	struct platform_device *pdev;
 	struct device *device;
+	struct kthread_work thread_priority_work;
 
 	/*
 	 * Managing rotation queues, depends on

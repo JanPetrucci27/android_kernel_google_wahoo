@@ -70,9 +70,6 @@ static ssize_t store_##name(struct device *dev,				\
 	int ret;							\
 	unsigned int val;						\
 									\
-	if (likely(task_is_booster(current)))					\
-		return count;						\
-									\
 	ret = kstrtouint(buf, 10, &val);				\
 	if (ret)							\
 		return ret;						\

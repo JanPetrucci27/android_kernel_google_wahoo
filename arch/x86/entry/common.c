@@ -70,7 +70,7 @@ static void do_audit_syscall_entry(struct pt_regs *regs, u32 arch)
  */
 long syscall_trace_enter(struct pt_regs *regs)
 {
-	u32 arch = is_ia32_task() ? AUDIT_ARCH_I386 : AUDIT_ARCH_X86_64;
+	u32 arch = in_ia32_syscall() ? AUDIT_ARCH_I386 : AUDIT_ARCH_X86_64;
 
 	struct thread_info *ti = pt_regs_to_thread_info(regs);
 	unsigned long ret = 0;
@@ -228,8 +228,12 @@ __visible inline void prepare_exit_to_usermode(struct pt_regs *regs)
 	 * handling, because syscall restart has a fixup for compat
 	 * syscalls.  The fixup is exercised by the ptrace_syscall_32
 	 * selftest.
+	 *
+	 * We also need to clear TS_REGS_POKED_I386: the 32-bit tracer
+	 * special case only applies after poking regs and before the
+	 * very next return to user mode.
 	 */
-	ti->status &= ~TS_COMPAT;
+	ti->status &= ~(TS_COMPAT|TS_I386_REGS_POKED);
 #endif
 
 	user_enter();

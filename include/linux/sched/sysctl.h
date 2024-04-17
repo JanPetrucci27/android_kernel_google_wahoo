@@ -35,18 +35,8 @@ enum { sysctl_hung_task_timeout_secs = 0 };
 
 extern int sysctl_max_map_count;
 
-extern unsigned int sysctl_sched_latency;
-extern unsigned int sysctl_sched_min_granularity;
-extern unsigned int sysctl_sched_wakeup_granularity;
-extern unsigned int sysctl_sched_child_runs_first;
+extern unsigned int sysctl_sched_base_slice;
 extern unsigned int sysctl_sched_cstate_aware;
-extern unsigned int sysctl_sched_energy_aware;
-#ifdef CONFIG_SCHED_WALT
-extern unsigned int sysctl_sched_use_walt_cpu_util;
-extern unsigned int sysctl_sched_use_walt_task_util;
-extern unsigned int sysctl_sched_walt_init_task_load_pct;
-extern unsigned int sysctl_sched_walt_cpu_high_irqload;
-#endif
 
 enum sched_tunable_scaling {
 	SCHED_TUNABLESCALING_NONE,
@@ -64,7 +54,6 @@ extern unsigned int sysctl_numa_balancing_scan_size;
 extern __read_mostly unsigned int sysctl_sched_migration_cost;
 extern __read_mostly unsigned int sysctl_sched_nr_migrate;
 extern __read_mostly unsigned int sysctl_sched_time_avg;
-extern unsigned int sysctl_sched_shares_window;
 
 int sched_proc_update_handler(struct ctl_table *table, int write,
 		void __user *buffer, size_t *length,
@@ -125,12 +114,11 @@ extern int sysctl_schedstats(struct ctl_table *table, int write,
 				 void __user *buffer, size_t *lenp,
 				 loff_t *ppos);
 
-#define LIB_PATH_LENGTH 512
-extern char sched_lib_name[LIB_PATH_LENGTH];
-extern unsigned int sched_lib_mask_force;
-extern int sysctl_sched_lib_name_handler(struct ctl_table *table, int write,
-					 void __user *buffer, size_t *lenp,
-					 loff_t *ppos);
-extern bool is_sched_lib_based_app(pid_t pid);
+#if defined(CONFIG_ENERGY_MODEL) && defined(CONFIG_CPU_FREQ_GOV_SCHEDUTIL)
+extern unsigned int sysctl_sched_energy_aware;
+extern int sched_energy_aware_handler(struct ctl_table *table, int write,
+				 void __user *buffer, size_t *lenp,
+				 loff_t *ppos);
+#endif
 
 #endif /* _SCHED_SYSCTL_H */

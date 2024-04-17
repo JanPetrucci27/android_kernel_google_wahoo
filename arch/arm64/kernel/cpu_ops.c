@@ -83,7 +83,7 @@ static const char *__init cpu_read_enable_method(int cpu)
 			 * when spin-table is used for secondaries).
 			 * Don't warn spuriously.
 			 */
-			if (cpu != 0)
+			if (cpu != logical_bootcpu_id)
 				pr_err("%s: missing enable-method property\n",
 					dn->full_name);
 		}

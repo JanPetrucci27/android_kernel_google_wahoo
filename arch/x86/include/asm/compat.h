@@ -318,7 +318,7 @@ static inline bool is_x32_task(void)
 
 static inline bool is_compat_task(void)
 {
-	return is_ia32_task() || is_x32_task();
+	return in_ia32_syscall() || is_x32_task();
 }
 
 #endif /* _ASM_X86_COMPAT_H */

@@ -35,7 +35,6 @@ static int enabled_devices;
 static int off __read_mostly;
 static int initialized __read_mostly;
 
-
 #ifdef CONFIG_SMP
 static atomic_t idled = ATOMIC_INIT(0);
 
@@ -93,24 +92,24 @@ int cpuidle_play_dead(void)
 
 static int find_deepest_state(struct cpuidle_driver *drv,
 			      struct cpuidle_device *dev,
-			      unsigned int max_latency,
+			      u64 max_latency_ns,
 			      unsigned int forbidden_flags,
 			      bool freeze)
 {
-	unsigned int latency_req = 0;
-	int i, ret = -ENXIO;
+	u64 latency_req = 0;
+	int i, ret = 0;
 
-	for (i = 0; i < drv->state_count; i++) {
+	for (i = 1; i < drv->state_count; i++) {
 		struct cpuidle_state *s = &drv->states[i];
 
 		if (dev->states_usage[i].disable
-			|| s->exit_latency <= latency_req
-		    || s->exit_latency > max_latency
+			|| s->exit_latency_ns <= latency_req
+		    || s->exit_latency_ns > max_latency_ns
 		    || (s->flags & forbidden_flags)
 		    || (freeze && !s->enter_freeze))
 			continue;
 
-		latency_req = s->exit_latency;
+		latency_req = s->exit_latency_ns;
 		ret = i;
 	}
 	return ret;
@@ -141,7 +140,7 @@ void cpuidle_use_deepest_state(bool enable)
 int cpuidle_find_deepest_state(struct cpuidle_driver *drv,
 			       struct cpuidle_device *dev)
 {
-	return find_deepest_state(drv, dev, UINT_MAX, 0, false);
+	return find_deepest_state(drv, dev, U64_MAX, 0, false);
 }
 
 #ifdef CONFIG_SUSPEND
@@ -188,8 +187,8 @@ int cpuidle_enter_freeze(struct cpuidle_driver *drv, struct cpuidle_device *dev)
 	 * that interrupts won't be enabled when it exits and allows the tick to
 	 * be frozen safely.
 	 */
-	index = find_deepest_state(drv, dev, UINT_MAX, 0, true);
-	if (index >= 0)
+	index = find_deepest_state(drv, dev, U64_MAX, 0, true);
+	if (index > 0)
 		enter_freeze_proper(drv, dev, index);
 
 	return index;
@@ -217,7 +216,7 @@ int cpuidle_enter_state(struct cpuidle_device *dev, struct cpuidle_driver *drv,
 	 * CPU as a broadcast timer, this call may fail if it is not available.
 	 */
 	if (broadcast && tick_broadcast_enter()) {
-		index = find_deepest_state(drv, dev, target_state->exit_latency,
+		index = find_deepest_state(drv, dev, target_state->exit_latency_ns,
 					   CPUIDLE_FLAG_TIMER_STOP, false);
 		if (index < 0) {
 			default_idle_call();
@@ -255,7 +254,7 @@ int cpuidle_enter_state(struct cpuidle_device *dev, struct cpuidle_driver *drv,
 		local_irq_enable();
 
 	if (entered_state >= 0) {
-		s64 diff, delay = drv->states[entered_state].exit_latency;
+		s64 diff, delay = drv->states[entered_state].exit_latency_ns;
 		int i;
 		
 		/*
@@ -263,15 +262,13 @@ int cpuidle_enter_state(struct cpuidle_device *dev, struct cpuidle_driver *drv,
 		 * This can be moved to within driver enter routine,
 		 * but that results in multiple copies of same code.
 		 */
-		diff = ktime_us_delta(time_end, time_start);
-		if (diff > INT_MAX)
-			diff = INT_MAX;
+		diff = ktime_sub(time_end, time_start);
 
-		dev->last_residency = (int) diff;
-		dev->states_usage[entered_state].time += dev->last_residency;
+		dev->last_residency_ns = diff;
+		dev->states_usage[entered_state].time_ns += diff;
 		dev->states_usage[entered_state].usage++;
 		
-		if (diff < drv->states[entered_state].target_residency) {
+		if (diff < drv->states[entered_state].target_residency_ns) {
 			for (i = entered_state - 1; i >= 0; i--) {
 				if (drv->states[i].disabled ||
 				    dev->states_usage[i].disable)
@@ -291,14 +288,14 @@ int cpuidle_enter_state(struct cpuidle_device *dev, struct cpuidle_driver *drv,
 				 * Update if a deeper state would have been a
 				 * better match for the observed idle duration.
 				 */
-				if (diff - delay >= drv->states[i].target_residency)
+				if (diff - delay >= drv->states[i].target_residency_ns)
 					dev->states_usage[entered_state].below++;
 
 				break;
 			}
 		}
 	} else {
-		dev->last_residency = 0;
+		dev->last_residency_ns = 0;
 	}
 
 	return entered_state;
@@ -310,7 +307,11 @@ int cpuidle_enter_state(struct cpuidle_device *dev, struct cpuidle_driver *drv,
  * @drv: the cpuidle driver
  * @dev: the cpuidle device
  *
- * Returns the index of the idle state.
+ * Returns the index of the idle state.  The return value must not be negative.
+ *
+ * The memory location pointed to by @stop_tick is expected to be written the
+ * 'false' boolean value if the scheduler tick should not be stopped before
+ * entering the returned state.
  */
 int cpuidle_select(struct cpuidle_driver *drv, struct cpuidle_device *dev)
 {
@@ -525,7 +526,7 @@ static void __cpuidle_unregister_device(struct cpuidle_device *dev)
 static void __cpuidle_device_init(struct cpuidle_device *dev)
 {
 	memset(dev->states_usage, 0, sizeof(dev->states_usage));
-	dev->last_residency = 0;
+	dev->last_residency_ns = 0;
 	dev->next_hrtimer = 0;
 }
 

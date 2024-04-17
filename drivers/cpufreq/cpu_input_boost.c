@@ -11,8 +11,6 @@
 #include <linux/input.h>
 #include <linux/kthread.h>
 
-unsigned long last_input_time;
-
 enum {
 	SCREEN_OFF,
 	INPUT_BOOST,
@@ -79,9 +77,6 @@ static void update_online_cpu_policy(void)
 
 static void __cpu_input_boost_kick(struct boost_drv *b)
 {
-	if (msecs_to_jiffies(CONFIG_INPUT_BOOST_DURATION_MS) == 0)
-		return;
-	
 	if (test_bit(SCREEN_OFF, &b->state))
 		return;
 
@@ -96,8 +91,6 @@ void cpu_input_boost_kick(void)
 	struct boost_drv *b = &boost_drv_g;
 
 	__cpu_input_boost_kick(b);
-	
-	last_input_time = jiffies;
 }
 
 static void __cpu_input_boost_kick_max(struct boost_drv *b,
@@ -205,6 +198,8 @@ static int cpu_notifier_cb(struct notifier_block *nb, unsigned long action,
 	 * unboosting, set policy->min to the absolute min freq for the CPU.
 	 */
 	if (test_bit(INPUT_BOOST, &b->state))
+	// if (test_bit(INPUT_BOOST, &b->state)
+			// && (cpumask_test_cpu(policy->cpu, cpu_perf_mask))) //HACK: ALlow Big CLuster boosting only
 		policy->min = get_input_boost_freq(policy);
 	else
 		policy->min = policy->cpuinfo.min_freq;
@@ -238,9 +233,9 @@ static void cpu_input_boost_input_event(struct input_handle *handle,
 					unsigned int type, unsigned int code,
 					int value)
 {
-	struct boost_drv *b = handle->handler->private;
+	// struct boost_drv *b = handle->handler->private;
 
-	__cpu_input_boost_kick(b);
+	// __cpu_input_boost_kick(b);
 }
 
 static int cpu_input_boost_input_connect(struct input_handler *handler,
@@ -345,7 +340,7 @@ static int __init cpu_input_boost_init(void)
 		goto unregister_handler;
 	}
 
-	thread = kthread_run_perf_critical(cpu_lp_mask, cpu_thread, b, "cpu_boostd");
+	thread = kthread_run(cpu_thread, b, "cpu_boostd");
 	if (IS_ERR(thread)) {
 		ret = PTR_ERR(thread);
 		pr_err("Failed to start CPU boost thread, err: %d\n", ret);

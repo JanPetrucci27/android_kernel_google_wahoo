@@ -32,14 +32,6 @@ aes-ce-blk-y := aes-glue-ce.o aes-ce.o
 obj-$(CONFIG_CRYPTO_AES_ARM64_NEON_BLK) += aes-neon-blk.o
 aes-neon-blk-y := aes-glue-neon.o aes-neon.o
 
-ifeq ($(cc-name),clang)
-ccflags-y += -mtune=cortex-a53 -march=armv8-a+crc+crypto
-asflags-y += -mtune=cortex-a53 -march=armv8-a+crc+crypto
-else
-ccflags-y += -mtune=cortex-a73.cortex-a53 -march=armv8-a+crc+crypto
-asflags-y += -mtune=cortex-a73.cortex-a53 -march=armv8-a+crc+crypto
-endif
-
 ccflags-y += -O3
 
 AFLAGS_aes-ce.o		:= -DINTERLEAVE=4

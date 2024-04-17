@@ -311,7 +311,7 @@ static void wdsp_glink_notify_state(void *handle, const void *priv,
 	mutex_lock(&ch->mutex);
 	ch->channel_state = event;
 	if (event == GLINK_CONNECTED) {
-		dev_info(wpriv->dev, "%s: glink channel: %s connected\n",
+		dev_dbg(wpriv->dev, "%s: glink channel: %s connected\n",
 			__func__, ch->ch_cfg.name);
 
 		for (i = 0; i < ch->ch_cfg.no_of_intents; i++) {
@@ -338,14 +338,14 @@ static void wdsp_glink_notify_state(void *handle, const void *priv,
 		 * Don't use dev_dbg here as dev may not be valid if channel
 		 * closed from driver close.
 		 */
-		pr_info("%s: channel: %s disconnected locally\n",
+		pr_debug("%s: channel: %s disconnected locally\n",
 			 __func__, ch->ch_cfg.name);
 		mutex_unlock(&ch->mutex);
 		ch->free_mem = true;
 		wake_up(&ch->ch_free_wait);
 		return;
 	} else if (event == GLINK_REMOTE_DISCONNECTED) {
-		pr_info("%s: remote channel: %s disconnected remotely\n",
+		pr_debug("%s: remote channel: %s disconnected remotely\n",
 			 __func__, ch->ch_cfg.name);
 		/*
 		 * If remote disconnect happens, local side also has
@@ -483,12 +483,12 @@ static void wdsp_glink_ch_open_cls_wrk(struct work_struct *work)
 			     ch_open_cls_wrk);
 
 	if (wpriv->glink_state.link_state == GLINK_LINK_STATE_DOWN) {
-		dev_info(wpriv->dev, "%s: GLINK_LINK_STATE_DOWN\n",
+		dev_dbg(wpriv->dev, "%s: GLINK_LINK_STATE_DOWN\n",
 			 __func__);
 
 		wdsp_glink_close_all_ch(wpriv);
 	} else if (wpriv->glink_state.link_state == GLINK_LINK_STATE_UP) {
-		dev_info(wpriv->dev, "%s: GLINK_LINK_STATE_UP\n",
+		dev_dbg(wpriv->dev, "%s: GLINK_LINK_STATE_UP\n",
 			 __func__);
 
 		wdsp_glink_open_all_ch(wpriv);

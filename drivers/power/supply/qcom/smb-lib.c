@@ -3626,7 +3626,7 @@ static void smblib_port_overheat_handle_chg_state_change(
 		return;
 
 	cancel_delayed_work_sync(&chg->port_overheat_work);
-	queue_delayed_work(system_power_efficient_wq, &chg->port_overheat_work, 0);
+	schedule_delayed_work(&chg->port_overheat_work, 0);
 }
 
 irqreturn_t smblib_handle_chg_state_change(int irq, void *data)
@@ -3688,7 +3688,7 @@ irqreturn_t smblib_handle_step_chg_soc_update_request(int irq, void *data)
 	smblib_dbg(chg, PR_INTERRUPT, "IRQ: %s\n", irq_data->name);
 
 	if (!chg->bms_psy) {
-		queue_delayed_work(system_power_efficient_wq, &chg->step_soc_req_work,
+		schedule_delayed_work(&chg->step_soc_req_work,
 				      msecs_to_jiffies(STEP_SOC_REQ_MS));
 		return IRQ_HANDLED;
 	}
@@ -3848,7 +3848,7 @@ void smblib_usb_plugin_locked(struct smb_charger *chg)
 
 		/* Schedule work to enable parallel charger */
 		vote(chg->awake_votable, PL_DELAY_VOTER, true, 0);
-		queue_delayed_work(system_power_efficient_wq, &chg->pl_enable_work,
+		schedule_delayed_work(&chg->pl_enable_work,
 					msecs_to_jiffies(PL_DELAY_MS));
 	} else {
 		if (chg->wa_flags & BOOST_BACK_WA) {
@@ -3925,7 +3925,7 @@ irqreturn_t smblib_handle_icl_change(int irq, void *data)
 			delay = 0;
 
 		cancel_delayed_work_sync(&chg->icl_change_work);
-		queue_delayed_work(system_power_efficient_wq, &chg->icl_change_work,
+		schedule_delayed_work(&chg->icl_change_work,
 						msecs_to_jiffies(delay));
 	}
 
@@ -4154,7 +4154,7 @@ static void smblib_handle_apsd_done(struct smb_charger *chg, bool rising)
 		break;
 	case DCP_CHARGER_BIT:
 		if (chg->wa_flags & QC_CHARGER_DETECTION_WA_BIT)
-			queue_delayed_work(system_power_efficient_wq, &chg->hvdcp_detect_work,
+			schedule_delayed_work(&chg->hvdcp_detect_work,
 					      msecs_to_jiffies(HVDCP_DET_MS));
 		break;
 	default:
@@ -4456,7 +4456,7 @@ irqreturn_t smblib_handle_usb_typec_change(int irq, void *data)
 		cancel_delayed_work_sync(&chg->uusb_otg_work);
 		vote(chg->awake_votable, OTG_DELAY_VOTER, true, 0);
 		smblib_dbg(chg, PR_INTERRUPT, "Scheduling OTG work\n");
-		queue_delayed_work(system_power_efficient_wq, &chg->uusb_otg_work,
+		schedule_delayed_work(&chg->uusb_otg_work,
 				msecs_to_jiffies(chg->otg_delay_ms));
 		return IRQ_HANDLED;
 	}
@@ -4489,7 +4489,7 @@ irqreturn_t smblib_handle_high_duty_cycle(int irq, void *data)
 	struct smb_charger *chg = irq_data->parent_data;
 
 	chg->is_hdc = true;
-	queue_delayed_work(system_power_efficient_wq, &chg->clear_hdc_work, msecs_to_jiffies(60));
+	schedule_delayed_work(&chg->clear_hdc_work, msecs_to_jiffies(60));
 
 	return IRQ_HANDLED;
 }
@@ -4555,7 +4555,7 @@ irqreturn_t smblib_handle_switcher_power_ok(int irq, void *data)
 			 * permanently suspending the input if the boost-back
 			 * condition is unintentionally hit.
 			 */
-			queue_delayed_work(system_power_efficient_wq, &chg->bb_removal_work,
+			schedule_delayed_work(&chg->bb_removal_work,
 				msecs_to_jiffies(BOOST_BACK_UNVOTE_DELAY_MS));
 		}
 	}
@@ -4931,7 +4931,7 @@ static void port_overheat_work(struct work_struct *work)
 
 rerun:
 	if (rerun_work) {
-		queue_delayed_work(system_power_efficient_wq, 
+		schedule_delayed_work(
 			&chg->port_overheat_work,
 			msecs_to_jiffies(
 				chg->port_overheat_mitigation_work_interval));
@@ -4985,7 +4985,7 @@ static void smblib_otg_oc_work(struct work_struct *work)
 	 * triggered then it is likely that the software based soft start was
 	 * successful and the VBUS < 1V restriction should be re-enabled.
 	 */
-	queue_delayed_work(system_power_efficient_wq, &chg->otg_ss_done_work, msecs_to_jiffies(500));
+	schedule_delayed_work(&chg->otg_ss_done_work, msecs_to_jiffies(500));
 
 	rc = _smblib_otg_disable(chg);
 	if (rc < 0) {

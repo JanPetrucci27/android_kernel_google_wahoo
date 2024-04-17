@@ -224,7 +224,7 @@ static void event_handler(uint32_t opcode,
 				atomic_inc(&prtd->in_count);
 			}
 			if (atomic_read(&prtd->in_count) == prtd->periods) {
-				pr_info("%s: reclaimed all bufs\n", __func__);
+				pr_debug("%s: reclaimed all bufs\n", __func__);
 				if (atomic_read(&prtd->start))
 					snd_pcm_period_elapsed(substream);
 				wake_up(&the_locks.read_wait);
@@ -926,6 +926,14 @@ static int msm_pcm_capture_copy(struct snd_pcm_substream *substream,
 			xfer = size;
 		offset = prtd->in_frame_info[idx].offset;
 		pr_debug("Offset value = %d\n", offset);
+
+		if (offset >= size) {
+			pr_err("%s: Invalid dsp buf offset\n", __func__);
+			ret = -EFAULT;
+			q6asm_cpu_buf_release(OUT, prtd->audio_client);
+			goto fail;
+		}
+
 		if (copy_to_user(buf, bufptr+offset, xfer)) {
 			pr_err("Failed to copy buf to user\n");
 			ret = -EFAULT;

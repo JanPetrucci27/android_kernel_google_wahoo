@@ -114,7 +114,7 @@
 		_node = debugfs_create_dir(_name, _parent); \
 		if (IS_ERR(_node)) { \
 			_ret = PTR_ERR(_node); \
-			pr_err("Error creating debugfs dir:%s. err:%d\n", \
+			pr_debug("Error creating debugfs dir:%s. err:%d\n", \
 					_name, _ret); \
 		} \
 	} while (0)
@@ -3174,7 +3174,7 @@ static int __ref update_offline_cores(int val)
 
 	if (pend_hotplug_req && !in_suspend && !retry_in_progress) {
 		retry_in_progress = true;
-		queue_delayed_work(system_power_efficient_wq,
+		schedule_delayed_work(
 			&retry_hotplug_work,
 			msecs_to_jiffies(HOTPLUG_RETRY_INTERVAL_MS));
 	}
@@ -3671,7 +3671,7 @@ static void check_temp(struct work_struct *work)
 
 reschedule:
 	if (polling_enabled)
-		queue_delayed_work(system_power_efficient_wq,
+		schedule_delayed_work(
 			&check_temp_work,
 			msecs_to_jiffies(msm_thermal_info.poll_ms));
 }

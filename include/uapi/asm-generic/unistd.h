@@ -720,8 +720,11 @@ __SYSCALL(__NR_pidfd_send_signal, sys_pidfd_send_signal)
 #define __NR_pidfd_open 434
 __SYSCALL(__NR_pidfd_open, sys_pidfd_open)
 
+#define __NR_futex_waitv 435
+__SYSCALL(__NR_futex_waitv, sys_futex_waitv)
+
 #undef __NR_syscalls
-#define __NR_syscalls 435
+#define __NR_syscalls 436
 
 /*
  * All syscalls below here should go away really,

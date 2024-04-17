@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2018, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2019, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -108,9 +108,6 @@ static ssize_t store_##name(struct device *dev,				\
 	int ret;							\
 	unsigned int val;						\
 									\
-	if (likely(task_is_booster(current)))					\
-		return count;						\
-									\
 	ret = sscanf(buf, "%u", &val);					\
 	if (ret != 1)							\
 		return -EINVAL;						\
@@ -148,9 +145,6 @@ static ssize_t store_list_##name(struct device *dev,			\
 	struct hwmon_node *hw = df->data;				\
 	int ret;							\
 	unsigned int i = 0, val;					\
-									\
-	if (likely(task_is_booster(current)))					\
-		return count;						\
 									\
 	do {								\
 		ret = sscanf(buf, "%u", &val);				\
@@ -625,7 +619,8 @@ static int gov_start(struct devfreq *df)
 	node->orig_data = df->data;
 	df->data = node;
 
-	if (start_monitor(df, true))
+	ret = start_monitor(df, true);
+	if (ret)
 		goto err_start;
 
 	ret = sysfs_create_group(&df->dev.kobj, node->attr_grp);
@@ -698,11 +693,6 @@ static int gov_resume(struct devfreq *df)
 	if (!node->hw->resume_hwmon)
 		return -ENOSYS;
 
-	if (!node->resume_freq) {
-		dev_warn(df->dev.parent, "Governor already resumed!\n");
-		return -EBUSY;
-	}
-
 	mutex_lock(&df->lock);
 	update_devfreq(df);
 	mutex_unlock(&df->lock);
@@ -738,9 +728,6 @@ static ssize_t store_throttle_adj(struct device *dev,
 	struct hwmon_node *node = df->data;
 	int ret;
 	unsigned int val;
-	
-	if (likely(task_is_booster(current)))
-		return count;
 
 	if (!node->hw->set_throttle_adj)
 		return -ENOSYS;

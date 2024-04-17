@@ -1248,7 +1248,7 @@ static int lmh_debug_init(void)
 		= lmh_debug_get_types;
 	ret = lmh_debug_register(&lmh_data->debug_info.debug_ops);
 	if (ret) {
-		pr_err("Error registering debug ops. err:%d\n", ret);
+		pr_debug("Error registering debug ops. err:%d\n", ret);
 		goto debug_init_exit;
 	}
 
@@ -1325,7 +1325,7 @@ static int lmh_probe(struct platform_device *pdev)
 
 	ret = lmh_debug_init();
 	if (ret) {
-		pr_err("LMH debug init failed. err:%d\n", ret);
+		pr_debug("LMH debug init failed. err:%d\n", ret);
 		ret = 0;
 	}
 	platform_set_drvdata(pdev, lmh_data);

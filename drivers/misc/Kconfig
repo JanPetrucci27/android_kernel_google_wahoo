@@ -606,7 +606,8 @@ config FORCE_FAST_CHARGE
 
 config FORCE_BATT_VOLTAGE_LIMIT
 	bool "Limit the battery voltage to 4.2mV."
-	default n
+	depends on FORCE_FAST_CHARGE
+	default y
 	help
 	  4.2mV is the optimum voltage to prolong the battery life of Lithium-based batteries.
 	  For reference: https://batteryuniversity.com/article/bu-808-how-to-prolong-lithium-based-batteries

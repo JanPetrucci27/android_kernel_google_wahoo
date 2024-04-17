@@ -28,6 +28,7 @@
 #include <linux/gfp.h>
 #include <linux/oom.h>
 #include <linux/smpboot.h>
+#include <linux/sched/isolation.h>
 #include "../time/tick-internal.h"
 
 #ifdef CONFIG_RCU_BOOST
@@ -2426,7 +2427,7 @@ static void rcu_spawn_one_nocb_kthread(struct rcu_state *rsp, int cpu)
 	}
 
 	/* Spawn the kthread for this CPU and RCU flavor. */
-	t = kthread_run_perf_critical(cpu_lp_mask, rcu_nocb_kthread, rdp_spawn,
+	t = kthread_run(rcu_nocb_kthread, rdp_spawn,
 			"rcuo%c/%d", rsp->abbr, cpu);
 
 	BUG_ON(IS_ERR(t));
@@ -3051,7 +3052,7 @@ static void rcu_bind_gp_kthread(void)
 	if (cpu >= 0 && cpu < nr_cpu_ids)
 		set_cpus_allowed_ptr(current, cpumask_of(cpu));
 #else /* #ifdef CONFIG_NO_HZ_FULL_SYSIDLE */
-	housekeeping_affine(current);
+	housekeeping_affine(current, HK_FLAG_RCU);
 #endif /* #else #ifdef CONFIG_NO_HZ_FULL_SYSIDLE */
 }
 

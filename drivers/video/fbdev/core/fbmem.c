@@ -36,6 +36,9 @@
 
 #include <asm/fb.h>
 
+#ifdef CONFIG_FB_MSM_MDSS_FLICKER_FREE
+#include "../../fbdev/msm/flicker_free.h"
+#endif
 
     /*
      *  Frame buffer device initialization and setup routines
@@ -1076,6 +1079,10 @@ fb_blank(struct fb_info *info, int blank)
 	struct fb_event event;
 	int ret = -EINVAL, early_ret;
 
+#ifdef CONFIG_FB_MSM_MDSS_FLICKER_FREE
+	enable_flicker_free(((blank == 0) ? true : false));
+#endif
+
  	if (blank > FB_BLANK_POWERDOWN)
  		blank = FB_BLANK_POWERDOWN;
 
@@ -1480,6 +1487,11 @@ __releases(&info->lock)
 	}
 	file->private_data = info;
 	info->file = file;
+
+#ifdef CONFIG_FB_MSM_MDSS_FLICKER_FREE
+	enable_flicker_free(true);
+#endif
+
 	if (info->fbops->fb_open) {
 		res = info->fbops->fb_open(info,1);
 		if (res)

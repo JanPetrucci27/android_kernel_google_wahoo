@@ -65,15 +65,38 @@ static struct msm_fb_data_type *ff_mfd;
 
 static uint32_t dither_copyback = 0;
 static uint32_t copyback = 0;
+static uint32_t last_bl_lvl = 0;
 
 /* State booleans */
 static bool pcc_enabled = false;
 static bool mdss_backlight_enable = false;
+static bool flicker_free_on = true;
 
-static bool last_screen_on = true;
-static bool last_screen_on_tmp = true;
+void enable_flicker_free(bool val)
+{
+	struct mdss_panel_data *pdata;
 
-static uint32_t last_bl_lvl = 0;
+	if (flicker_free_on != val) {
+		flicker_free_on = val;
+		if ((likely(ff_mfd) && flicker_free_on == false)) {
+		// if ((likely(ff_mfd))) {
+			pdata = dev_get_platdata(&ff_mfd->pdev->dev);
+			pdata->set_backlight(pdata, last_bl_lvl);
+		}
+	}
+
+	// if (flicker_free_on)
+		// pr_debug("FOO: Enabled \n");
+	// else
+		// pr_debug("BAR: Disabled \n");
+
+	flicker_free_on = val;
+}
+
+static inline bool get_mdss_backlight_enable(void)
+{
+	return mdss_backlight_enable && flicker_free_on;
+}
 
 static inline int flicker_free_push(int val)
 {
@@ -91,7 +114,7 @@ static inline int flicker_free_push(int val)
 
 	/* Configure dither values */
 	dither_config.flags = MDP_PP_OPS_WRITE;
-	if (mdss_backlight_enable && last_screen_on)
+	if (get_mdss_backlight_enable())
 		dither_config.flags |= MDP_PP_OPS_ENABLE;
 	else
 		dither_config.flags |= MDP_PP_OPS_DISABLE;
@@ -133,7 +156,7 @@ static inline int flicker_free_push(int val)
 
 uint32_t mdss_panel_calc_backlight(uint32_t bl_lvl)
 {
-	if (last_screen_on && mdss_backlight_enable && bl_lvl < elvss_off_threshold) {
+	if (get_mdss_backlight_enable() && bl_lvl < elvss_off_threshold) {
 		pcc_enabled = true;
 		if (!flicker_free_push(bl_lvl))
 			return elvss_off_threshold;
@@ -191,31 +214,11 @@ static const struct file_operations proc_file_fops_state = {
 
 void mdss_fb_update_flicker_free(struct msm_fb_data_type *mfd, uint32_t bl_lvl)
 {
+	if (!flicker_free_on && mfd->op_enable != 0)
+		return;
+
 	ff_mfd = mfd;
 	last_bl_lvl = bl_lvl;
-}
-
-void mdss_fb_update_last_screen_on(bool screen_on)
-{
-	last_screen_on = screen_on;
-}
-
-bool mdss_fb_get_last_screen_on(void)
-{
-	return last_screen_on;
-}
-
-void mdss_fb_update_last_screen_on_tmp(void)
-{
-	struct mdss_panel_data *pdata;
-
-	if (last_screen_on_tmp != last_screen_on) {
-		last_screen_on_tmp = last_screen_on;
-		if (likely(ff_mfd)) {
-			pdata = dev_get_platdata(&ff_mfd->pdev->dev);
-			pdata->set_backlight(pdata, last_bl_lvl);
-		}
-	}
 }
 
 void mdss_panel_set_elvss_off_threshold(int val)

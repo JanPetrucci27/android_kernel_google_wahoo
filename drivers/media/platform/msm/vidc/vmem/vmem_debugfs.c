@@ -63,7 +63,7 @@ struct dentry *vmem_debugfs_init(struct platform_device *pdev)
 
 	debugfs_root = debugfs_create_dir("vmem", NULL);
 	if (IS_ERR_OR_NULL(debugfs_root)) {
-		pr_warn("Failed to create '<debugfs>/vmem'\n");
+		pr_debug("Failed to create '<debugfs>/vmem'\n");
 		debugfs_root = NULL;
 		goto exit;
 	}

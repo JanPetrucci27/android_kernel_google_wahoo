@@ -18,7 +18,12 @@ ldflags-y := -shared -nostdlib -soname=linux-vdso.so.1  --hash-style=sysv \
 		--build-id -n -T
 ccflags-y := -fno-stack-protector
 ccflags-y += -DDISABLE_BRANCH_PROFILING -ffixed-x18
-ccflags-y += $(DISABLE_LTO)
+
+ifneq ($(CONFIG_LTO_CLANG),)
+ccflags-y	+= $(DISABLE_LTO)
+KBUILD_CFLAGS	+= $(DISABLE_LTO)
+endif
+
 ccflags-y += $(call cc-option, -fno-whole-program)
 
 # Force -O2 to avoid libgcc dependencies

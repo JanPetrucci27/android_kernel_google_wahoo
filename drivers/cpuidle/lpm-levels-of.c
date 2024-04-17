@@ -542,6 +542,8 @@ static int parse_power_params(struct device_node *node,
 	if (ret)
 		goto fail;
 
+	pwr->local_timer_stop = of_property_read_bool(node, "local-timer-stop");
+
 fail:
 	if (ret)
 		pr_err("%s(): %s Error reading %s\n", __func__, node->name,

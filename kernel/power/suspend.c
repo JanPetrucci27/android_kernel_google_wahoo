@@ -440,7 +440,7 @@ int suspend_devices_and_enter(suspend_state_t state)
 	suspend_test_start();
 	error = dpm_suspend_start(PMSG_SUSPEND);
 	if (error) {
-		pr_err("PM: Some devices failed to suspend, or early wake event detected\n");
+		pr_debug("PM: Some devices failed to suspend, or early wake event detected\n");
 		log_suspend_abort_reason("Some devices failed to suspend, or early wake event detected");
 		goto Recover_platform;
 	}
@@ -508,8 +508,7 @@ static int enter_state(suspend_state_t state)
 	}
 	if (!mutex_trylock(&pm_mutex))
 		return -EBUSY;
-	
-	pm_wakeup_clear();
+
 	if (state == PM_SUSPEND_FREEZE)
 		freeze_begin();
 

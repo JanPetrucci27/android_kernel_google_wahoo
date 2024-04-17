@@ -40,31 +40,32 @@ struct rt_mutex_waiter {
  */
 static inline int rt_mutex_has_waiters(struct rt_mutex *lock)
 {
-	return !RB_EMPTY_ROOT(&lock->waiters);
+	return !RB_EMPTY_ROOT(&lock->waiters.rb_root);
 }
 
 static inline struct rt_mutex_waiter *
 rt_mutex_top_waiter(struct rt_mutex *lock)
 {
-	struct rt_mutex_waiter *w;
+	struct rb_node *leftmost = rb_first_cached(&lock->waiters);
+	struct rt_mutex_waiter *w = NULL;
 
-	w = rb_entry(lock->waiters_leftmost, struct rt_mutex_waiter,
-		     tree_entry);
-	BUG_ON(w->lock != lock);
-
+	if (leftmost) {
+		w = rb_entry(leftmost, struct rt_mutex_waiter, tree_entry);
+		BUG_ON(w->lock != lock);
+	}
 	return w;
 }
 
 static inline int task_has_pi_waiters(struct task_struct *p)
 {
-	return !RB_EMPTY_ROOT(&p->pi_waiters);
+	return !RB_EMPTY_ROOT(&p->pi_waiters.rb_root);
 }
 
 static inline struct rt_mutex_waiter *
 task_top_pi_waiter(struct task_struct *p)
 {
-	return rb_entry(p->pi_waiters_leftmost, struct rt_mutex_waiter,
-			pi_tree_entry);
+	return rb_entry(p->pi_waiters.rb_leftmost,
+			struct rt_mutex_waiter, pi_tree_entry);
 }
 
 /*
@@ -97,7 +98,6 @@ enum rtmutex_chainwalk {
 /*
  * PI-futex support (proxy locking functions, etc.):
  */
-extern struct task_struct *rt_mutex_next_owner(struct rt_mutex *lock);
 extern void rt_mutex_init_proxy_locked(struct rt_mutex *lock,
 				       struct task_struct *proxy_owner);
 extern void rt_mutex_proxy_unlock(struct rt_mutex *lock);

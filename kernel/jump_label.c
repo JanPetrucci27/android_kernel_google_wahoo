@@ -250,7 +250,7 @@ void __static_key_slow_dec_deferred(struct static_key *key,
 	if (static_key_slow_try_dec(key))
 		return;
 
-	queue_delayed_work(system_power_efficient_wq, work, timeout);
+	schedule_delayed_work(work, timeout);
 }
 EXPORT_SYMBOL_GPL(__static_key_slow_dec_deferred);
 

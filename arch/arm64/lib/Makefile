@@ -1,6 +1,6 @@
 ccflags-y += -O3
 
-lib-y		:= bitops.o clear_user.o delay.o copy_from_user.o	\
+lib-y		:= clear_user.o delay.o copy_from_user.o		\
 		   copy_to_user.o copy_in_user.o copy_page.o		\
 		   clear_page.o csum.o memchr.o memcpy.o memmove.o	\
 		   memset.o memcmp.o strcmp.o strncmp.o strlen.o	\
@@ -24,7 +24,7 @@ obj-$(CONFIG_ARM64_LSE_ATOMICS) += atomic_ll_sc.o
 else
 lib-$(CONFIG_ARM64_LSE_ATOMICS) += atomic_ll_sc.o
 endif
-CFLAGS_atomic_ll_sc.o	:= -fcall-used-x0 -ffixed-x1 -ffixed-x2		\
+CFLAGS_atomic_ll_sc.o	:= -ffixed-x1 -ffixed-x2		\
 		   -ffixed-x3 -ffixed-x4 -ffixed-x5 -ffixed-x6		\
 		   -ffixed-x7 -fcall-saved-x8 -fcall-saved-x9		\
 		   -fcall-saved-x10 -fcall-saved-x11 -fcall-saved-x12	\

@@ -1838,7 +1838,7 @@ enum hdd_dot11_mode {
 #define CFG_FORCE_1X1_NAME      "gForce1x1Exception"
 #define CFG_FORCE_1X1_MIN       (0)
 #define CFG_FORCE_1X1_MAX       (1)
-#define CFG_FORCE_1X1_DEFAULT   (0)
+#define CFG_FORCE_1X1_DEFAULT   (1)
 
 /*
  * <ini>
@@ -7669,7 +7669,7 @@ enum hdd_link_speed_rpt_type {
  */
 #define CFG_ENABLE_FW_LOG_NAME                   "gEnablefwlog"
 #define CFG_ENABLE_FW_LOG_DISABLE                (0)
-#define CFG_ENABLE_FW_LOG_WMI                    (1)
+#define CFG_ENABLE_FW_LOG_WMI                    (0)
 #define CFG_ENABLE_FW_LOG_DIAG                   (2)
 #define CFG_ENABLE_FW_LOG_MIN                    (CFG_ENABLE_FW_LOG_DISABLE)
 #define CFG_ENABLE_FW_LOG_MAX                    (CFG_ENABLE_FW_LOG_DIAG)

@@ -136,10 +136,13 @@ config HAVE_KERNEL_LZO
 config HAVE_KERNEL_LZ4
 	bool
 
+config HAVE_KERNEL_ZSTD
+        bool
+
 choice
 	prompt "Kernel compression mode"
 	default KERNEL_GZIP
-	depends on HAVE_KERNEL_GZIP || HAVE_KERNEL_BZIP2 || HAVE_KERNEL_LZMA || HAVE_KERNEL_XZ || HAVE_KERNEL_LZO || HAVE_KERNEL_LZ4
+	depends on HAVE_KERNEL_GZIP || HAVE_KERNEL_BZIP2 || HAVE_KERNEL_LZMA || HAVE_KERNEL_XZ || HAVE_KERNEL_LZO || HAVE_KERNEL_LZ4 || HAVE_KERNEL_ZSTD
 	help
 	  The linux kernel is a kind of self-extracting executable.
 	  Several compression algorithms are available, which differ
@@ -217,6 +220,16 @@ config KERNEL_LZ4
 	  Its compression ratio is worse than LZO. The size of the kernel
 	  is about 8% bigger than LZO. But the decompression speed is
 	  faster than LZO.
+
+config KERNEL_ZSTD
+	bool "ZSTD"
+	depends on HAVE_KERNEL_ZSTD
+	help
+	  ZSTD is a compression algorithm targeting intermediate compression
+	  with fast decompression speed. It will compress better than GZIP and
+	  decompress around the same speed as LZO, but slower than LZ4. You
+	  will need at least 192 KB RAM or more for booting. The zstd command
+	  line tool is required for compression.
 
 endchoice
 
@@ -422,6 +435,11 @@ config SCHED_WALT
 	based set of metrics for tasks and runqueues. These metrics can be
 	used to guide task placement as well as task frequency requirements
 	for cpufreq governors.
+
+config HAVE_SCHED_AVG_IRQ
+	def_bool y
+	depends on IRQ_TIME_ACCOUNTING || PARAVIRT_TIME_ACCOUNTING
+	depends on SMP
 
 config BSD_PROCESS_ACCT
 	bool "BSD Process Accounting"
@@ -818,6 +836,13 @@ config RCU_EXPEDITE_BOOT
 	  
 endmenu # "RCU Subsystem"
 
+config CPU_ISOLATION
+	bool "CPU isolation"
+	help
+	  Make sure that CPUs running critical tasks are not disturbed by
+	  any source of "noise" such as unbound workqueues, timers, kthreads...
+	  Unbound jobs get offloaded to housekeeping CPUs.
+
 config BUILD_BIN2C
 	bool
 	default n
@@ -906,44 +931,6 @@ config HAVE_UNSTABLE_SCHED_CLOCK
 
 config GENERIC_SCHED_CLOCK
 	bool
-	
-menu "FAIR Scheduler tunables"
-
-choice
-	prompt "Utilization's PELT half-Life"
-	default PELT_UTIL_HALFLIFE_32
-	help
-	  Allows choosing one of the possible values for the PELT half-life to
-	  be used for the update of the utilization of tasks and CPUs.
-	  The half-life is the amount of [ms] required by the PELT signal to
-	  build up to 50% utilization. The higher the half-life the longer it
-	  takes for a task to be represented as a big one.
-
-	  If not sure, use the default of 32 ms.
-
-config PELT_UTIL_HALFLIFE_32
-	bool "32 ms, default for server"
-
-config PELT_UTIL_HALFLIFE_16
-	bool "16 ms, suggested for interactive workloads"
-	help
-	  Use 16ms as PELT half-life value. This will increase the ramp-up and
-	  decay of utlization and load twice as fast as for the default
-	  configuration using 32ms.
-
-config PELT_UTIL_HALFLIFE_12
-	bool "12 ms, faster"
-
-config PELT_UTIL_HALFLIFE_8
-	bool "8 ms, very fast"
-	help
-	  Use 8ms as PELT half-life value. This will increase the ramp-up and
-	  decay of utlization and load four time as fast as for the default
-	  configuration using 32ms.
-
-endchoice
-
-endmenu # FAIR Scheduler tunables"
 
 #
 # For architectures that want to enable the support for NUMA-affine scheduler
@@ -1387,6 +1374,13 @@ config CPUSETS_ASSIST
 	  This option enables in-kernel overrides for cpuset values.
 
 	  If unsure, say N.
+
+config SCHED_TUNE_DUMMY
+	bool "Create dummy SCHEDTUNE nodes"
+	depends on SMP
+	depends on !SCHED_TUNE && !CGROUP_SCHEDTUNE
+	help
+	  Create dummy SCHEDTUNE nodes.
 
 config DEFAULT_USE_ENERGY_AWARE
 	bool "Default to enabling the Energy Aware Scheduler feature"

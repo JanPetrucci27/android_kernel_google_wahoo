@@ -93,14 +93,6 @@ VDSO_CFLAGS += -Wno-int-to-pointer-cast
 VDSO_AFLAGS := $(VDSO_CAFLAGS)
 VDSO_AFLAGS += -D__ASSEMBLY__
 
-ifeq ($(cc-name),clang)
-VDSO_CFLAGS += -mtune=cortex-a53 -march=armv8-a
-VDSO_AFLAGS += -mtune=cortex-a53 -march=armv8-a
-else
-VDSO_CFLAGS += -mtune=cortex-a73.cortex-a53 -march=armv8-a
-VDSO_AFLAGS += -mtune=cortex-a73.cortex-a53 -march=armv8-a
-endif
-
 # From arm vDSO Makefile
 VDSO_LDFLAGS += -Bsymbolic --no-undefined -soname=linux-vdso.so.1
 VDSO_LDFLAGS += -z max-page-size=4096 -z common-page-size=4096
@@ -169,7 +161,7 @@ quiet_cmd_vdsosym = VDSOSYM $@
       cmd_vdsosym = $(NM) $< | $(gen-vdsosym) | LC_ALL=C sort > $@
 
 # Install commands for the unstripped file
-quiet_cmd_vdso_install = INSTALL $@
+quiet_cmd_vdso_install = INSTALL32 $@
       cmd_vdso_install = cp $(obj)/$@.dbg $(MODLIB)/vdso/vdso32.so
 
 vdso.so: $(obj)/vdso.so.dbg

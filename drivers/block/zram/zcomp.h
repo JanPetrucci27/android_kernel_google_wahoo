@@ -22,6 +22,8 @@ struct zcomp {
 	struct notifier_block notifier;
 
 	const char *name;
+
+	struct hlist_node node;
 };
 
 ssize_t zcomp_available_show(const char *comp, char *buf);

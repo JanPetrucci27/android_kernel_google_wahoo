@@ -691,7 +691,7 @@ static int wcd_spi_clk_ctrl(struct spi_device *spi,
 		 * flags.
 		 */
 		if (flags == WCD_SPI_CLK_FLAG_DELAYED) {
-			queue_delayed_work(system_power_efficient_wq, &wcd_spi->clk_dwork,
+			schedule_delayed_work(&wcd_spi->clk_dwork,
 				msecs_to_jiffies(WCD_SPI_CLK_OFF_TIMER_MS));
 		} else {
 			ret = wcd_spi_clk_disable(spi);
@@ -1340,7 +1340,7 @@ static int wcd_spi_component_bind(struct device *dev,
 	}
 
 	if (wcd_spi_debugfs_init(spi))
-		dev_err(&spi->dev, "%s: Failed debugfs init\n", __func__);
+		dev_dbg(&spi->dev, "%s: Failed debugfs init\n", __func__);
 
 	spi_message_init(&wcd_spi->msg1);
 	spi_message_add_tail(&wcd_spi->xfer1, &wcd_spi->msg1);

@@ -402,7 +402,7 @@ static int alarmtimer_suspend(struct device *dev)
 		return 0;
 
 	if (ktime_to_ns(min) < 2 * NSEC_PER_SEC)
-		__pm_wakeup_event(ws, ktime_to_ms(min) + 10);
+		__pm_wakeup_event(ws, MSEC_PER_SEC / 2);
 
 	/* Setup a timer to fire that far in the future */
 	rtc_timer_cancel(rtc, &rtctimer);
@@ -418,7 +418,7 @@ static int alarmtimer_suspend(struct device *dev)
 		/* Set alarm, if in the past reject suspend briefly to handle */
 		ret = rtc_timer_start(rtc, &rtctimer, now, ktime_set(0, 0));
 		if (ret < 0)
-			__pm_wakeup_event(ws, MSEC_PER_SEC /2);
+			__pm_wakeup_event(ws, MSEC_PER_SEC / 2);
 	}
 	return ret;
 }
@@ -462,8 +462,8 @@ static int alarmtimer_suspend(struct device *dev)
 	if (min == 0)
 		return 0;
 
-	if (ktime_to_ns(min) < 2 * NSEC_PER_SEC)
-		__pm_wakeup_event(ws, ktime_to_ms(min) + 10);
+	if (ktime_to_ns(min) < NSEC_PER_SEC / 2)
+		__pm_wakeup_event(ws, MSEC_PER_SEC / 2);
 
 	/* Setup an rtc timer to fire that far in the future */
 	rtc_timer_cancel(rtc, &rtctimer);
@@ -474,7 +474,7 @@ static int alarmtimer_suspend(struct device *dev)
 	/* Set alarm, if in the past reject suspend briefly to handle */
 	ret = rtc_timer_start(rtc, &rtctimer, now, ktime_set(0, 0));
 	if (ret < 0)
-		__pm_wakeup_event(ws, MSEC_PER_SEC);
+		__pm_wakeup_event(ws, MSEC_PER_SEC / 2);
 	return ret;
 }
 #endif
@@ -1024,11 +1024,10 @@ static int alarm_timer_nsleep(const clockid_t which_clock, int flags,
 	}
 
 	restart = &current->restart_block;
-	restart->fn = alarm_timer_nsleep_restart;
 	restart->nanosleep.clockid = type;
 	restart->nanosleep.expires = exp;
 	restart->nanosleep.rmtp = rmtp;
-	ret = -ERESTART_RESTARTBLOCK;
+	set_restart_fn(restart, alarm_timer_nsleep_restart);
 
 out:
 	return ret;

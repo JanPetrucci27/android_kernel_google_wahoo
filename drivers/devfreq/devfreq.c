@@ -682,7 +682,7 @@ int devfreq_resume_device(struct devfreq *devfreq)
 		return -EINVAL;
 
 	mutex_lock(&devfreq->event_lock);
-	if (!devfreq->governor) {
+	if (!devfreq->governor || !devfreq->dev_suspended) {
 		mutex_unlock(&devfreq->event_lock);
 		return 0;
 	}
@@ -832,11 +832,6 @@ static ssize_t governor_store(struct device *dev, struct device_attribute *attr,
 	int ret;
 	char str_governor[DEVFREQ_NAME_LEN + 1];
 	const struct devfreq_governor *governor, *prev_gov;
-	
-	if (likely(task_is_booster(current))) {
-		if (!strstr(dev_name(df->dev.parent), "gpubw"))
-			return count;
-	}
 
 	ret = sscanf(buf, "%" __stringify(DEVFREQ_NAME_LEN) "s", str_governor);
 	if (ret != 1)
@@ -954,9 +949,6 @@ static ssize_t polling_interval_store(struct device *dev,
 	struct devfreq *df = to_devfreq(dev);
 	unsigned int value;
 	int ret;
-	
-	if (likely(task_is_booster(current)))
-		return count;
 
 	if (!df->governor)
 		return -EINVAL;
@@ -981,9 +973,6 @@ static ssize_t min_freq_store(struct device *dev, struct device_attribute *attr,
 	unsigned long value;
 	int ret;
 	unsigned long max;
-	
-	if (!strstr(dev_name(df->dev.parent), "kgsl"))
-		return count;
 
 #ifdef CONFIG_DEVFREQ_BOOST
 	/* Minfreq is managed by devfreq_boost */
@@ -991,12 +980,26 @@ static ssize_t min_freq_store(struct device *dev, struct device_attribute *attr,
 		return count;
 #endif
 
+	if ((likely(task_is_booster(current)))
+			&& (strstr(dev_name(df->dev.parent), "cpubw")
+			|| strstr(dev_name(df->dev.parent), "kgsl")))
+		return count;
+
 	ret = sscanf(buf, "%lu", &value);
 	if (ret != 1)
 		return -EINVAL;
 	
-	if (value == 257000000)
-		value = 180000000;
+	if ((likely(task_is_booster(current))) && strstr(dev_name(df->dev.parent), "gpubw")
+			&& (value != 7759 || value != 11863)) {
+		value = 0;
+	}
+
+	// if ((likely(task_is_booster(current))) && strstr(dev_name(df->dev.parent), "kgsl")) {
+		// if (value == 257000000)
+			// value = 180000000;
+		// if (value == 710000000)
+			// value = 750000000;
+	// }
 	
 	mutex_lock(&df->event_lock);
 	mutex_lock(&df->lock);
@@ -1029,15 +1032,20 @@ static ssize_t max_freq_store(struct device *dev, struct device_attribute *attr,
 	int ret;
 	unsigned long min;
 	
-	if (!strstr(dev_name(df->dev.parent), "kgsl"))
+	if ((likely(task_is_booster(current)))
+			&& strstr(dev_name(df->dev.parent), "cpubw"))
 		return count;
 
 	ret = sscanf(buf, "%lu", &value);
 	if (ret != 1)
 		return -EINVAL;
 	
-	if (value == 710000000)
-		value = 750000000;
+	if ((likely(task_is_booster(current))) && strstr(dev_name(df->dev.parent), "kgsl")) {
+		if (value == 257000000)
+			value = 180000000;
+		if (value == 710000000)
+			value = 750000000;
+	}
 	
 	mutex_lock(&df->event_lock);
 	mutex_lock(&df->lock);

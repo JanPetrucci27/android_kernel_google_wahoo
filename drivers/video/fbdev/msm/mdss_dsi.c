@@ -858,7 +858,7 @@ static ssize_t mdss_dsi_cmd_write(struct file *file, const char __user *p,
 {
 	struct buf_data *pcmds = file->private_data;
 	ssize_t ret = 0;
-	int blen = 0;
+	unsigned int blen = 0;
 	char *string_buf;
 
 	mutex_lock(&pcmds->dbg_mutex);
@@ -870,6 +870,11 @@ static ssize_t mdss_dsi_cmd_write(struct file *file, const char __user *p,
 
 	/* Allocate memory for the received string */
 	blen = count + (pcmds->sblen);
+	if (blen > U32_MAX - 1) {
+		mutex_unlock(&pcmds->dbg_mutex);
+		return -EINVAL;
+	}
+
 	string_buf = krealloc(pcmds->string_buf, blen + 1, GFP_KERNEL);
 	if (!string_buf) {
 		pr_err("%s: Failed to allocate memory\n", __func__);
@@ -877,11 +882,11 @@ static ssize_t mdss_dsi_cmd_write(struct file *file, const char __user *p,
 		return -ENOMEM;
 	}
 
+	pcmds->string_buf = string_buf;
 	/* Writing in batches is possible */
 	ret = simple_write_to_buffer(string_buf, blen, ppos, p, count);
 
 	string_buf[blen] = '\0';
-	pcmds->string_buf = string_buf;
 	pcmds->sblen = blen;
 	mutex_unlock(&pcmds->dbg_mutex);
 	return ret;
@@ -1010,7 +1015,7 @@ static int mdss_dsi_debugfs_setup(struct mdss_panel_data *pdata,
 
 	dfs->root = debugfs_create_dir("dsi_ctrl_pdata", parent);
 	if (IS_ERR_OR_NULL(dfs->root)) {
-		pr_err("%s: debugfs_create_dir dsi fail, error %ld\n",
+		pr_debug("%s: debugfs_create_dir dsi fail, error %ld\n",
 			__func__, PTR_ERR(dfs->root));
 		kfree(dfs);
 		return -ENODEV;
@@ -1097,7 +1102,7 @@ static int mdss_dsi_debugfs_init(struct mdss_dsi_ctrl_pdata *ctrl_pdata)
 	panel_info = pdata->panel_info;
 	rc = mdss_dsi_debugfs_setup(pdata, panel_info.debugfs_info->root);
 	if (rc) {
-		pr_err("%s: Error in initilizing dsi ctrl debugfs\n",
+		pr_debug("%s: Error in initilizing dsi ctrl debugfs\n",
 				__func__);
 		return rc;
 	}
@@ -3558,7 +3563,7 @@ static int mdss_dsi_ctrl_probe(struct platform_device *pdev)
 	init_completion(&ctrl_pdata->wake_comp);
 	init_waitqueue_head(&ctrl_pdata->wake_waitq);
 	ctrl_pdata->wake_thread =
-		kthread_run_perf_critical(cpu_lp_mask, mdss_dsi_disp_wake_thread,
+		kthread_run(mdss_dsi_disp_wake_thread,
 					  ctrl_pdata, "mdss_display_wake");
 	if (IS_ERR(ctrl_pdata->wake_thread)) {
 		rc = PTR_ERR(ctrl_pdata->wake_thread);

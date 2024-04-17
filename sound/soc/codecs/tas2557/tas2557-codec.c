@@ -441,7 +441,7 @@ static int tas2557_configuration_put(struct snd_kcontrol *pKcontrol,
 
 	mutex_lock(&pTAS2557->codec_lock);
 
-	dev_info(pTAS2557->dev, "%s = %d\n", __func__, nConfiguration);
+	dev_dbg(pTAS2557->dev, "%s = %d\n", __func__, nConfiguration);
 	ret = tas2557_set_config(pTAS2557, nConfiguration);
 
 	mutex_unlock(&pTAS2557->codec_lock);
@@ -461,7 +461,7 @@ static int tas2557_calibration_get(struct snd_kcontrol *pKcontrol,
 	mutex_lock(&pTAS2557->codec_lock);
 
 	pValue->value.integer.value[0] = pTAS2557->mnCurrentCalibration;
-	dev_info(pTAS2557->dev,
+	dev_dbg(pTAS2557->dev,
 		"tas2557_calibration_get = %d\n",
 		pTAS2557->mnCurrentCalibration);
 

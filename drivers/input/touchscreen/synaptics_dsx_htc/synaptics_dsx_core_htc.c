@@ -151,7 +151,6 @@ static int synaptics_rmi4_hw_reset_device(struct synaptics_rmi4_data *rmi4_data)
 static irqreturn_t synaptics_rmi4_irq(int irq, void *data);
 
 #ifdef CONFIG_FB
-static void synaptics_pm_worker(struct work_struct *work);
 static int synaptics_rmi4_fb_notifier_cb(struct notifier_block *self,
 		unsigned long event, void *data);
 #endif
@@ -2520,12 +2519,7 @@ static irqreturn_t synaptics_rmi4_irq(int irq, void *data)
 	}
 #endif
 	
-	/* prevent CPU from entering deep sleep */
-	pm_qos_update_request(&rmi4_data->pm_touch_req, 100);
-	pm_qos_update_request(&rmi4_data->pm_i2c_req, 100);
 	synaptics_rmi4_sensor_report(rmi4_data, true);
-	pm_qos_update_request(&rmi4_data->pm_i2c_req, PM_QOS_DEFAULT_VALUE);
-	pm_qos_update_request(&rmi4_data->pm_touch_req, PM_QOS_DEFAULT_VALUE);
 
 exit:
 	return IRQ_HANDLED;
@@ -5566,7 +5560,6 @@ static int synaptics_rmi4_probe(struct platform_device *pdev)
 	struct synaptics_rmi4_data *rmi4_data;
 	const struct synaptics_dsx_hw_interface *hw_if;
 	const struct synaptics_dsx_board_data *bdata;
-	unsigned int i2c_irq;
 	
 	hw_if = pdev->dev.platform_data;
 	if (!hw_if) {
@@ -5672,7 +5665,6 @@ static int synaptics_rmi4_probe(struct platform_device *pdev)
 	}
 
 #ifdef CONFIG_FB
-	INIT_WORK(&rmi4_data->pm_work, synaptics_pm_worker);
 	rmi4_data->fb_notifier.notifier_call = synaptics_rmi4_fb_notifier_cb;
 	retval = fb_register_client(&rmi4_data->fb_notifier);
 	if (retval < 0) {
@@ -5707,36 +5699,11 @@ static int synaptics_rmi4_probe(struct platform_device *pdev)
 	rmi4_data->irq =
 		platform_get_irq_byname(to_platform_device(pdev->dev.parent),
 					"tp_direct_interrupt");
-					
-	i2c_irq = synaptics_rmi4_i2c_irq();
-	irq_set_perf_affinity(i2c_irq);
-
-	rmi4_data->pm_i2c_req.type = PM_QOS_REQ_AFFINE_IRQ;
-	rmi4_data->pm_i2c_req.irq = i2c_irq;
-	pm_qos_add_request(&rmi4_data->pm_i2c_req, PM_QOS_CPU_DMA_LATENCY,
-			   PM_QOS_DEFAULT_VALUE);
-
-	rmi4_data->pm_touch_req.type = PM_QOS_REQ_AFFINE_IRQ;
-	rmi4_data->pm_touch_req.irq = rmi4_data->irq;
-	pm_qos_add_request(&rmi4_data->pm_touch_req, PM_QOS_CPU_DMA_LATENCY,
-			   PM_QOS_DEFAULT_VALUE);
-	i2c_irq = synaptics_rmi4_i2c_irq();
-	irq_set_perf_affinity(i2c_irq);
-
-	rmi4_data->pm_i2c_req.type = PM_QOS_REQ_AFFINE_IRQ;
-	rmi4_data->pm_i2c_req.irq = i2c_irq;
-	pm_qos_add_request(&rmi4_data->pm_i2c_req, PM_QOS_CPU_DMA_LATENCY,
-			   PM_QOS_DEFAULT_VALUE);
-
-	rmi4_data->pm_touch_req.type = PM_QOS_REQ_AFFINE_IRQ;
-	rmi4_data->pm_touch_req.irq = rmi4_data->irq;
-	pm_qos_add_request(&rmi4_data->pm_touch_req, PM_QOS_CPU_DMA_LATENCY,
-			   PM_QOS_DEFAULT_VALUE);
 
 #if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 	retval = request_threaded_irq(rmi4_data->irq, synaptics_rmi4_hardirq,
 			synaptics_rmi4_irq,
-			IRQF_TRIGGER_HIGH | IRQF_ONESHOT | IRQF_PERF_CRITICAL,
+			IRQF_TRIGGER_HIGH | IRQF_ONESHOT,
 			PLATFORM_DRIVER_NAME,
 			rmi4_data);
 	if (retval < 0) {
@@ -6147,17 +6114,6 @@ static void synaptics_rmi4_wakeup_gesture(struct synaptics_rmi4_data *rmi4_data,
 }
 
 #ifdef CONFIG_FB
-static void synaptics_pm_worker(struct work_struct *work)
-{
-	struct synaptics_rmi4_data *rmi4_data =
-			container_of(work, typeof(*rmi4_data), pm_work);
-
-	if (rmi4_data->fb_ready)
-		synaptics_rmi4_resume(&rmi4_data->pdev->dev);
-	else
-		synaptics_rmi4_suspend(&rmi4_data->pdev->dev);
-}
-
 static int synaptics_rmi4_fb_notifier_cb(struct notifier_block *self,
 		unsigned long event, void *data)
 {
@@ -6175,14 +6131,12 @@ static int synaptics_rmi4_fb_notifier_cb(struct notifier_block *self,
 		     *transition == FB_BLANK_NORMAL ||
 		     *transition == FB_BLANK_VSYNC_SUSPEND) &&
 		    rmi4_data->fb_ready) {
-			flush_work(&rmi4_data->pm_work);
+			synaptics_rmi4_suspend(&rmi4_data->pdev->dev);
 			rmi4_data->fb_ready = false;
-			schedule_work(&rmi4_data->pm_work);
 		} else if (*transition == FB_BLANK_UNBLANK &&
 			   !rmi4_data->fb_ready) {
-			flush_work(&rmi4_data->pm_work);
+			synaptics_rmi4_resume(&rmi4_data->pdev->dev);
 			rmi4_data->fb_ready = true;
-			schedule_work(&rmi4_data->pm_work);
 		}
 	}
 

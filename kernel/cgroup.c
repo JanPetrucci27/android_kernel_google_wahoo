@@ -63,8 +63,9 @@
 #include <linux/nsproxy.h>
 #include <linux/binfmts.h>
 #include <linux/file.h>
-#include <linux/cpu_input_boost.h>
+#include <linux/sched/deadline.h>
 #include <net/sock.h>
+// #include <linux/devfreq_boost.h>
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/cgroup.h>
@@ -1917,7 +1918,7 @@ static int cgroup_remount(struct kernfs_root *kf_root, int *flags, char *data)
  */
 static bool use_task_css_set_links __read_mostly;
 
-static void cgroup_enable_task_cg_lists(void)
+void cgroup_enable_task_cg_lists(void)
 {
 	struct task_struct *p, *g;
 
@@ -3025,10 +3026,11 @@ static ssize_t __cgroup_procs_write(struct kernfs_open_file *of, char *buf,
 		ret = cgroup_attach_task(cgrp, tsk, threadgroup);
 	
 	/* This covers boosting for app launches and app transitions */
-	if (!ret && !threadgroup &&
-	    !strcmp(of->kn->parent->name, "top-app") &&
-	    task_is_zygote(tsk->parent))
-		cpu_input_boost_kick_max();
+	// if (!ret && !threadgroup &&
+		// !memcmp(of->kn->parent->name, "top-app", sizeof("top-app")) &&
+		// task_is_zygote(tsk->parent)) {
+		// devfreq_boost_kick_max(DEVFREQ_MSM_CPUBW, 500);
+	// }
 
 	put_task_struct(tsk);
 	goto out_unlock_threadgroup;
@@ -6172,6 +6174,8 @@ void cgroup_exit(struct task_struct *tsk)
 	if (!list_empty(&tsk->cg_list)) {
 		spin_lock_irq(&css_set_lock);
 		css_set_move_task(tsk, cset, NULL, false);
+		if (dl_task(tsk))
+			dec_dl_tasks_cs(tsk);
 		spin_unlock_irq(&css_set_lock);
 	} else {
 		get_css_set(cset);

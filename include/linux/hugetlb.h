@@ -453,17 +453,6 @@ static inline int hstate_index(struct hstate *h)
 	return h - hstates;
 }
 
-pgoff_t __basepage_index(struct page *page);
-
-/* Return page->index in PAGE_SIZE units */
-static inline pgoff_t basepage_index(struct page *page)
-{
-	if (!PageCompound(page))
-		return page->index;
-
-	return __basepage_index(page);
-}
-
 extern void dissolve_free_huge_pages(unsigned long start_pfn,
 				     unsigned long end_pfn);
 static inline int hugepage_migration_supported(struct hstate *h)
@@ -531,10 +520,6 @@ static inline unsigned int pages_per_huge_page(struct hstate *h)
 #define hstate_index_to_shift(index) 0
 #define hstate_index(h) 0
 
-static inline pgoff_t basepage_index(struct page *page)
-{
-	return page->index;
-}
 #define dissolve_free_huge_pages(s, e)	do {} while (0)
 #define hugepage_migration_supported(h)	0
 

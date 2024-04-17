@@ -1750,7 +1750,7 @@ static void ipa_wwan_setup(struct net_device *dev)
 	dev->flags &= ~(IFF_BROADCAST | IFF_MULTICAST);
 	dev->needed_headroom = HEADROOM_FOR_QMAP;
 	dev->needed_tailroom = TAILROOM;
-	dev->watchdog_timeo = 1000;
+	dev->watchdog_timeo = msecs_to_jiffies(10000);
 }
 
 /* IPA_RM related functions start*/
@@ -2511,7 +2511,7 @@ static void tethering_stats_poll_queue(struct work_struct *work)
 
 	/* Schedule again only if there's an active polling interval */
 	if (0 != ipa_rmnet_ctx.polling_interval)
-		queue_delayed_work(system_power_efficient_wq, &ipa_tether_stats_poll_wakequeue_work,
+		schedule_delayed_work(&ipa_tether_stats_poll_wakequeue_work,
 			msecs_to_jiffies(ipa_rmnet_ctx.polling_interval*1000));
 }
 
@@ -2605,7 +2605,7 @@ int rmnet_ipa_poll_tethering_stats(struct wan_ioctl_poll_tethering_stats *data)
 		return 0;
 	}
 
-	queue_delayed_work(system_power_efficient_wq, &ipa_tether_stats_poll_wakequeue_work, 0);
+	schedule_delayed_work(&ipa_tether_stats_poll_wakequeue_work, 0);
 	return 0;
 }
 

@@ -3783,7 +3783,7 @@ static void update_kswapd_threads_node(int nid)
 		increase = kswapd_threads - nr_threads;
 		start_idx = last_idx + 1;
 		for (hid = start_idx; hid < (start_idx + increase); hid++) {
-			pgdat->mkswapd[hid] = kthread_run_perf_critical(cpu_lp_mask, kswapd, pgdat,
+			pgdat->mkswapd[hid] = kthread_run(kswapd, pgdat,
 						"kswapd%d:%d", nid, hid);
 			if (IS_ERR(pgdat->mkswapd[hid])) {
 				pr_err("Failed to start kswapd%d on node %d\n",
@@ -3828,7 +3828,7 @@ static int multi_kswapd_run(int nid)
 
 	pgdat->mkswapd[0] = pgdat->kswapd;
 	for (hid = 1; hid < nr_threads; ++hid) {
-		pgdat->mkswapd[hid] = kthread_run_perf_critical(cpu_lp_mask, kswapd, pgdat, "kswapd%d:%d",
+		pgdat->mkswapd[hid] = kthread_run(kswapd, pgdat, "kswapd%d:%d",
 								nid, hid);
 		if (IS_ERR(pgdat->mkswapd[hid])) {
 			/* failure at boot is fatal */
@@ -3912,9 +3912,9 @@ int kswapd_run(int nid)
 		return 0;
 
 #ifdef CONFIG_MULTIPLE_KSWAPD
-	pgdat->kswapd = kthread_run_perf_critical(cpu_lp_mask, kswapd, pgdat, "kswapd%d:0", nid);
+	pgdat->kswapd = kthread_run(kswapd, pgdat, "kswapd%d:0", nid);
 #else
-	pgdat->kswapd =  kthread_run(kswapd, pgdat, "kswapd%d", nid);
+	pgdat->kswapd = kthread_run(kswapd, pgdat, "kswapd%d", nid);
 #endif
 
 	if (IS_ERR(pgdat->kswapd)) {

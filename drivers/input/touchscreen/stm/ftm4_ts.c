@@ -50,7 +50,6 @@
 #include <linux/regulator/consumer.h>
 #include <linux/of_gpio.h>
 #include <linux/of_irq.h>
-#include <linux/i2c/i2c-msm-v2.h>
 #include <linux/wahoo_info.h>
 
 #ifdef CONFIG_TRUSTONIC_TRUSTED_UI
@@ -98,8 +97,6 @@ static int fts_suspend(struct i2c_client *client, pm_message_t mesg);
 static int fts_resume(struct i2c_client *client);
 
 #if defined(CONFIG_FB)
-static void touch_resume_worker(struct work_struct *work);
-static void touch_suspend_worker(struct work_struct *work);
 static int touch_fb_notifier_callback(struct notifier_block *self,
 		unsigned long event, void *data);
 #endif
@@ -305,7 +302,7 @@ int fts_systemreset(struct fts_ts_info *info)
 	unsigned char addr[4] = {0xB6, 0x00, 0x28, 0x80};
 	unsigned char addr_wbcrc[4] = {0xB6, 0x00, 0x1E, 0x20};
 
-	tsp_debug_info(&info->client->dev, "FTS Enable WBCRC\n");
+	tsp_debug_dbg(&info->client->dev, "FTS Enable WBCRC\n");
 	ret = fts_write_reg(info, &addr_wbcrc[0], 4);
 	fts_delay(10);
 
@@ -876,7 +873,7 @@ static int fts_init(struct fts_ts_info *info)
 static void fts_debug_msg_event_handler(struct fts_ts_info *info,
 				      unsigned char data[])
 {
-	tsp_debug_info(&info->client->dev,
+	tsp_debug_dbg(&info->client->dev,
 	       "%s: %02X %02X %02X %02X "
 	       "%02X %02X %02X %02X\n", __func__,
 	       data[0], data[1], data[2], data[3],
@@ -909,6 +906,7 @@ static void fts_error_event_handler(struct fts_ts_info *info,
 		fts_debug_msg_event_handler(info, data);
 }
 
+#ifdef DEBUG
 static void fts_status_event_handler(struct fts_ts_info *info,
 					unsigned char status,
 					unsigned char data[])
@@ -989,6 +987,11 @@ static void fts_status_event_handler(struct fts_ts_info *info,
 		fts_debug_msg_event_handler(info,
 				  data);
 }
+#else
+static void fts_status_event_handler(struct fts_ts_info *info,
+					unsigned char status,
+					unsigned char data[]){}
+#endif
 
 static unsigned char fts_event_handler_type_b(struct fts_ts_info *info,
 					      unsigned char data[],
@@ -1102,14 +1105,14 @@ static unsigned char fts_event_handler_type_b(struct fts_ts_info *info,
 #endif
 		case EVENTID_MOTION_POINTER:
 			if (info->fts_power_state == FTS_POWER_STATE_LOWPOWER) {
-				tsp_debug_info(&info->client->dev,
+				tsp_debug_dbg(&info->client->dev,
 						"%s: low power mode\n", __func__);
 				fts_release_all_finger(info);
 				break;
 			}
 
 			if (info->touch_count == 0) {
-				tsp_debug_info(&info->client->dev,
+				tsp_debug_dbg(&info->client->dev,
 						"%s: count 0\n", __func__);
 				fts_release_all_finger(info);
 				break;
@@ -1147,7 +1150,7 @@ static unsigned char fts_event_handler_type_b(struct fts_ts_info *info,
 			orient = (s8)data[5 + EventNum * FTS_EVENT_SIZE];
 
 			if (z == 255) {
-				tsp_debug_info(&info->client->dev,
+				tsp_debug_dbg(&info->client->dev,
 						"%s: Palm Detected\n", __func__);
 				tsp_debug_event(&info->client->dev, "%s: "
 						"[ID:%2d  X:%4d  Y:%4d  Z:%4d "
@@ -1199,7 +1202,7 @@ static unsigned char fts_event_handler_type_b(struct fts_ts_info *info,
 			}
 
 			if (info->touch_count <= 0) {
-				tsp_debug_info(&info->client->dev,
+				tsp_debug_dbg(&info->client->dev,
 						"%s: count 0\n", __func__);
 				fts_release_all_finger(info);
 				break;
@@ -1349,8 +1352,7 @@ static irqreturn_t fts_interrupt_handler(int irq, void *handle)
 	unsigned short evtcount = 0;
 
 	/* prevent CPU from entering deep sleep */
-	pm_qos_update_request(&info->pm_touch_req, 100);
-	pm_qos_update_request(&info->pm_i2c_req, 100);
+	pm_qos_update_request(&info->pm_qos_req, 100);
 	evtcount = 0;
 
 	fts_read_reg(info, &regAdd[0], 3, (unsigned char *)&evtcount, 2);
@@ -1366,8 +1368,8 @@ static irqreturn_t fts_interrupt_handler(int irq, void *handle)
 				  FTS_EVENT_SIZE * evtcount);
 		fts_event_handler_type_b(info, info->data, evtcount);
 	}
-	pm_qos_update_request(&info->pm_i2c_req, PM_QOS_DEFAULT_VALUE);
-	pm_qos_update_request(&info->pm_touch_req, PM_QOS_DEFAULT_VALUE);
+	pm_qos_update_request(&info->pm_qos_req, PM_QOS_DEFAULT_VALUE);
+
 	return IRQ_HANDLED;
 }
 
@@ -1824,7 +1826,6 @@ static int fts_probe(struct i2c_client *client, const struct i2c_device_id *idp)
 	struct fts_ts_info *info = NULL;
 	static char fts_ts_phys[64] = { 0 };
 	struct power_supply_config psy_cfg = {};
-	struct i2c_msm_ctrl *ctrl;
 	int i = 0;
 
 /*
@@ -1954,20 +1955,6 @@ static int fts_probe(struct i2c_client *client, const struct i2c_device_id *idp)
 		goto err_enable_irq;
 	}
 	
-	ctrl = client->dev.parent->driver_data;
-	irq_set_perf_affinity(ctrl->rsrcs.irq);
-
-	info->pm_i2c_req.type = PM_QOS_REQ_AFFINE_IRQ;
-	info->pm_i2c_req.irq = ctrl->rsrcs.irq;
-	pm_qos_add_request(&info->pm_i2c_req, PM_QOS_CPU_DMA_LATENCY,
-			   PM_QOS_DEFAULT_VALUE);
-
-	info->pm_touch_req.type = PM_QOS_REQ_AFFINE_IRQ;
-	info->pm_touch_req.irq = info->irq;
-	pm_qos_add_request(&info->pm_touch_req, PM_QOS_CPU_DMA_LATENCY,
-			   PM_QOS_DEFAULT_VALUE);
-	
-	info->board->irq_type |= IRQF_PERF_CRITICAL;
 	retval = request_threaded_irq(info->irq, fts_hard_interrupt_handler,
 			fts_interrupt_handler, info->board->irq_type,
 			FTS_TS_DRV_NAME, info);
@@ -1986,8 +1973,6 @@ static int fts_probe(struct i2c_client *client, const struct i2c_device_id *idp)
 #endif
 
 #ifdef CONFIG_FB
-	INIT_WORK(&info->resume_work, touch_resume_worker);
-	INIT_WORK(&info->suspend_work, touch_suspend_worker);
 	info->fb_notif.notifier_call = touch_fb_notifier_callback;
 	retval = fb_register_client(&info->fb_notif);
 	if (retval < 0) {
@@ -2136,6 +2121,9 @@ static int fts_input_open(struct input_dev *dev)
 		fts_command(info, FTS_CMD_HOVER_ON);
 	}
 
+	pm_qos_add_request(&info->pm_qos_req, PM_QOS_CPU_DMA_LATENCY,
+			PM_QOS_DEFAULT_VALUE);
+
 out:
 	return 0;
 }
@@ -2145,6 +2133,8 @@ static void fts_input_close(struct input_dev *dev)
 	struct fts_ts_info *info = input_get_drvdata(dev);
 
 	tsp_debug_info(&info->client->dev, "%s\n", __func__);
+
+	pm_qos_remove_request(&info->pm_qos_req);
 
 #ifdef USE_OPEN_DWORK
 	cancel_delayed_work(&info->open_work);
@@ -2280,7 +2270,7 @@ static int fts_stop_device(struct fts_ts_info *info)
 	}
 
 	if (info->lowpower_mode) {
-		tsp_debug_info(&info->client->dev,
+		tsp_debug_dbg(&info->client->dev,
 					"%s lowpower flag:%d\n",
 					__func__, info->lowpower_flag);
 
@@ -2471,7 +2461,7 @@ static int fts_suspend(struct i2c_client *client, pm_message_t mesg)
 {
 	struct fts_ts_info *info = i2c_get_clientdata(client);
 
-	tsp_debug_info(&info->client->dev, "%s power state : %d\n",
+	tsp_debug_dbg(&info->client->dev, "%s power state : %d\n",
 			__func__, info->fts_power_state);
 	/* if suspend is called from non-active state, the i2c bus is not
 	 * switched to AP, skipping suspend routine */
@@ -2485,7 +2475,7 @@ static int fts_suspend(struct i2c_client *client, pm_message_t mesg)
 	fts_stop_device(info);
 
 	gpio_set_value(info->switch_gpio, 1);
-	tsp_debug_info(&info->client->dev,
+	tsp_debug_dbg(&info->client->dev,
 			"%s: switch i2c to SLPI (set to %d)\n",
 			__func__,
 			gpio_get_value(info->switch_gpio));
@@ -2497,7 +2487,7 @@ static int fts_resume(struct i2c_client *client)
 {
 	struct fts_ts_info *info = i2c_get_clientdata(client);
 
-	tsp_debug_info(&info->client->dev, "%s power state : %d\n",
+	tsp_debug_dbg(&info->client->dev, "%s power state : %d\n",
 			__func__, info->fts_power_state);
 	/* if resume is called from active state, the i2c bus is not
 	 * switched to AP, skipping resume routine */
@@ -2509,7 +2499,7 @@ static int fts_resume(struct i2c_client *client)
 	}
 
 	gpio_set_value(info->switch_gpio, 0);
-	tsp_debug_info(&info->client->dev,
+	tsp_debug_dbg(&info->client->dev,
 			"%s: switch i2c to AP (set to %d)\n",
 			__func__,
 			gpio_get_value(info->switch_gpio));
@@ -2520,22 +2510,6 @@ static int fts_resume(struct i2c_client *client)
 }
 
 #if defined(CONFIG_FB)
-static void touch_resume_worker(struct work_struct *work)
-{
-	struct fts_ts_info *info = container_of(work, typeof(*info),
-						resume_work);
-
-	fts_resume(info->client);
-}
-
-static void touch_suspend_worker(struct work_struct *work)
-{
-	struct fts_ts_info *info = container_of(work, typeof(*info),
-						suspend_work);
-
-	fts_suspend(info->client, PMSG_SUSPEND);
-}
-
 static int touch_fb_notifier_callback(struct notifier_block *self,
 		unsigned long event, void *data)
 {
@@ -2545,13 +2519,10 @@ static int touch_fb_notifier_callback(struct notifier_block *self,
 
 	if (ev && ev->data) {
 		int *blank = (int *)ev->data;
-		if (event == FB_EARLY_EVENT_BLANK && *blank != FB_BLANK_UNBLANK) {
-			flush_work(&info->resume_work);
-			schedule_work(&info->suspend_work);
-		} else if (event == FB_EVENT_BLANK && *blank == FB_BLANK_UNBLANK) {
-			flush_work(&info->suspend_work);
-			schedule_work(&info->resume_work);
-		}
+		if (event == FB_EARLY_EVENT_BLANK && *blank != FB_BLANK_UNBLANK)
+			fts_suspend(info->client, PMSG_SUSPEND);
+		else if (event == FB_EVENT_BLANK && *blank == FB_BLANK_UNBLANK)
+			fts_resume(info->client);
 	}
 
 	return 0;

@@ -5878,7 +5878,7 @@ static void cpr3_regulator_debugfs_ctrl_add(struct cpr3_controller *ctrl)
 	if (cpr3_debugfs_base == NULL) {
 		cpr3_debugfs_base = debugfs_create_dir("cpr3-regulator", NULL);
 		if (IS_ERR_OR_NULL(cpr3_debugfs_base)) {
-			cpr3_err(ctrl, "cpr3-regulator debugfs base directory creation failed\n");
+			cpr3_debug(ctrl, "cpr3-regulator debugfs base directory creation failed\n");
 			cpr3_debugfs_base = NULL;
 			return;
 		}

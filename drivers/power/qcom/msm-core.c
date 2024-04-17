@@ -338,7 +338,7 @@ static __ref int do_sampling(void *data)
 		if (!poll_ms)
 			goto unlock;
 
-		queue_delayed_work(system_power_efficient_wq,
+		schedule_delayed_work(
 			&sampling_work,
 			msecs_to_jiffies(poll_ms));
 unlock:
@@ -1110,7 +1110,7 @@ static int msm_core_dev_probe(struct platform_device *pdev)
 	for_each_possible_cpu(cpu)
 		set_threshold(&activity[cpu]);
 
-	queue_delayed_work(system_power_efficient_wq,
+	schedule_delayed_work(
 			&sampling_work, msecs_to_jiffies(0));
 	pm_notifier(system_suspend_handler, 0);
 #endif

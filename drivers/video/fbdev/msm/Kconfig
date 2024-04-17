@@ -135,10 +135,4 @@ config FB_MSM_MDSS_FLICKER_FREE
 	---help---
 	The flicker free provides flicker free function without change
 	panel hardware brightness to avoid PWM flicker on OLED devices.
-
-config FB_MSM_TRIPLE_BUFFER
-	bool "Force triple buffering"
-	depends on FB_MSM_MDSS
-	---help---
-	Hardcode triple buffering in the kernel.
 endif

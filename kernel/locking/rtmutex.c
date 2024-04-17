@@ -245,10 +245,10 @@ rt_mutex_waiter_less(struct rt_mutex_waiter *left,
 static void
 rt_mutex_enqueue(struct rt_mutex *lock, struct rt_mutex_waiter *waiter)
 {
-	struct rb_node **link = &lock->waiters.rb_node;
+	struct rb_node **link = &lock->waiters.rb_root.rb_node;
 	struct rb_node *parent = NULL;
 	struct rt_mutex_waiter *entry;
-	int leftmost = 1;
+	bool leftmost = true;
 
 	while (*link) {
 		parent = *link;
@@ -257,15 +257,12 @@ rt_mutex_enqueue(struct rt_mutex *lock, struct rt_mutex_waiter *waiter)
 			link = &parent->rb_left;
 		} else {
 			link = &parent->rb_right;
-			leftmost = 0;
+			leftmost = false;
 		}
 	}
 
-	if (leftmost)
-		lock->waiters_leftmost = &waiter->tree_entry;
-
 	rb_link_node(&waiter->tree_entry, parent, link);
-	rb_insert_color(&waiter->tree_entry, &lock->waiters);
+	rb_insert_color_cached(&waiter->tree_entry, &lock->waiters, leftmost);
 }
 
 static void
@@ -274,20 +271,17 @@ rt_mutex_dequeue(struct rt_mutex *lock, struct rt_mutex_waiter *waiter)
 	if (RB_EMPTY_NODE(&waiter->tree_entry))
 		return;
 
-	if (lock->waiters_leftmost == &waiter->tree_entry)
-		lock->waiters_leftmost = rb_next(&waiter->tree_entry);
-
-	rb_erase(&waiter->tree_entry, &lock->waiters);
+	rb_erase_cached(&waiter->tree_entry, &lock->waiters);
 	RB_CLEAR_NODE(&waiter->tree_entry);
 }
 
 static void
 rt_mutex_enqueue_pi(struct task_struct *task, struct rt_mutex_waiter *waiter)
 {
-	struct rb_node **link = &task->pi_waiters.rb_node;
+	struct rb_node **link = &task->pi_waiters.rb_root.rb_node;
 	struct rb_node *parent = NULL;
 	struct rt_mutex_waiter *entry;
-	int leftmost = 1;
+	bool leftmost = true;
 
 	while (*link) {
 		parent = *link;
@@ -296,15 +290,12 @@ rt_mutex_enqueue_pi(struct task_struct *task, struct rt_mutex_waiter *waiter)
 			link = &parent->rb_left;
 		} else {
 			link = &parent->rb_right;
-			leftmost = 0;
+			leftmost = false;
 		}
 	}
 
-	if (leftmost)
-		task->pi_waiters_leftmost = &waiter->pi_tree_entry;
-
 	rb_link_node(&waiter->pi_tree_entry, parent, link);
-	rb_insert_color(&waiter->pi_tree_entry, &task->pi_waiters);
+	rb_insert_color_cached(&waiter->pi_tree_entry, &task->pi_waiters, leftmost);
 }
 
 static void
@@ -313,12 +304,24 @@ rt_mutex_dequeue_pi(struct task_struct *task, struct rt_mutex_waiter *waiter)
 	if (RB_EMPTY_NODE(&waiter->pi_tree_entry))
 		return;
 
-	if (task->pi_waiters_leftmost == &waiter->pi_tree_entry)
-		task->pi_waiters_leftmost = rb_next(&waiter->pi_tree_entry);
-
-	rb_erase(&waiter->pi_tree_entry, &task->pi_waiters);
+	rb_erase_cached(&waiter->pi_tree_entry, &task->pi_waiters);
 	RB_CLEAR_NODE(&waiter->pi_tree_entry);
 }
+
+/*
+ * Must hold both p->pi_lock and task_rq(p)->lock.
+ */
+void rt_mutex_update_top_task(struct task_struct *p)
+{
+	if (!task_has_pi_waiters(p)) {
+		p->pi_top_task = NULL;
+		return;
+	}
+
+	p->pi_top_task = task_top_pi_waiter(p)->task;
+}
+
+
 
 /*
  * Calculate task priority from the waiter tree priority
@@ -335,12 +338,12 @@ int rt_mutex_getprio(struct task_struct *task)
 		   task->normal_prio);
 }
 
+/*
+ * Must hold either p->pi_lock or task_rq(p)->lock.
+ */
 struct task_struct *rt_mutex_get_top_task(struct task_struct *task)
 {
-	if (likely(!task_has_pi_waiters(task)))
-		return NULL;
-
-	return task_top_pi_waiter(task)->task;
+	return task->pi_top_task;
 }
 
 /*
@@ -349,12 +352,12 @@ struct task_struct *rt_mutex_get_top_task(struct task_struct *task)
  */
 int rt_mutex_get_effective_prio(struct task_struct *task, int newprio)
 {
-	if (!task_has_pi_waiters(task))
+	struct task_struct *top_task = rt_mutex_get_top_task(task);
+
+	if (!top_task)
 		return newprio;
 
-	if (task_top_pi_waiter(task)->task->prio <= newprio)
-		return task_top_pi_waiter(task)->task->prio;
-	return newprio;
+	return min(top_task->prio, newprio);
 }
 
 /*
@@ -1273,8 +1276,7 @@ rt_mutex_slowlock(struct rt_mutex *lock, int state,
 
 	if (unlikely(ret)) {
 		__set_current_state(TASK_RUNNING);
-		if (rt_mutex_has_waiters(lock))
-			remove_waiter(lock, &waiter);
+		remove_waiter(lock, &waiter);
 		rt_mutex_handle_deadlock(ret, chwalk, &waiter);
 	}
 
@@ -1588,11 +1590,12 @@ bool __sched __rt_mutex_futex_unlock(struct rt_mutex *lock,
 void __sched rt_mutex_futex_unlock(struct rt_mutex *lock)
 {
 	WAKE_Q(wake_q);
+	unsigned long flags;
 	bool deboost;
 
-	raw_spin_lock_irq(&lock->wait_lock);
+	raw_spin_lock_irqsave(&lock->wait_lock, flags);
 	deboost = __rt_mutex_futex_unlock(lock, &wake_q);
-	raw_spin_unlock_irq(&lock->wait_lock);
+	raw_spin_unlock_irqrestore(&lock->wait_lock, flags);
 
 	if (deboost) {
 		wake_up_q(&wake_q);
@@ -1631,8 +1634,7 @@ void __rt_mutex_init(struct rt_mutex *lock, const char *name)
 {
 	lock->owner = NULL;
 	raw_spin_lock_init(&lock->wait_lock);
-	lock->waiters = RB_ROOT;
-	lock->waiters_leftmost = NULL;
+	lock->waiters = RB_ROOT_CACHED;
 
 	debug_rt_mutex_init(lock, name);
 }
@@ -1726,26 +1728,6 @@ int rt_mutex_start_proxy_lock(struct rt_mutex *lock,
 	debug_rt_mutex_print_deadlock(waiter);
 
 	return ret;
-}
-
-/**
- * rt_mutex_next_owner - return the next owner of the lock
- *
- * @lock: the rt lock query
- *
- * Returns the next owner of the lock or NULL
- *
- * Caller has to serialize against other accessors to the lock
- * itself.
- *
- * Special API call for PI-futex support
- */
-struct task_struct *rt_mutex_next_owner(struct rt_mutex *lock)
-{
-	if (!rt_mutex_has_waiters(lock))
-		return NULL;
-
-	return rt_mutex_top_waiter(lock)->task;
 }
 
 /**

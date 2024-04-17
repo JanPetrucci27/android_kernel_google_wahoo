@@ -2486,7 +2486,7 @@ static void tsens_debugfs_init(void)
 
 	dent = debugfs_create_dir("tsens", 0);
 	if (IS_ERR(dent)) {
-		pr_err("Error creating TSENS directory\n");
+		pr_debug("Error creating TSENS directory\n");
 		return;
 	}
 
