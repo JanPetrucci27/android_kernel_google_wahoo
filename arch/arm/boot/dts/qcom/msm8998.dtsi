@@ -34,7 +34,7 @@
 
 	chosen {
 		stdout-path = "serial0";
-		bootargs = "quiet rcupdate.rcu_expedited=1 noirqdebug nodebugmon rcu_nocbs=0-7 pelt=16 mce=ignore_ce cgroup_disable=pressure,memory";
+		bootargs = "quiet noirqdebug rcupdate.rcu_normal_after_boot=1 nodebugmon rcu_nocbs=0-7 pelt=16 mce=ignore_ce cgroup_disable=pressure,memory";
 	};
 
 	cpus {
@@ -50,8 +50,9 @@
 			qcom,lmh-dcvs = <&lmh_dcvs0>;
 			enable-method = "psci";
 			cpu-idle-states = <&LITTLE_CPU_SLEEP_0 &LITTLE_CPU_SLEEP_1>;
-			efficiency = <526>;
-			capacity-dmips-mhz = <526>;
+			efficiency = <636>;
+			capacity-dmips-mhz = <636>;
+			#cooling-cells = <2>;
 			sched-energy-costs = <&CPU_COST_0 &CLUSTER_COST_0>;
 			next-level-cache = <&L2_0>;
 			qcom,ea = <&ea0>;
@@ -82,8 +83,9 @@
 			qcom,lmh-dcvs = <&lmh_dcvs0>;
 			enable-method = "psci";
 			cpu-idle-states = <&LITTLE_CPU_SLEEP_0 &LITTLE_CPU_SLEEP_1>;
-			efficiency = <526>;
-			capacity-dmips-mhz = <526>;
+			efficiency = <636>;
+			capacity-dmips-mhz = <636>;
+			#cooling-cells = <2>;
 			sched-energy-costs = <&CPU_COST_0 &CLUSTER_COST_0>;
 			next-level-cache = <&L2_0>;
 			qcom,ea = <&ea1>;
@@ -109,8 +111,9 @@
 			qcom,lmh-dcvs = <&lmh_dcvs0>;
 			enable-method = "psci";
 			cpu-idle-states = <&LITTLE_CPU_SLEEP_0 &LITTLE_CPU_SLEEP_1>;
-			efficiency = <526>;
-			capacity-dmips-mhz = <526>;
+			efficiency = <636>;
+			capacity-dmips-mhz = <636>;
+			#cooling-cells = <2>;
 			sched-energy-costs = <&CPU_COST_0 &CLUSTER_COST_0>;
 			next-level-cache = <&L2_0>;
 			qcom,ea = <&ea2>;
@@ -136,8 +139,9 @@
 			qcom,lmh-dcvs = <&lmh_dcvs0>;
 			enable-method = "psci";
 			cpu-idle-states = <&LITTLE_CPU_SLEEP_0 &LITTLE_CPU_SLEEP_1>;
-			efficiency = <526>;
-			capacity-dmips-mhz = <526>;
+			efficiency = <636>;
+			capacity-dmips-mhz = <636>;
+			#cooling-cells = <2>;
 			sched-energy-costs = <&CPU_COST_0 &CLUSTER_COST_0>;
 			next-level-cache = <&L2_0>;
 			qcom,ea = <&ea3>;
@@ -158,13 +162,14 @@
 			device_type = "cpu";
 			compatible = "qcom,kryo280";
 			reg = <0x0 0x100>;
-			clock-frequency = <2361600000>;
+			clock-frequency = <2457600000>;
 			qcom,limits-info = <&mitigation_profile4>;
 			qcom,lmh-dcvs = <&lmh_dcvs1>;
 			enable-method = "psci";
 			cpu-idle-states = <&BIG_CPU_SLEEP_0 &BIG_CPU_SLEEP_1>;
 			efficiency = <1024>;
 			capacity-dmips-mhz = <1024>;
+			#cooling-cells = <2>;
 			sched-energy-costs = <&CPU_COST_1 &CLUSTER_COST_1>;
 			next-level-cache = <&L2_1>;
 			qcom,ea = <&ea4>;
@@ -189,13 +194,14 @@
 			device_type = "cpu";
 			compatible = "qcom,kryo280";
 			reg = <0x0 0x101>;
-			clock-frequency = <2361600000>;
+			clock-frequency = <2457600000>;
 			qcom,limits-info = <&mitigation_profile5>;
 			qcom,lmh-dcvs = <&lmh_dcvs1>;
 			enable-method = "psci";
 			cpu-idle-states = <&BIG_CPU_SLEEP_0 &BIG_CPU_SLEEP_1>;
 			efficiency = <1024>;
 			capacity-dmips-mhz = <1024>;
+			#cooling-cells = <2>;
 			sched-energy-costs = <&CPU_COST_1 &CLUSTER_COST_1>;
 			next-level-cache = <&L2_1>;
 			qcom,ea = <&ea5>;
@@ -216,13 +222,14 @@
 			device_type = "cpu";
 			compatible = "qcom,kryo280";
 			reg = <0x0 0x102>;
-			clock-frequency = <2361600000>;
+			clock-frequency = <2457600000>;
 			qcom,limits-info = <&mitigation_profile6>;
 			qcom,lmh-dcvs = <&lmh_dcvs1>;
 			enable-method = "psci";
 			cpu-idle-states = <&BIG_CPU_SLEEP_0 &BIG_CPU_SLEEP_1>;
 			efficiency = <1024>;
 			capacity-dmips-mhz = <1024>;
+			#cooling-cells = <2>;
 			sched-energy-costs = <&CPU_COST_1 &CLUSTER_COST_1>;
 			next-level-cache = <&L2_1>;
 			qcom,ea = <&ea6>;
@@ -243,13 +250,14 @@
 			device_type = "cpu";
 			compatible = "qcom,kryo280";
 			reg = <0x0 0x103>;
-			clock-frequency = <2361600000>;
+			clock-frequency = <2457600000>;
 			qcom,limits-info = <&mitigation_profile7>;
 			qcom,lmh-dcvs = <&lmh_dcvs1>;
 			enable-method = "psci";
 			cpu-idle-states = <&BIG_CPU_SLEEP_0 &BIG_CPU_SLEEP_1>;
 			efficiency = <1024>;
 			capacity-dmips-mhz = <1024>;
+			#cooling-cells = <2>;
 			sched-energy-costs = <&CPU_COST_1 &CLUSTER_COST_1>;
 			next-level-cache = <&L2_1>;
 			qcom,ea = <&ea7>;
@@ -355,16 +363,15 @@
 
 			CPU_COST_0: core-cost0 {
 				busy-cost-data = <
-					748800	39
-					960000	52
-					1171200	70
-					1248000	75
-					1324800	85
-					1555200	108
-					1747200	145
-					1824000	159
-					1900800	185
-					2035200 156
+					748800	14
+					960000	22
+					1094400	32
+					1248000	42
+					1401600	57
+					1555200	72
+					1747200	94
+					1824000	108
+					2035200 166
 				>;
 				idle-cost-data = <
 					4 4 0 0
@@ -372,18 +379,23 @@
 			};
 			CPU_COST_1: core-cost1 {
 				busy-cost-data = <
-					499200	66
-					979200	131
-					1190400	161
-					1344000	187
-					1420800	218
-					1728000	303
-					1804800	334
-					1881600	375
-					2035200	498
-					2208000	588
-					2265600	716
-					2361600	775
+					499200	50
+					729600	81
+					902400	101
+					1132800	128
+					1190400	142
+					1344000	181
+					1420800	201
+					1497600	241
+					1651200	268
+					1728000	318
+					1881600	385
+					1958400	445
+					2035200	480
+					2112000	517
+					2265600	657
+					2323200	732
+					2457600	808
 				>;
 				idle-cost-data = <
 					10 10 0 0
@@ -393,36 +405,40 @@
 				busy-cost-data = <
 					748800	23
 					960000	29
-					1171200	33
+					1094400	32
 					1248000	35
-					1324800	38
+					1401600	39
 					1555200	46
 					1747200	53
 					1824000	59
-					1900800	66
-					2035200 69
+					2035200 80
 				>;
 				idle-cost-data = <
-					31 31 31 0
+					17 17 17 0
 				>;
 			};
 			CLUSTER_COST_1: cluster-cost1 {
 				busy-cost-data = <
 					499200	29
-					979200	40
+					729600	35
+					902400	38
+					1132800	44
 					1190400	46
 					1344000	54
 					1420800	60
+					1497600	63
+					1651200	74
 					1728000	80
-					1804800	87
 					1881600	96
+					1958400	104
 					2035200	120
-					2208000	171
+					2112000	130
 					2265600	178
-					2361600	202
+					2323200	185
+					2457600	203
 				>;
 				idle-cost-data = <
-					50 50 50 0
+					24 24 24 0
 				>;
 			};
 		};
@@ -532,7 +548,7 @@
 			alloc-ranges = <0 0x00000000 0 0xffffffff>;
 			reusable;
 			alignment = <0 0x400000>;
-			size = <0 0x2000000>;
+			size = <0 0x8000000>;
 			linux,cma-default;
 		};
 
@@ -2813,7 +2829,7 @@
 					0x9ac 0x00 0x00
 					0x8a0 0x01 0x00
 					0x9e0 0x00 0x00
-					0x9dc 0x01 0x00
+					0x9dc 0x20 0x00
 					0x9a8 0x00 0x00
 					0x8a4 0x01 0x00
 					0x8a8 0x73 0x00
@@ -3200,8 +3216,8 @@
 	qcom,msm-core@780000 {
 		compatible = "qcom,apss-core-ea";
 		reg = <0x780000 0x1000>;
-		qcom,low-hyst-temp = <100>;
-		qcom,high-hyst-temp = <100>;
+		qcom,low-hyst-temp = <10>;
+		qcom,high-hyst-temp = <5>;
 		qcom,polling-interval = <100>;
 
 		ea0: ea0 {
