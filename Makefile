@@ -626,17 +626,19 @@ endif # $(dot-config)
 all: vmlinux
 
 ifeq ($(cc-name),clang)
-OPT_FLAGS += -march=armv8-a+crc+crypto
+#Enable fast FMA optimizations
+KBUILD_CFLAGS   += -ffp-contract=fast
+#Enable hot cold split optimization
+KBUILD_CFLAGS   += -mllvm -hot-cold-split=true
+OPT_FLAGS += -O3 -march=armv8-a+crc+lse+crypto+dotprod --cuda-path=/dev/null
 OPT_FLAGS += -mtune=cortex-a53
 ifdef CONFIG_POLLY_CLANG
 OPT_FLAGS += -mllvm -polly \
+		   -mllvm -polly-parallel \
 		   -mllvm -polly-run-dce \
 		   -mllvm -polly-run-inliner \
-           -mllvm -polly-isl-arg=--no-schedule-serialize-sccs \
 		   -mllvm -polly-ast-use-context \
-           -mllvm -polly-position=before-vectorizer \
 		   -mllvm -polly-vectorizer=stripmine \
-           -mllvm -polly-detect-profitability-min-per-loop-insts=40 \
 		   -mllvm -polly-invariant-load-hoisting
 
 # ifeq ($(call clang-ifversion, -ge, 1500, y), y)
@@ -667,13 +669,14 @@ endif
 KBUILD_CFLAGS	+= $(CLANG_FLAGS)
 KBUILD_AFLAGS	+= $(CLANG_FLAGS)
 else
-OPT_FLAGS += -march=armv8-a+crc+crypto
+OPT_FLAGS += -march=armv8-a+crc+lse+crypto+dotprod
 OPT_FLAGS += -mtune=cortex-a73.cortex-a53
 endif
 
 KBUILD_CFLAGS += $(OPT_FLAGS)
 KBUILD_AFLAGS += $(OPT_FLAGS)
 KBUILD_LDFLAGS += $(OPT_FLAGS)
+KBUILD_LDFLAGS  += --plugin-opt=O3
 
 # Use store motion pass for gcse
 KBUILD_CFLAGS	+= $(call cc-option,-fgcse-sm)
@@ -711,12 +714,13 @@ KBUILD_CFLAGS   += -O3 $(call cc-disable-warning,maybe-uninitialized,)
 endif
 
 ifdef CONFIG_LTO_CLANG
-KBUILD_CFLAG	+= -fwhole-program-vtables
+KBUILD_CFLAG	+= -fsplit-machine-functions
 endif
 
 ifdef CONFIG_INLINE_OPTIMIZATION
 KBUILD_CFLAGS	+= -mllvm -inline-threshold=2500
-KBUILD_CFLAGS	+= -mllvm -inlinehint-threshold=1500
+KBUILD_CFLAGS	+= -mllvm -inlinehint-threshold=2000
+KBUILD_CFLAGS	+= -mllvm -unroll-threshold=1200
 endif
 
 ifeq ($(cc-name),clang)
@@ -908,15 +912,15 @@ endif
 
 ifdef CONFIG_LTO_CLANG
 ifdef CONFIG_THINLTO
-lto-clang-flags	:= -flto=thin -fsplit-lto-unit
-KBUILD_LDFLAGS	+= --thinlto-cache-dir=$(extmod-prefix).thinlto-cache
+lto-clang-flags	:= -flto=thin -fsplit-lto-unit -funified-lto
+KBUILD_LDFLAGS	+= --thinlto-cache-dir=.thinlto-cache
 else
-lto-clang-flags	:= -flto
+lto-clang-flags	:= -flto -funified-lto
 endif
 lto-clang-flags += -fvisibility=default
 
 # Limit inlining across translation units to reduce binary size
-LD_FLAGS_LTO_CLANG := --plugin-opt=-import-instr-limit=5
+LD_FLAGS_LTO_CLANG := --plugin-opt=-import-instr-limit=40
 
 KBUILD_LDFLAGS += $(LD_FLAGS_LTO_CLANG)
 KBUILD_LDFLAGS_MODULE += $(LD_FLAGS_LTO_CLANG)

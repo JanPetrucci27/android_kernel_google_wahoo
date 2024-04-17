@@ -42,7 +42,7 @@
 #define BACKLIGHT_INDEX 66
 
 /* Minimum backlight value that does not flicker */
-static int elvss_off_threshold __read_mostly = 111;
+static const int elvss_off_threshold __read_mostly = 218;
 
 /* Display configuration data */
 static const int bkl_to_pcc[BACKLIGHT_INDEX] = {
@@ -79,16 +79,10 @@ void enable_flicker_free(bool val)
 	if (flicker_free_on != val) {
 		flicker_free_on = val;
 		if ((likely(ff_mfd) && flicker_free_on == false)) {
-		// if ((likely(ff_mfd))) {
 			pdata = dev_get_platdata(&ff_mfd->pdev->dev);
 			pdata->set_backlight(pdata, last_bl_lvl);
 		}
 	}
-
-	// if (flicker_free_on)
-		// pr_debug("FOO: Enabled \n");
-	// else
-		// pr_debug("BAR: Disabled \n");
 
 	flicker_free_on = val;
 }
@@ -219,11 +213,6 @@ void mdss_fb_update_flicker_free(struct msm_fb_data_type *mfd, uint32_t bl_lvl)
 
 	ff_mfd = mfd;
 	last_bl_lvl = bl_lvl;
-}
-
-void mdss_panel_set_elvss_off_threshold(int val)
-{
-	elvss_off_threshold = val;
 }
 
 static int __init mdss_fb_flicker_free_init(void)

@@ -145,9 +145,9 @@ static struct em_perf_domain *em_create_pd(cpumask_t *span, int nr_states,
 		} else {
 			prev_cost = table[i].cost;
 		}
-		// pr_info("pd%d (%*pbl): <freq=%ld, power=%ld, cost=%ld>\n",
-				// cpu, cpumask_pr_args(span), table[i].frequency,
-				// table[i].power, table[i].cost);
+		pr_info("pd%d (%*pbl): <freq=%ld, power=%ld, cost=%ld>\n",
+				cpu, cpumask_pr_args(span), table[i].frequency,
+				table[i].power, table[i].cost);
 	}
 
 	pd->table = table;
@@ -246,7 +246,7 @@ int em_register_perf_domain(cpumask_t *span, unsigned int nr_states,
 		smp_store_release(per_cpu_ptr(&em_data, cpu), pd);
 	}
 
-	pr_debug("Created perf domain %*pbl\n", cpumask_pr_args(span));
+	pr_info("Created perf domain %*pbl\n", cpumask_pr_args(span));
 unlock:
 	mutex_unlock(&em_pd_mutex);
 

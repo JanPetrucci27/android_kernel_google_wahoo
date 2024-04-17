@@ -98,7 +98,7 @@ void init_sched_energy_costs(void)
 			return;
 		}
 		/* Check if the energy model contains frequency/power values */
-		// if (of_find_property(cn, "freq-energy-model", NULL))
+		if (of_find_property(cn, "freq-energy-model", NULL))
 			freq_energy_model = true;
 
 		for_each_possible_sd_level(sd_level) {
@@ -282,16 +282,16 @@ static int sched_energy_probe(struct platform_device *pdev)
 			}
 			
 			is_sge_valid = true;
-			// dev_info(&pdev->dev,
-				// "cpu=%d eff=%d [freq=%ld cap=%ld power_d0=%ld] -> [freq=%ld cap=%ld power_d0=%ld]\n",
-				// cpu, efficiency,
-				// sge_l0->cap_states[0].frequency,
-				// sge_l0->cap_states[0].cap,
-				// sge_l0->cap_states[0].power,
-				// sge_l0->cap_states[ncapstates - 1].frequency,
-				// sge_l0->cap_states[ncapstates - 1].cap,
-				// sge_l0->cap_states[ncapstates - 1].power
-				// );
+			dev_info(&pdev->dev,
+				"cpu=%d eff=%d [freq=%ld cap=%ld power_d0=%ld] -> [freq=%ld cap=%ld power_d0=%ld]\n",
+				cpu, efficiency,
+				sge_l0->cap_states[0].frequency,
+				sge_l0->cap_states[0].cap,
+				sge_l0->cap_states[0].power,
+				sge_l0->cap_states[ncapstates - 1].frequency,
+				sge_l0->cap_states[ncapstates - 1].cap,
+				sge_l0->cap_states[ncapstates - 1].power
+				);
 		}
 		arch_update_cpu_capacity(cpu);
 	}

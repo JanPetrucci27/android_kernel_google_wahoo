@@ -54,8 +54,9 @@ typedef vector signed char unative_t;
 		V1##_3 = vec_xor(V1##_3, V2##_3);	\
 	} while (0)
 
-void xor_altivec_2(unsigned long bytes, unsigned long *v1_in,
-		   unsigned long *v2_in)
+void xor_altivec_2(unsigned long bytes,
+		     unsigned long * __restrict v1_in,
+		     const unsigned long * __restrict v2_in)
 {
 	DEFINE(v1);
 	DEFINE(v2);
@@ -78,8 +79,10 @@ void xor_altivec_2(unsigned long bytes, unsigned long *v1_in,
 }
 EXPORT_SYMBOL(xor_altivec_2);
 
-void xor_altivec_3(unsigned long bytes, unsigned long *v1_in,
-		   unsigned long *v2_in, unsigned long *v3_in)
+void xor_altivec_3(unsigned long bytes,
+		     unsigned long * __restrict v1_in,
+		     const unsigned long * __restrict v2_in,
+		     const unsigned long * __restrict v3_in)
 {
 	DEFINE(v1);
 	DEFINE(v2);
@@ -106,9 +109,11 @@ void xor_altivec_3(unsigned long bytes, unsigned long *v1_in,
 }
 EXPORT_SYMBOL(xor_altivec_3);
 
-void xor_altivec_4(unsigned long bytes, unsigned long *v1_in,
-		   unsigned long *v2_in, unsigned long *v3_in,
-		   unsigned long *v4_in)
+void xor_altivec_4(unsigned long bytes,
+		     unsigned long * __restrict v1_in,
+		     const unsigned long * __restrict v2_in,
+		     const unsigned long * __restrict v3_in,
+		     const unsigned long * __restrict v4_in)
 {
 	DEFINE(v1);
 	DEFINE(v2);
@@ -139,9 +144,12 @@ void xor_altivec_4(unsigned long bytes, unsigned long *v1_in,
 }
 EXPORT_SYMBOL(xor_altivec_4);
 
-void xor_altivec_5(unsigned long bytes, unsigned long *v1_in,
-		   unsigned long *v2_in, unsigned long *v3_in,
-		   unsigned long *v4_in, unsigned long *v5_in)
+void xor_altivec_5(unsigned long bytes,
+		     unsigned long * __restrict v1_in,
+		     const unsigned long * __restrict v2_in,
+		     const unsigned long * __restrict v3_in,
+		     const unsigned long * __restrict v4_in,
+		     const unsigned long * __restrict v5_in)
 {
 	DEFINE(v1);
 	DEFINE(v2);

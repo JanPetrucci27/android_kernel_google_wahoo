@@ -254,8 +254,4 @@ int LZ4_decompress_safe(const char *source, char *dest, int compressedSize,
 int LZ4_compress_HC(const char *src, char *dst, int srcSize, int dstCapacity,
 	int compressionLevel, void *wrkmem);
 
-ssize_t LZ4_arm64_decompress_safe(const void *source, void *dest, size_t inputSize, size_t outputSize, bool dip);
-
-ssize_t LZ4_arm64_decompress_safe_partial(const void *source, void *dest, size_t inputSize, size_t outputSize, bool dip);
-
 #endif

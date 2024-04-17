@@ -1,4 +1,5 @@
 /* Copyright (c) 2012-2018, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -638,6 +639,7 @@ static int msm_pcm_open(struct snd_pcm_substream *substream)
 	if (!prtd->audio_client) {
 		pr_info("%s: Could not allocate memory\n", __func__);
 		kfree(prtd);
+		prtd = NULL;
 		return -ENOMEM;
 	}
 
@@ -704,6 +706,11 @@ static int msm_pcm_open(struct snd_pcm_substream *substream)
 	prtd->set_channel_map = false;
 	prtd->reset_event = false;
 	runtime->private_data = prtd;
+	/* Vote to update the Rx thread priority to RT Thread for playback */
+	if ((substream->stream == SNDRV_PCM_STREAM_PLAYBACK) &&
+	    (pdata->perf_mode == LOW_LATENCY_PCM_MODE))
+		apr_start_rx_rt(prtd->audio_client->apr);
+
 	/* Vote to update the Rx thread priority to RT Thread for playback */
 	if ((substream->stream == SNDRV_PCM_STREAM_PLAYBACK) &&
 	    (pdata->perf_mode == LOW_LATENCY_PCM_MODE))
@@ -934,12 +941,21 @@ static int msm_pcm_capture_copy(struct snd_pcm_substream *substream,
 			goto fail;
 		}
 
+		if ((size == 0 || size < prtd->pcm_count) && ((offset + size) < prtd->pcm_count)) {
+			memset(bufptr + offset + size, 0, prtd->pcm_count - size);
+			if (fbytes > prtd->pcm_count)
+				size = xfer = prtd->pcm_count;
+			else
+				size = xfer = fbytes;
+		}
+
 		if (copy_to_user(buf, bufptr+offset, xfer)) {
 			pr_err("Failed to copy buf to user\n");
 			ret = -EFAULT;
 			q6asm_cpu_buf_release(OUT, prtd->audio_client);
 			goto fail;
 		}
+
 		fbytes -= xfer;
 		size -= xfer;
 		prtd->in_frame_info[idx].offset += xfer;
@@ -1150,6 +1166,12 @@ static int msm_pcm_adsp_stream_cmd_put(struct snd_kcontrol *kcontrol,
 	}
 
 	prtd = substream->runtime->private_data;
+	if (prtd == NULL) {
+		pr_err("%s prtd is null.\n", __func__);
+		ret = -EINVAL;
+		goto done;
+	}
+
 	if (prtd->audio_client == NULL) {
 		pr_err("%s prtd is null.\n", __func__);
 		ret = -EINVAL;
