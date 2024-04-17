@@ -61,6 +61,9 @@ struct irq_desc {
 	unsigned int		irqs_unhandled;
 	atomic_t		threads_handled;
 	int			threads_handled_last;
+#ifdef CONFIG_IRQ_SBALANCE
+	unsigned int		last_cpu;
+#endif
 	raw_spinlock_t		lock;
 	struct cpumask		*percpu_enabled;
 #ifdef CONFIG_SMP

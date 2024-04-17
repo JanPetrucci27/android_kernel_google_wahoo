@@ -116,7 +116,13 @@ static int irq_affinity_list_proc_show(struct seq_file *m, void *v)
 	return show_irq_affinity(AFFINITY_LIST, m, v);
 }
 
-
+#ifdef CONFIG_IRQ_SBALANCE
+static ssize_t write_irq_affinity(int type, struct file *file,
+		const char __user *buffer, size_t count, loff_t *pos)
+{
+	return count;
+}
+#else
 static ssize_t write_irq_affinity(int type, struct file *file,
 		const char __user *buffer, size_t count, loff_t *pos)
 {
@@ -160,6 +166,7 @@ free_cpumask:
 	free_cpumask_var(new_value);
 	return err;
 }
+#endif
 
 static ssize_t irq_affinity_proc_write(struct file *file,
 		const char __user *buffer, size_t count, loff_t *pos)
