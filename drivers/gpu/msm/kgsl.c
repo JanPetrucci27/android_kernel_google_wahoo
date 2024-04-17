@@ -1036,10 +1036,12 @@ static void kgsl_process_private_close(struct kgsl_device_private *dev_priv,
 	 * directories and garbage collect any outstanding resources
 	 */
 
-	kgsl_process_uninit_sysfs(private);
-	debugfs_remove_recursive(private->debug_root);
+	process_release_memory(private);
 
 	process_release_sync_sources(private);
+
+	debugfs_remove_recursive(private->debug_root);
+	kgsl_process_uninit_sysfs(private);
 
 	/* When using global pagetables, do not detach global pagetable */
 	if (private->pagetable->name != KGSL_MMU_GLOBAL_PT)
@@ -1050,13 +1052,7 @@ static void kgsl_process_private_close(struct kgsl_device_private *dev_priv,
 	list_del(&private->list);
 	spin_unlock(&kgsl_driver.proclist_lock);
 
-	/*
-	 * Unlock the mutex before releasing the memory - this prevents a
-	 * deadlock with the IOMMU mutex if a page fault occurs
-	 */
 	mutex_unlock(&kgsl_driver.process_mutex);
-
-	process_release_memory(private);
 
 	kgsl_process_private_put(private);
 }
@@ -1097,8 +1093,7 @@ static int kgsl_close_device(struct kgsl_device *device)
 	int result = 0;
 
 	mutex_lock(&device->mutex);
-	device->open_count--;
-	if (device->open_count == 0) {
+	if (device->open_count == 1) {
 
 		/* Wait for the active count to go to 0 */
 		kgsl_active_count_wait(device, 0);
@@ -1108,6 +1103,18 @@ static int kgsl_close_device(struct kgsl_device *device)
 
 		result = kgsl_pwrctrl_change_state(device, KGSL_STATE_INIT);
 	}
+
+	/*
+	 * We must decrement the open_count after last_close() has finished.
+	 * This is because last_close() relinquishes device mutex while
+	 * waiting for active count to become 0. This opens up a window
+	 * where a new process can come in, see that open_count is 0, and
+	 * initiate a first_open(). This can potentially mess up the power
+	 * state machine. To avoid a first_open() from happening before
+	 * last_close() has finished, decrement the open_count after
+	 * last_close().
+	 */
+	device->open_count--;
 	mutex_unlock(&device->mutex);
 	return result;
 
@@ -1278,8 +1285,8 @@ err:
 struct kgsl_mem_entry * __must_check
 kgsl_sharedmem_find(struct kgsl_process_private *private, uint64_t gpuaddr)
 {
-	int ret = 0, id;
-	struct kgsl_mem_entry *entry = NULL;
+	int id;
+	struct kgsl_mem_entry *entry, *ret = NULL;
 
 	if (!private)
 		return NULL;
@@ -1297,7 +1304,7 @@ kgsl_sharedmem_find(struct kgsl_process_private *private, uint64_t gpuaddr)
 	}
 	spin_unlock(&private->mem_lock);
 
-	return (ret == 0) ? NULL : entry;
+	return ret;
 }
 EXPORT_SYMBOL(kgsl_sharedmem_find);
 
@@ -1305,18 +1312,17 @@ struct kgsl_mem_entry * __must_check
 kgsl_sharedmem_find_id_flags(struct kgsl_process_private *process,
 		unsigned int id, uint64_t flags)
 {
-	int count = 0;
-	struct kgsl_mem_entry *entry;
+	struct kgsl_mem_entry *entry, *ret = NULL;
 
 	spin_lock(&process->mem_lock);
 	entry = idr_find(&process->mem_idr, id);
 	if (entry)
 		if (!entry->pending_free &&
 				(flags & entry->memdesc.flags) == flags)
-			count = kgsl_mem_entry_get(entry);
+			ret = kgsl_mem_entry_get(entry);
 	spin_unlock(&process->mem_lock);
 
-	return (count == 0) ? NULL : entry;
+	return ret;
 }
 
 /**
@@ -1939,7 +1945,7 @@ static long gpumem_free_entry_on_timestamp(struct kgsl_device *device,
 	kgsl_readtimestamp(device, context, KGSL_TIMESTAMP_RETIRED, &temp);
 	trace_kgsl_mem_timestamp_queue(device, entry, context->id, temp,
 		timestamp);
-	ret = kgsl_add_low_prio_event(device, &context->events,
+	ret = kgsl_add_event(device, &context->events,
 		timestamp, gpumem_free_func, entry);
 
 	if (ret)
@@ -4304,7 +4310,7 @@ static void kgsl_gpumem_vm_open(struct vm_area_struct *vma)
 {
 	struct kgsl_mem_entry *entry = vma->vm_private_data;
 
-	if (kgsl_mem_entry_get(entry) == 0)
+	if (!kgsl_mem_entry_get(entry))
 		vma->vm_private_data = NULL;
 
 	atomic_inc(&entry->map_count);
@@ -4725,6 +4731,15 @@ static int kgsl_mmap(struct file *file, struct vm_area_struct *vma)
 
 	vma->vm_file = file;
 
+	/*
+	 * kgsl gets the entry id or the gpu address through vm_pgoff.
+	 * It is used during mmap and never needed again. But this vm_pgoff
+	 * has different meaning at other parts of kernel. Not setting to
+	 * zero will let way for wrong assumption when tried to unmap a page
+	 * from this vma.
+	 */
+	vma->vm_pgoff = 0;
+
 	atomic_inc(&entry->map_count);
 
 	trace_kgsl_mem_mmap(entry, vma->vm_start);
@@ -5128,7 +5143,7 @@ static int __init kgsl_core_init(void)
 	INIT_LIST_HEAD(&kgsl_driver.pagetable_list);
 
 	kgsl_driver.workqueue = alloc_workqueue("kgsl-workqueue",
-		WQ_HIGHPRI | WQ_UNBOUND | WQ_MEM_RECLAIM | WQ_SYSFS, 0);
+		WQ_UNBOUND | WQ_MEM_RECLAIM | WQ_SYSFS, 0);
 
 	kgsl_driver.mem_workqueue = alloc_workqueue("kgsl-mementry",
 		WQ_HIGHPRI | WQ_UNBOUND | WQ_MEM_RECLAIM | WQ_FREEZABLE, 0);
@@ -5137,14 +5152,8 @@ static int __init kgsl_core_init(void)
 
 	kgsl_driver.worker_thread = kthread_run(kthread_worker_fn,
 		&kgsl_driver.worker, "kgsl_worker_thread");
-		
-	init_kthread_worker(&kgsl_driver.low_prio_worker);
 
-	kgsl_driver.low_prio_worker_thread = kthread_run(kthread_worker_fn,
-					&kgsl_driver.low_prio_worker, "kgsl_low_prio_worker_thread");
-
-	if (IS_ERR(kgsl_driver.worker_thread) ||
-				IS_ERR(kgsl_driver.low_prio_worker_thread))	{
+	if (IS_ERR(kgsl_driver.worker_thread)) {
 		pr_err("unable to start kgsl thread\n");
 		goto err;
 	}

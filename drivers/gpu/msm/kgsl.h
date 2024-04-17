@@ -161,9 +161,7 @@ struct kgsl_driver {
 	struct workqueue_struct *workqueue;
 	struct workqueue_struct *mem_workqueue;
 	struct kthread_worker worker;
-	struct kthread_worker low_prio_worker;
 	struct task_struct *worker_thread;
-	struct task_struct *low_prio_worker_thread;
 };
 
 extern struct kgsl_driver kgsl_driver;
@@ -301,14 +299,6 @@ struct kgsl_event_group;
 
 typedef void (*kgsl_event_func)(struct kgsl_device *, struct kgsl_event_group *,
 		void *, int);
-		
-enum kgsl_priority {
-	KGSL_EVENT_REGULAR_PRIORITY = 0,
-	KGSL_EVENT_LOW_PRIORITY,
-	KGSL_EVENT_NUM_PRIORITIES
-};
-
-const char *prio_to_string(enum kgsl_priority prio);
 
 /**
  * struct kgsl_event - KGSL GPU timestamp event
@@ -331,9 +321,8 @@ struct kgsl_event {
 	void *priv;
 	struct list_head node;
 	unsigned int created;
-	struct kthread_work work;
+	struct work_struct work;
 	int result;
-	enum kgsl_priority prio;
 	struct kgsl_event_group *group;
 };
 
@@ -556,18 +545,19 @@ static inline void kgsl_schedule_work(struct work_struct *work)
 	queue_work(kgsl_driver.workqueue, work);
 }
 
-static inline int
+static inline struct kgsl_mem_entry *
 kgsl_mem_entry_get(struct kgsl_mem_entry *entry)
 {
-	if (entry)
-		return kref_get_unless_zero(&entry->refcount);
-	return 0;
+	if (!IS_ERR_OR_NULL(entry) && kref_get_unless_zero(&entry->refcount))
+		return entry;
+
+	return NULL;
 }
 
 static inline void
 kgsl_mem_entry_put(struct kgsl_mem_entry *entry)
 {
-	if (entry)
+	if (!IS_ERR_OR_NULL(entry))
 		kref_put(&entry->refcount, kgsl_mem_entry_destroy);
 }
 

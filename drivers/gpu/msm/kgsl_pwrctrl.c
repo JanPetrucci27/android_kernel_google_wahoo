@@ -27,7 +27,6 @@
 #include "kgsl.h"
 #include "kgsl_pwrscale.h"
 #include "kgsl_device.h"
-#include "kgsl_trace.h"
 
 #define KGSL_PWRFLAGS_POWER_ON 0
 #define KGSL_PWRFLAGS_CLK_ON   1
@@ -329,9 +328,6 @@ void kgsl_pwrctrl_pwrlevel_change(struct kgsl_device *device,
 	/* If a pwr constraint is expired, remove it */
 	if ((pwr->constraint.type != KGSL_CONSTRAINT_NONE) &&
 		(time_after(jiffies, pwr->constraint.expires))) {
-		/* Trace the constraint being un-set by the driver */
-		trace_kgsl_constraint(device, pwr->constraint.type,
-						old_level, 0);
 		/*Invalidate the constraint set */
 		pwr->constraint.expires = 0;
 		pwr->constraint.type = KGSL_CONSTRAINT_NONE;
@@ -402,11 +398,6 @@ void kgsl_pwrctrl_pwrlevel_change(struct kgsl_device *device,
 	kgsl_pwrctrl_clk_set_rate(pwr->grp_clks[0],
 			pwrlevel->gpu_freq, clocks[0]);
 	_isense_clk_set_rate(pwr, pwr->active_pwrlevel);
-
-	trace_kgsl_pwrlevel(device,
-			pwr->active_pwrlevel, pwrlevel->gpu_freq,
-			pwr->previous_pwrlevel,
-			pwr->pwrlevels[old_level].gpu_freq);
 
 	/*
 	 * Some targets do not support the bandwidth requirement of
@@ -524,8 +515,8 @@ static ssize_t kgsl_pwrctrl_thermal_pwrlevel_store(struct device *dev,
 
 	mutex_lock(&device->mutex);
 
-	if (level > pwr->num_pwrlevels - 1)
-		level = pwr->num_pwrlevels - 1;
+	if (level > pwr->num_pwrlevels - 2)
+		level = pwr->num_pwrlevels - 2;
 
 	pwr->thermal_pwrlevel = level;
 
@@ -601,8 +592,8 @@ static void kgsl_pwrctrl_min_pwrlevel_set(struct kgsl_device *device,
 	struct kgsl_pwrctrl *pwr = &device->pwrctrl;
 
 	mutex_lock(&device->mutex);
-	if (level > pwr->num_pwrlevels - 1)
-		level = pwr->num_pwrlevels - 1;
+	if (level > pwr->num_pwrlevels - 2)
+		level = pwr->num_pwrlevels - 2;
 
 	/* You can't set a minimum power level lower than the maximum */
 	if (level < pwr->max_pwrlevel)
