@@ -26,26 +26,29 @@ void store_cpu_topology(unsigned int cpuid);
 const struct cpumask *cpu_coregroup_mask(int cpu);
 
 #ifdef CONFIG_CPU_FREQ
-#define arch_scale_freq_capacity cpufreq_scale_freq_capacity
+#define arch_scale_freq_capacity cpufreq_get_freq_scale
+extern unsigned long cpufreq_get_freq_scale(int cpu);
+extern unsigned long cpufreq_get_pressure(int cpu);
+
 #endif
 #define arch_scale_cpu_capacity scale_cpu_capacity
 extern unsigned long scale_cpu_capacity(int cpu);
 
-#define arch_scale_freq_ref topology_get_freq_ref
-extern unsigned long topology_get_freq_ref(int cpu);
-#define arch_set_freq_factor topology_set_freq_ref
-extern void topology_set_freq_ref(struct cpumask *cpus,
+#define arch_get_hw_load_avg hw_load_avg_by_cpu
+extern u64 hw_load_avg_by_cpu(int cpu);
+
+#define arch_scale_freq_ref cpufreq_get_freq_ref
+extern unsigned long cpufreq_get_freq_ref(int cpu);
+#define arch_set_freq_ref cpufreq_set_freq_ref
+extern void cpufreq_set_freq_ref(const struct cpumask *cpus,
 			       unsigned long max_freq);
 
-#define arch_scale_throttle_freq topology_get_throttle_freq
-extern unsigned long topology_get_throttle_freq(int cpu);
+/* Replace task scheduler's default HW pressure API */
+#define arch_scale_hw_pressure topology_get_hw_pressure
+extern unsigned long topology_get_hw_pressure(int cpu);
 
-/* Replace task scheduler's default thermal pressure retrieve API */
-#define arch_scale_thermal_pressure topology_get_thermal_pressure
-extern unsigned long topology_get_thermal_pressure(int cpu);
-
-#define arch_update_thermal_pressure	topology_update_thermal_pressure
-extern void topology_update_thermal_pressure(const struct cpumask *cpus,
+#define arch_update_hw_pressure	topology_update_hw_pressure
+extern void topology_update_hw_pressure(const struct cpumask *cpus,
 				      unsigned long capped_freq);
 
 #else

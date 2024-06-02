@@ -209,6 +209,7 @@ extern struct task_group root_task_group;
 	.normal_prio	= MAX_PRIO-20,					\
 	.policy		= SCHED_NORMAL,					\
 	.cpus_allowed	= CPU_MASK_ALL,					\
+	.max_allowed_capacity	= SCHED_CAPACITY_SCALE, \
 	.nr_cpus_allowed= NR_CPUS,					\
 	.cpus_requested	= CPU_MASK_ALL,					\
 	.mm		= NULL,						\

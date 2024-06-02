@@ -37,8 +37,6 @@
 #define GLINK_QOS_DEF_NUM_PRIORITY	1
 #define GLINK_QOS_DEF_MTU		2048
 
-#define GLINK_KTHREAD_PRIO 1
-
 /**
  * struct glink_qos_priority_bin - Packet Scheduler's priority bucket
  * @max_rate_kBps:	Maximum rate supported by the priority bucket.
@@ -3891,7 +3889,6 @@ static int glink_core_init_xprt_qos_cfg(struct glink_core_xprt_ctx *xprt_ptr,
 					 struct glink_core_transport_cfg *cfg)
 {
 	int i;
-	struct sched_param param = { .sched_priority = GLINK_KTHREAD_PRIO };
 
 	xprt_ptr->mtu = cfg->mtu ? cfg->mtu : GLINK_QOS_DEF_MTU;
 	xprt_ptr->num_priority = cfg->num_flows ? cfg->num_flows :
@@ -3903,7 +3900,7 @@ static int glink_core_init_xprt_qos_cfg(struct glink_core_xprt_ctx *xprt_ptr,
 				sizeof(struct glink_qos_priority_bin),
 				GFP_KERNEL);
 	if (xprt_ptr->num_priority > 1)
-		sched_setscheduler(xprt_ptr->tx_task, SCHED_FIFO, &param);
+		sched_set_fifo_low(xprt_ptr->tx_task);
 	if (!xprt_ptr->prio_bin) {
 		GLINK_ERR("%s: unable to allocate priority bins\n", __func__);
 		return -ENOMEM;

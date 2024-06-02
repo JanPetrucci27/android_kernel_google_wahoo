@@ -452,6 +452,8 @@ struct cgroup_subsys {
 	void (*css_free)(struct cgroup_subsys_state *css);
 	void (*css_reset)(struct cgroup_subsys_state *css);
 
+	int (*css_local_stat_show)(struct seq_file *seq,
+				   struct cgroup_subsys_state *css);
 	int (*allow_attach)(struct cgroup_subsys_state *css,
 			    struct cgroup_taskset *tset);
 	int (*can_attach)(struct cgroup_taskset *tset);

@@ -17,7 +17,6 @@
 #include "msm_sd.h"
 #include "msm_ois.h"
 #include "msm_cci.h"
-#include <linux/kthread.h>
 #include <linux/ktime.h>
 #include <linux/hrtimer.h>
 
@@ -160,6 +159,9 @@ static void msm_ois_read_work(struct work_struct *work)
 	struct sched_param param = { .sched_priority = 75 };
 	sched_setscheduler(current, SCHED_FIFO, &param);
 	*/
+
+	sched_set_fifo(current);
+
 	ois_timer_in_t = container_of(work, struct ois_timer, g_work);
 	get_monotonic_boottime(&ts);
 	rc = ois_timer_in_t->o_ctrl->i2c_client.i2c_func_tbl->i2c_read_seq(

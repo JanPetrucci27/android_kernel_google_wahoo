@@ -61,7 +61,19 @@ static inline void update_idle_core(struct rq *rq)
 static inline void update_idle_core(struct rq *rq) { }
 #endif
 
-extern bool energy_aware(void);
+/*
+ * Asymmetric CPU capacity bits
+ */
+struct asym_cap_data {
+	struct list_head link;
+	struct rcu_head rcu;
+	unsigned long capacity;
+	unsigned long cpus[];
+};
+
+extern struct list_head asym_cap_list;
+
+#define cpu_capacity_span(asym_data) to_cpumask((asym_data)->cpus)
 
 /*
  * Helpers for converting nanosecond timing to jiffy resolution
@@ -259,7 +271,6 @@ struct dl_bw {
 	u64 bw, total_bw;
 };
 
-void dl_change_utilization(struct task_struct *p, u64 new_bw);
 extern void init_dl_bw(struct dl_bw *dl_b);
 extern int sched_dl_global_validate(void);
 extern void sched_dl_do_global(void);
@@ -530,6 +541,9 @@ struct cfs_rq {
 
 	u64 exec_clock;
 	u64 min_vruntime;
+#ifndef CONFIG_64BIT
+	u64	min_vruntime_copy;
+#endif
 
 	struct rb_root_cached tasks_timeline;
 
@@ -605,6 +619,8 @@ struct cfs_rq {
 
 	u64 throttled_clock, throttled_clock_pelt
 	u64 throttled_clock_pelt_time;
+	u64	throttled_clock_self;
+	u64	throttled_clock_self_time;
 	int throttled, throttle_count, throttle_uptodate;
 	struct list_head throttled_list;
 	struct list_head	throttled_csd_list;
@@ -636,7 +652,7 @@ struct rt_rq {
 	} highest_prio;
 #endif
 #ifdef CONFIG_SMP
-	int overloaded;
+	bool			overloaded;
 	struct plist_head pushable_tasks;
 	
 #endif /* CONFIG_SMP */
@@ -680,7 +696,7 @@ struct dl_rq {
 		u64 next;
 	} earliest_dl;
 
-	int overloaded;
+	bool			overloaded;
 
 	/*
 	 * Tasks on this rq that can be pushed away. They are kept in
@@ -773,9 +789,6 @@ struct perf_domain {
 	struct rcu_head rcu;
 };
 
-/* Scheduling group status flags */
-#define SG_OVERLOAD		0x1 /* More than one runnable task on a CPU. */
-#define SG_OVERUTILIZED		0x2 /* One or more CPUs are over-utilized. */
 /*
  * We add the notion of a root-domain which will be used to define per-domain
  * variables. Each exclusive cpuset essentially defines an island domain by
@@ -796,10 +809,10 @@ struct root_domain {
 	 * - More than one runnable task
 	 * - Running task is misfit
 	 */
-	int			overload;
+	bool			overloaded;
 
 	/* Indicate one or more cpus over-utilized (tipping point) */
-	int			overutilized;
+	bool			overutilized;
 
 	/*
 	 * The bit corresponding to a CPU gets set here if such CPU has more
@@ -839,8 +852,6 @@ struct root_domain {
 	cpumask_var_t rto_mask;
 	struct cpupri cpupri;
 
-	unsigned long		max_cpu_capacity;
-	
 	/*
 	 * NULL-terminated list of performance domains intersecting with the
 	 * CPUs of the rd. Protected by RCU.
@@ -850,6 +861,17 @@ struct root_domain {
 
 extern void sched_get_rd(struct root_domain *rd);
 extern void sched_put_rd(struct root_domain *rd);
+
+static inline int get_rd_overloaded(struct root_domain *rd)
+{
+	return READ_ONCE(rd->overloaded);
+}
+
+static inline void set_rd_overloaded(struct root_domain *rd, int status)
+{
+	if (get_rd_overloaded(rd) != status)
+		WRITE_ONCE(rd->overloaded, status);
+}
 
 #ifdef HAVE_RT_PUSH_IPI
 extern void rto_push_irq_work_func(struct irq_work *work);
@@ -953,7 +975,8 @@ struct rq {
 
 	unsigned long cpu_capacity;
 
-	struct callback_head *balance_callback;
+	struct callback_head	*balance_callback;
+	unsigned char		balance_push;
 
 	unsigned char nohz_idle_balance;
 	unsigned char idle_balance;
@@ -973,8 +996,8 @@ struct rq {
 #ifdef CONFIG_HAVE_SCHED_AVG_IRQ
 	struct sched_avg	avg_irq;
 #endif
-#ifdef CONFIG_SCHED_THERMAL_PRESSURE
-	struct sched_avg	avg_thermal;
+#ifdef CONFIG_SCHED_HW_PRESSURE
+	struct sched_avg	avg_hw;
 #endif
 	u64			idle_stamp;
 	u64			avg_idle;
@@ -1125,24 +1148,6 @@ static inline u64 rq_clock_task(struct rq *rq)
 	return rq->clock_task;
 }
 
-/**
- * By default the decay is the default pelt decay period.
- * The decay shift can change the decay period in
- * multiples of 32.
- *  Decay shift		Decay period(ms)
- *	0			32
- *	1			64
- *	2			128
- *	3			256
- *	4			512
- */
-extern int sched_thermal_decay_shift;
-
-static inline u64 rq_clock_thermal(struct rq *rq)
-{
-	return rq_clock_task(rq) >> sched_thermal_decay_shift;
-}
-
 static inline void rq_clock_skip_update(struct rq *rq)
 {
 	lockdep_assert_held(&rq->lock);
@@ -1194,15 +1199,17 @@ struct rq_flags {
 #endif
 };
 
+extern struct callback_head balance_push_callback;
+
 static inline void rq_pin_lock(struct rq *rq, struct rq_flags *rf)
 {
 	rf->cookie = lockdep_pin_lock(&rq->lock);
 #ifdef CONFIG_SCHED_DEBUG
 	rq->clock_update_flags &= (RQCF_REQ_SKIP|RQCF_ACT_SKIP);
 	rf->clock_update_flags = 0;
-#endif
 #ifdef CONFIG_SMP
-	SCHED_WARN_ON(rq->balance_callback);
+	SCHED_WARN_ON(rq->balance_callback && rq->balance_callback != &balance_push_callback);
+#endif
 #endif
 }
 
@@ -1267,7 +1274,12 @@ queue_balance_callback(struct rq *rq,
 {
 	lockdep_assert_held(&rq->lock);
 
-	if (unlikely(head->next))
+	/*
+	 * Don't (re)queue an already queued item; nor queue anything when
+	 * balance_push() is active, see the comment with
+	 * balance_push_callback.
+	 */
+	if (unlikely(head->next || rq->balance_callback == &balance_push_callback))
 		return;
 
 	head->func = (void (*)(struct callback_head *))func;
@@ -1625,7 +1637,7 @@ struct sched_class {
 
 #ifdef CONFIG_SMP
 	int (*balance)(struct rq *rq, struct task_struct *prev, struct rq_flags *rf);
-	int  (*select_task_rq)(struct task_struct *p, int task_cpu, int flags, int subling_count_hint);
+	int  (*select_task_rq)(struct task_struct *p, int task_cpu, int flags);
 	void (*migrate_task_rq)(struct task_struct *p, int new_cpu);
 
 	struct task_struct * (*pick_task)(struct rq *rq);
@@ -1724,7 +1736,7 @@ extern struct task_struct *pick_next_task_idle(struct rq *rq);
 
 extern void update_group_capacity(struct sched_domain *sd, int cpu);
 
-extern void trigger_load_balance(struct rq *rq);
+extern void sched_balance_trigger(struct rq *rq);
 
 extern void set_cpus_allowed_common(struct task_struct *p, const struct cpumask *new_mask);
 
@@ -1794,9 +1806,9 @@ extern void resched_cpu(int cpu);
 
 extern struct rt_bandwidth def_rt_bandwidth;
 extern void init_rt_bandwidth(struct rt_bandwidth *rt_b, u64 period, u64 runtime);
+extern bool sched_rt_bandwidth_account(struct rt_rq *rt_rq);
 
 extern void init_dl_entity(struct sched_dl_entity *dl_se);
-extern void init_dl_rq_bw_ratio(struct dl_rq *dl_rq);
 
 #define BW_SHIFT	20
 #define BW_UNIT		(1 << BW_SHIFT)
@@ -1806,6 +1818,7 @@ extern void init_dl_rq_bw_ratio(struct dl_rq *dl_rq);
 unsigned long to_ratio(u64 period, u64 runtime);
 
 extern void init_entity_runnable_average(struct sched_entity *se);
+
 extern void post_init_entity_util_avg(struct task_struct *p);
 
 static inline void __add_nr_running(struct rq *rq, unsigned count)
@@ -1816,8 +1829,7 @@ static inline void __add_nr_running(struct rq *rq, unsigned count)
 
 	if (prev_nr < 2 && rq->nr_running >= 2) {
 #ifdef CONFIG_SMP
-		if (!READ_ONCE(rq->rd->overload))
-			WRITE_ONCE(rq->rd->overload, true);
+		set_rd_overloaded(rq->rd, 1);
 #endif
 
 #ifdef CONFIG_NO_HZ_FULL
@@ -1954,6 +1966,7 @@ static inline int hrtick_enabled(struct rq *rq)
 
 struct rq *__task_rq_lock(struct task_struct *p, struct rq_flags *rf)
 	__acquires(rq->lock);
+
 struct rq *task_rq_lock(struct task_struct *p, struct rq_flags *rf)
 	__acquires(p->pi_lock)
 	__acquires(rq->lock);
@@ -1975,8 +1988,61 @@ task_rq_unlock(struct rq *rq, struct task_struct *p, struct rq_flags *rf)
 	raw_spin_unlock_irqrestore(&p->pi_lock, rf->flags);
 }
 
-extern struct rq *lock_rq_of(struct task_struct *p, struct rq_flags *rf);
-extern void unlock_rq_of(struct rq *rq, struct task_struct *p, struct rq_flags *rf);
+static inline void
+rq_lock_irqsave(struct rq *rq, struct rq_flags *rf)
+	__acquires(rq->lock)
+{
+	raw_spin_lock_irqsave(&rq->lock, rf->flags);
+	rq_pin_lock(rq, rf);
+}
+
+static inline void
+rq_lock_irq(struct rq *rq, struct rq_flags *rf)
+	__acquires(rq->lock)
+{
+	raw_spin_lock_irq(&rq->lock);
+	rq_pin_lock(rq, rf);
+}
+
+static inline void
+rq_lock(struct rq *rq, struct rq_flags *rf)
+	__acquires(rq->lock)
+{
+	raw_spin_lock(&rq->lock);
+	rq_pin_lock(rq, rf);
+}
+
+static inline void
+rq_relock(struct rq *rq, struct rq_flags *rf)
+	__acquires(rq->lock)
+{
+	raw_spin_lock(&rq->lock);
+	rq_repin_lock(rq, rf);
+}
+
+static inline void
+rq_unlock_irqrestore(struct rq *rq, struct rq_flags *rf)
+	__releases(rq->lock)
+{
+	rq_unpin_lock(rq, rf);
+	raw_spin_unlock_irqrestore(&rq->lock, rf->flags);
+}
+
+static inline void
+rq_unlock_irq(struct rq *rq, struct rq_flags *rf)
+	__releases(rq->lock)
+{
+	rq_unpin_lock(rq, rf);
+	raw_spin_unlock_irq(&rq->lock);
+}
+
+static inline void
+rq_unlock(struct rq *rq, struct rq_flags *rf)
+	__releases(rq->lock)
+{
+	rq_unpin_lock(rq, rf);
+	raw_spin_unlock(&rq->lock);
+}
 
 #ifdef CONFIG_SMP
 
@@ -2189,8 +2255,9 @@ extern bool sched_debug_enabled;
 extern void print_cfs_stats(struct seq_file *m, int cpu);
 extern void print_rt_stats(struct seq_file *m, int cpu);
 extern void print_dl_stats(struct seq_file *m, int cpu);
-extern void
-print_cfs_rq(struct seq_file *m, int cpu, struct cfs_rq *cfs_rq);
+extern void print_cfs_rq(struct seq_file *m, int cpu, struct cfs_rq *cfs_rq);
+extern void print_rt_rq(struct seq_file *m, int cpu, struct rt_rq *rt_rq);
+extern void print_dl_rq(struct seq_file *m, int cpu, struct dl_rq *dl_rq);
 
 #ifdef CONFIG_NUMA_BALANCING
 extern void
@@ -2214,7 +2281,7 @@ extern void cfs_bandwidth_usage_dec(void);
 #define NOHZ_NEWILB_KICK_BIT	2
 #define NOHZ_NEXT_KICK_BIT		3
 
-/* Run rebalance_domains() */
+/* Run sched_balance_domains() */
 #define NOHZ_BALANCE_KICK	BIT(NOHZ_BALANCE_KICK_BIT)
 /* Update blocked load */
 #define NOHZ_STATS_KICK		BIT(NOHZ_STATS_KICK_BIT)
@@ -2286,11 +2353,6 @@ static inline u64 irq_time_read(int cpu)
 }
 #endif /* CONFIG_64BIT */
 #endif /* CONFIG_IRQ_TIME_ACCOUNTING */
-
-/*
- * task_may_not_preempt - check whether a task may not be preemptible soon
- */
-extern bool task_may_not_preempt(struct task_struct *task, int cpu);
 
 #ifdef CONFIG_CPU_FREQ
 DECLARE_PER_CPU(struct update_util_data __rcu *, cpufreq_update_util_data);
@@ -2434,4 +2496,4 @@ static inline bool is_per_cpu_kthread(struct task_struct *p)
 extern u64 avg_vruntime(struct cfs_rq *cfs_rq);
 extern int entity_eligible(struct cfs_rq *cfs_rq, struct sched_entity *se);
 
-// extern int try_to_wake_up(struct task_struct *tsk, unsigned int state, int wake_flags, int sibling_count_hint);
+// extern int try_to_wake_up(struct task_struct *tsk, unsigned int state, int wake_flags);

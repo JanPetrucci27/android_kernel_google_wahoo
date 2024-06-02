@@ -848,7 +848,6 @@ static int mdss_rotator_init_queue(struct mdss_rot_mgr *mgr)
 {
 	int i, size, ret = 0;
 	char name[32];
-	struct sched_param param = { .sched_priority = 17 };
 
 	size = sizeof(struct mdss_rot_queue) * mgr->queue_count;
 	mgr->queues = devm_kzalloc(&mgr->pdev->dev, size, GFP_KERNEL);
@@ -867,7 +866,7 @@ static int mdss_rotator_init_queue(struct mdss_rot_mgr *mgr)
 			ret = -ENOMEM;
 			break;
 		}
-		sched_setscheduler(mgr->queues[i].thread, SCHED_FIFO, &param);
+		sched_set_fifo(mgr->queues[i].thread);
 
 		snprintf(name, sizeof(name), "rot_timeline_%d", i);
 		pr_debug("timeline name=%s\n", name);

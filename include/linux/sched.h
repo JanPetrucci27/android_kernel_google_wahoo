@@ -434,7 +434,7 @@ extern void show_stack(struct task_struct *task, unsigned long *sp);
 extern void cpu_init (void);
 extern void trap_init(void);
 extern void update_process_times(int user);
-extern void scheduler_tick(void);
+extern void sched_tick(void);
 
 extern void sched_show_task(struct task_struct *p);
 
@@ -984,8 +984,8 @@ void force_schedstat_enabled(void);
 #endif
 
 enum cpu_idle_type {
+	__CPU_NOT_IDLE = 0,
 	CPU_IDLE,
-	CPU_NOT_IDLE,
 	CPU_NEWLY_IDLE,
 	CPU_MAX_IDLE_TYPES
 };
@@ -1212,7 +1212,7 @@ struct sched_domain {
 	unsigned long last_decay_max_lb_cost;
 
 #ifdef CONFIG_SCHEDSTATS
-	/* load_balance() stats */
+	/* sched_balance_rq() stats */
 	unsigned int lb_count[CPU_MAX_IDLE_TYPES];
 	unsigned int lb_failed[CPU_MAX_IDLE_TYPES];
 	unsigned int lb_balanced[CPU_MAX_IDLE_TYPES];
@@ -1478,9 +1478,6 @@ struct sched_entity {
 	struct list_head	group_node;
 	unsigned int		on_rq;
 
-	unsigned int			custom_slice : 1;
-					/* 31 bits hole */
-
 	u64			exec_start;
 	u64			sum_exec_runtime;
 	u64			prev_sum_exec_runtime;
@@ -1719,6 +1716,7 @@ struct task_struct {
 #endif
 
 	unsigned int policy;
+	unsigned long max_allowed_capacity;
 	int nr_cpus_allowed;
 	cpumask_t cpus_allowed;
 	cpumask_t cpus_requested;
@@ -2622,7 +2620,6 @@ extern void do_set_cpus_allowed(struct task_struct *p,
 extern int set_cpus_allowed_ptr(struct task_struct *p,
 				const struct cpumask *new_mask);
 extern int dl_task_check_affinity(struct task_struct *p, const struct cpumask *mask);
-extern bool cpupri_check_rt(void);
 static inline void set_wake_up_idle(bool enabled)
 {
 	/* do nothing for now */
@@ -2643,11 +2640,6 @@ static inline int set_cpus_allowed_ptr(struct task_struct *p,
 static inline int dl_task_check_affinity(struct task_struct *p, const struct cpumask *mask)
 {
 	return 0;
-}
-
-static inline bool cpupri_check_rt(void)
-{
-	return false;
 }
 #endif
 
@@ -3679,17 +3671,17 @@ static inline unsigned int task_cpu(const struct task_struct *p)
 #endif
 }
 
-#ifndef arch_scale_thermal_pressure
+#ifndef arch_scale_hw_pressure
 static __always_inline
-unsigned long arch_scale_thermal_pressure(int cpu)
+unsigned long arch_scale_hw_pressure(int cpu)
 {
 	return 0;
 }
 #endif
 
-#ifndef arch_update_thermal_pressure
+#ifndef arch_update_hw_pressure
 static __always_inline
-void arch_update_thermal_pressure(const struct cpumask *cpus,
+void arch_update_hw_pressure(const struct cpumask *cpus,
 				  unsigned long capped_frequency)
 { }
 #endif

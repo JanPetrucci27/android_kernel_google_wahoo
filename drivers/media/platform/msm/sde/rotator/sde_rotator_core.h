@@ -262,7 +262,6 @@ struct sde_rot_mgr {
 	atomic_t device_suspended;
 	struct platform_device *pdev;
 	struct device *device;
-	struct kthread_work thread_priority_work;
 
 	/*
 	 * Managing rotation queues, depends on

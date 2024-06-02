@@ -335,7 +335,6 @@ struct task_struct *kthread_create_on_node(int (*threadfn)(void *data),
 	}
 	task = create.result;
 	if (!IS_ERR(task)) {
-		static const struct sched_param param = { .sched_priority = 0 };
 		char name[TASK_COMM_LEN];
 		va_list args;
 
@@ -351,7 +350,7 @@ struct task_struct *kthread_create_on_node(int (*threadfn)(void *data),
 		 * root may have changed our (kthreadd's) priority or CPU mask.
 		 * The kernel thread should not inherit these properties.
 		 */
-		sched_setscheduler_nocheck(task, SCHED_NORMAL, &param);
+		sched_set_normal(task, 0);
 		set_cpus_allowed_ptr(task, cpu_all_mask);
 	}
 	return task;

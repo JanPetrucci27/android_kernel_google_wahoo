@@ -600,7 +600,7 @@ int tty_port_open(struct tty_port *port, struct tty_struct *tty,
 
 EXPORT_SYMBOL(tty_port_open);
 
-int tty_port_set_policy(struct tty_port *port, int policy, int sched_priority)
+int tty_port_set_policy(struct tty_port *port)
 {
 	sched_set_fifo_low(port->worker_thread);
 

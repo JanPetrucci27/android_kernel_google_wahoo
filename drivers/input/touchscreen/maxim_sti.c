@@ -116,7 +116,6 @@ struct dev_data {
 	struct sk_buff               *outgoing_skb;
 	struct sk_buff_head          incoming_skb_queue;
 	struct task_struct           *thread;
-	struct sched_param           thread_sched;
 	struct list_head             dev_list;
 	struct regulator             *reg_avdd;
 	struct regulator             *reg_dvdd;
@@ -1970,7 +1969,7 @@ static int processing_thread(void *arg)
 	bool                    fusion_dead;
 
 	DRV_PT_DBG("%s started", __FUNCTION__);
-	sched_setscheduler(current, SCHED_FIFO, &dd->thread_sched);
+	sched_set_fifo(current);
 
 	while (!kthread_should_stop()) {
 		set_current_state(TASK_INTERRUPTIBLE);
@@ -2632,7 +2631,6 @@ static int probe(struct spi_device *spi)
 	}
 
 	/* start processing thread */
-	dd->thread_sched.sched_priority = MAX_USER_RT_PRIO / 2;
 	dd->thread = kthread_run(processing_thread, dd, pdata->nl_family);
 	if (IS_ERR(dd->thread)) {
 		dev_err(&spi->dev, "error creating kthread!");

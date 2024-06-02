@@ -92,7 +92,7 @@ static int init_em_dt_callback(struct notifier_block *nb, unsigned long val,
 		goto unlock;
 	}
 
-	arch_set_freq_factor(policy->related_cpus, max_freq);
+	arch_set_freq_ref(policy->related_cpus, max_freq);
 
 	cpu = cpumask_first(policy->cpus);
 	cn = of_get_cpu_node(cpu, NULL);

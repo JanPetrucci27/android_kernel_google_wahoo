@@ -67,9 +67,16 @@ static int set_cpu_freq(struct cpufreq_policy *policy, unsigned int new_freq)
 	return ret;
 }
 
-static int msm_cpufreq_target(struct cpufreq_policy *policy,
-				unsigned int target_freq,
-				unsigned int relation)
+static int set_cpu_freq_index(struct cpufreq_policy *policy, unsigned long new_freq)
+{
+	new_freq = new_freq * 1000;
+	new_freq = clk_round_rate(cpu_clk[policy->cpu], new_freq);
+
+	return clk_set_rate(cpu_clk[policy->cpu], new_freq);
+}
+
+static int msm_cpufreq_target_index(struct cpufreq_policy *policy,
+				unsigned int idx)
 {
 	int ret;
 
@@ -82,7 +89,7 @@ static int msm_cpufreq_target(struct cpufreq_policy *policy,
 		goto done;
 	}
 
-	ret = set_cpu_freq(policy, target_freq);
+	ret = set_cpu_freq_index(policy, policy->freq_table[idx].frequency);
 
 done:
 	mutex_unlock(&per_cpu(suspend_data, policy->cpu).suspend_mutex);
@@ -326,7 +333,7 @@ static struct cpufreq_driver msm_cpufreq_driver = {
 					CPUFREQ_NEED_INITIAL_FREQ_CHECK,
 	.init		= msm_cpufreq_init,
 	.verify		= msm_cpufreq_verify,
-	.target		= msm_cpufreq_target,
+	.target_index		= msm_cpufreq_target_index,
 	.get		= msm_cpufreq_get_freq,
 	.name		= "msm",
 	.attr		= msm_freq_attr,

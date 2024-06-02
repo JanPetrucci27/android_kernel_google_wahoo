@@ -114,12 +114,18 @@ static void msm_lmh_dcvs_get_max_freq(uint32_t cpu, uint32_t *max_freq)
 	*max_freq = freq_ceil/1000;
 }
 
-static uint32_t msm_lmh_mitigation_notify(struct msm_lmh_dcvs_hw *hw)
+static uint32_t msm_lmh_mitigation_notify(struct msm_lmh_dcvs_hw *hw, bool limit)
 {
 	uint32_t val = 0;
 	struct device *cpu_dev = NULL;
 	unsigned long freq_val, max_limit = 0;
 	struct dev_pm_opp *opp_entry;
+
+	/*
+	 * Reset thermal pressure
+	 */
+	if (!limit)
+		goto skip;
 
 	val = readl_relaxed(hw->osm_hw_reg);
 	dcvsh_get_frequency(val, max_limit);
@@ -148,8 +154,9 @@ static uint32_t msm_lmh_mitigation_notify(struct msm_lmh_dcvs_hw *hw)
 	rcu_read_unlock();
 	max_limit = FREQ_HZ_TO_KHZ(freq_val);
 
-	/* Update thermal pressure */
-	arch_update_thermal_pressure(&hw->core_map, max_limit);
+skip:
+	/* Update HW pressure */
+	arch_update_hw_pressure(&hw->core_map, max_limit);
 
 	trace_lmh_dcvs_freq(cpumask_first(&hw->core_map), max_limit);
 	trace_clock_set_rate(hw->sensor_name,
@@ -169,8 +176,10 @@ static void msm_lmh_dcvs_poll(unsigned long data)
 	if (hw->max_freq == UINT_MAX)
 		msm_lmh_dcvs_get_max_freq(cpumask_first(&hw->core_map),
 			&hw->max_freq);
-	max_limit = msm_lmh_mitigation_notify(hw);
+	max_limit = msm_lmh_mitigation_notify(hw, true);
 	if (max_limit >= hw->max_freq) {
+		/* Update scheduler for throttle removal */
+		msm_lmh_mitigation_notify(hw, false);
 		del_timer(&hw->poll_timer);
 		writel_relaxed(0xFF, hw->int_clr_reg);
 		set_bit(1, hw->is_irq_enabled);
@@ -185,7 +194,7 @@ static void lmh_dcvs_notify(struct msm_lmh_dcvs_hw *hw)
 {
 	if (test_and_clear_bit(1, hw->is_irq_enabled)) {
 		disable_irq_nosync(hw->irq_num);
-		msm_lmh_mitigation_notify(hw);
+		msm_lmh_mitigation_notify(hw, true);
 		mod_timer(&hw->poll_timer, jiffies + msecs_to_jiffies(
 			MSM_LIMITS_POLLING_DELAY_MS));
 	}

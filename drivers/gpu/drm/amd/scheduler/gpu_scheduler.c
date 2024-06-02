@@ -404,13 +404,12 @@ static void amd_sched_fence_work_func(struct work_struct *work)
 
 static int amd_sched_main(void *param)
 {
-	struct sched_param sparam = {.sched_priority = 1};
 	struct amd_gpu_scheduler *sched = (struct amd_gpu_scheduler *)param;
 	int r, count;
 
 	spin_lock_init(&sched->fence_list_lock);
 	INIT_LIST_HEAD(&sched->fence_list);
-	sched_setscheduler(current, SCHED_FIFO, &sparam);
+	sched_set_fifo_low(current);
 
 	while (!kthread_should_stop()) {
 		struct amd_sched_entity *entity;

@@ -976,11 +976,6 @@ static void sde_rotator_put_hw_resource(struct sde_rot_queue *queue,
 			entry->item.session_id, entry->item.sequence_id);
 }
 
-static void rotator_thread_priority_worker(struct kthread_work *work)
-{
-	sched_set_fifo_low(current->group_leader);
-}
-
 /*
  * caller will need to call sde_rotator_deinit_queue when
  * the function returns error
@@ -1002,16 +997,13 @@ static int sde_rotator_init_queue(struct sde_rot_mgr *mgr)
 		init_kthread_worker(&mgr->commitq[i].rot_kw);
 		mgr->commitq[i].rot_thread = kthread_run(kthread_worker_fn,
 				&mgr->commitq[i].rot_kw, name);
-		init_kthread_work(&mgr->thread_priority_work,
-				rotator_thread_priority_worker);
-		queue_kthread_work(&mgr->commitq[i].rot_kw,
-				&mgr->thread_priority_work);
-		flush_kthread_work(&mgr->thread_priority_work);
 		if (IS_ERR(mgr->commitq[i].rot_thread)) {
 			ret = -EPERM;
 			mgr->commitq[i].rot_thread = NULL;
 			break;
 		}
+
+		sched_set_fifo_low(mgr->commitq[i].rot_thread);
 
 		/* timeline not used */
 		mgr->commitq[i].timeline = NULL;
@@ -1029,16 +1021,13 @@ static int sde_rotator_init_queue(struct sde_rot_mgr *mgr)
 		init_kthread_worker(&mgr->doneq[i].rot_kw);
 		mgr->doneq[i].rot_thread = kthread_run(kthread_worker_fn,
 				&mgr->doneq[i].rot_kw, name);
-		init_kthread_work(&mgr->thread_priority_work,
-				rotator_thread_priority_worker);
-		queue_kthread_work(&mgr->doneq[i].rot_kw,
-				&mgr->thread_priority_work);
-		flush_kthread_work(&mgr->thread_priority_work);
 		if (IS_ERR(mgr->doneq[i].rot_thread)) {
 			ret = -EPERM;
 			mgr->doneq[i].rot_thread = NULL;
 			break;
 		}
+
+		sched_set_fifo_low(mgr->doneq[i].rot_thread);
 
 		/* timeline not used */
 		mgr->doneq[i].timeline = NULL;

@@ -561,13 +561,6 @@ static int switch_to_rt_policy(void)
 
 }
 
-static int switch_to_fair_policy(void)
-{
-	struct sched_param param = { .sched_priority = 0 };
-
-	return sched_setscheduler_nocheck(current, SCHED_NORMAL, &param);
-}
-
 int cpu_up(unsigned int cpu)
 {
 	int err = 0;
@@ -603,10 +596,7 @@ out:
 	cpu_maps_update_done();
 
 	if (!switch_err) {
-		switch_err = switch_to_fair_policy();
-		if (switch_err)
-			pr_err("Hotplug policy switch err=%d Task %s pid=%d\n",
-				switch_err, current->comm, current->pid);
+		sched_set_normal(current, 0);
 	}
 
 	return err;

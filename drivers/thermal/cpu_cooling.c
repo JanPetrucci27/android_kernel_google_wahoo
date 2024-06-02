@@ -551,7 +551,7 @@ static int cpufreq_set_cur_state(struct thermal_cooling_device *cdev,
 	cpufreq_device->clipped_freq = clip_freq;
 
 	cpus = cpufreq_device->policy->related_cpus;
-	arch_update_thermal_pressure(cpus, clip_freq);
+	arch_update_hw_pressure(cpus, clip_freq);
 
 	/* Check if the device has a platform mitigation function that
 	 * can handle the CPU freq mitigation, if not, notify cpufreq
