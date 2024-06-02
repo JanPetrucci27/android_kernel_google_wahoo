@@ -132,7 +132,7 @@ int btfm_slim_enable_ch(struct btfmslim *btfmslim, struct btfmslim_ch *ch,
 	/* Define the channel with below parameters */
 	prop.prot = SLIM_AUTO_ISO;
 	prop.baser = SLIM_RATE_4000HZ;
-	prop.dataf = (rates == 48000) ? SLIM_CH_DATAF_NOT_DEFINED
+	prop.dataf = (rates >= 48000) ? SLIM_CH_DATAF_NOT_DEFINED
 			: SLIM_CH_DATAF_LPCM_AUDIO;
 	prop.auxf = SLIM_CH_AUXF_NOT_APPLICABLE;
 	prop.ratem = (rates/4000);

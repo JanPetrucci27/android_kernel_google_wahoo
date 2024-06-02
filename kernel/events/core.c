@@ -3465,8 +3465,7 @@ static int perf_event_read(struct perf_event *event, bool group)
 		};
 
 		event_cpu = READ_ONCE(event->oncpu);
-		if (event_cpu < 0 || event_cpu >= nr_cpu_ids ||
-				cpu_isolated(event_cpu))
+		if (event_cpu < 0 || event_cpu >= nr_cpu_ids)
 			return 0;
 
 		if (!event->attr.exclude_idle ||

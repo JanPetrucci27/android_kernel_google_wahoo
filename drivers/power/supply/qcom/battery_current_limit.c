@@ -53,6 +53,8 @@
 		_ret = of_property_read_u32(_dev, _key, &_out); \
 	} while (0)
 
+#define bcl_hotplug_enabled 0
+
 /*
  * Battery Current Limit Enable or Not
  */
@@ -205,7 +207,7 @@ static uint32_t bcl_frequency_mask;
 static struct work_struct bcl_hotplug_work;
 static DEFINE_MUTEX(bcl_hotplug_mutex);
 static DEFINE_MUTEX(bcl_cpufreq_mutex);
-static bool bcl_hotplug_enabled;
+// static bool bcl_hotplug_enabled;
 static uint32_t battery_soc_val = 100;
 static uint32_t soc_low_threshold;
 static const char bcl_psy_name[] = "bcl";
@@ -236,12 +238,9 @@ static void bcl_handle_hotplug(struct work_struct *work)
 		gbcl->hotplug_handle,
 		HOTPLUG_MITIGATION_REQ,
 		&curr_req);
-	if (ret) {
+	if (ret)
 		pr_err("hotplug request failed. err:%d\n", ret);
-		goto handle_hotplug_exit;
-	}
 
-handle_hotplug_exit:
 	mutex_unlock(&bcl_hotplug_mutex);
 	trace_bcl_sw_mitigation_event("stop hotplug mitigation");
 }
@@ -1194,10 +1193,10 @@ static ssize_t hotplug_mask_store(struct device *dev,
 	bcl_hotplug_mask = val;
 	pr_info("bcl hotplug mask updated to %d\n", bcl_hotplug_mask);
 
-	if (!bcl_hotplug_mask && !bcl_soc_hotplug_mask)
-		bcl_hotplug_enabled = false;
-	else
-		bcl_hotplug_enabled = true;
+	// if (!bcl_hotplug_mask && !bcl_soc_hotplug_mask)
+		// bcl_hotplug_enabled = false;
+	// else
+		// bcl_hotplug_enabled = true;
 
 	return count;
 }
@@ -1215,10 +1214,10 @@ static ssize_t hotplug_soc_mask_store(struct device *dev,
 	bcl_soc_hotplug_mask = val;
 	pr_info("bcl soc hotplug mask updated to %d\n", bcl_soc_hotplug_mask);
 
-	if (!bcl_hotplug_mask && !bcl_soc_hotplug_mask)
-		bcl_hotplug_enabled = false;
-	else
-		bcl_hotplug_enabled = true;
+	// if (!bcl_hotplug_mask && !bcl_soc_hotplug_mask)
+		// bcl_hotplug_enabled = false;
+	// else
+		// bcl_hotplug_enabled = true;
 
 	return count;
 }
@@ -1725,10 +1724,10 @@ static int bcl_probe(struct platform_device *pdev)
 	bcl_soc_hotplug_mask = get_mask_from_core_handle(pdev,
 					 "qcom,bcl-soc-hotplug-list");
 
-	if (!bcl_hotplug_mask && !bcl_soc_hotplug_mask)
-		bcl_hotplug_enabled = false;
-	else
-		bcl_hotplug_enabled = true;
+	// if (!bcl_hotplug_mask && !bcl_soc_hotplug_mask)
+		// bcl_hotplug_enabled = false;
+	// else
+		// bcl_hotplug_enabled = true;
 
 	if (of_property_read_bool(pdev->dev.of_node,
 		"qcom,bcl-framework-interface"))

@@ -456,12 +456,12 @@ static struct snd_soc_dai_driver btfmslim_dai[] = {
 		.id = BTFM_BT_SPLIT_A2DP_SLIM_RX,
 		.playback = {
 			.stream_name = "SPLIT A2DP Playback",
-			.rates = SNDRV_PCM_RATE_48000, /* 48 KHz */
-			.formats = SNDRV_PCM_FMTBIT_S16_LE, /* 16 bits */
-			.rate_max = 48000,
-			.rate_min = 48000,
+			.rates = SNDRV_PCM_RATE_96000, /* 48 or 96 KHz */
+			.formats = SNDRV_PCM_FMTBIT_S32_LE, /* 32 bits */
+			.rate_max = 96000,
+			.rate_min = 96000,
 			.channels_min = 1,
-			.channels_max = 1,
+			.channels_max = 2,
 		},
 		.ops = &btfmslim_dai_ops,
 	},

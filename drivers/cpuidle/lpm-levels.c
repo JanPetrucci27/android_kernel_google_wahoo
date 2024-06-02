@@ -624,7 +624,7 @@ static bool psci_enter_sleep(struct lpm_cluster *cluster, int idx, bool from_idl
 	 * idx = 0 is the default LPM state
 	 */
 	if (!idx) {
-		wfi();
+		cpu_do_idle();
 		return 1;
 	} else {
 		int affinity_level = 0;
@@ -649,7 +649,7 @@ static bool psci_enter_sleep(struct lpm_cluster *cluster, int idx, bool from_idl
 static bool psci_enter_sleep(struct lpm_cluster *cluster, int idx, bool from_idle)
 {
 	if (!idx) {
-		wfi();
+		cpu_do_idle();
 		return 1;
 	} else {
 		int affinity_level = 0;
@@ -679,13 +679,17 @@ static int lpm_cpuidle_select(struct cpuidle_driver *drv,
 	return 0;
 }
 
+static void lpm_cpuidle_reflect(struct cpuidle_device *dev,
+		 int idx)
+{
+}
+
 static int lpm_cpuidle_enter(struct cpuidle_device *dev,
 		struct cpuidle_driver *drv, int idx)
 {
-	if (need_resched())
-		return idx;
+	if (!need_resched())
+		cpu_do_idle();
 
-	wfi();
 	return idx;
 }
 
@@ -736,6 +740,7 @@ static struct cpuidle_governor lpm_governor = {
 	.name =		"qcom",
 	.rating =	30,
 	.select =	lpm_cpuidle_select,
+	.reflect =	lpm_cpuidle_reflect,
 	.owner =	THIS_MODULE,
 };
 

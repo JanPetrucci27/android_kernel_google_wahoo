@@ -376,6 +376,7 @@ EXPORT_SYMBOL_GPL(play_idle);
 
 void cpu_startup_entry(enum cpuhp_state state)
 {
+	current->flags |= PF_IDLE;
 	/*
 	 * This #ifdef needs to die, but it's too late in the cycle to
 	 * make this generic (arm and sh have never invoked the canary

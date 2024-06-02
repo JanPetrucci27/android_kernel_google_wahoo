@@ -634,8 +634,8 @@ OPT_FLAGS += -O3 -march=armv8-a+crc+lse+crypto+dotprod --cuda-path=/dev/null
 OPT_FLAGS += -mtune=cortex-a53
 ifdef CONFIG_POLLY_CLANG
 OPT_FLAGS += -mllvm -polly \
+		   -mllvm -polly-position=before-vectorizer \
 		   -mllvm -polly-parallel \
-		   -mllvm -polly-run-dce \
 		   -mllvm -polly-run-inliner \
 		   -mllvm -polly-ast-use-context \
 		   -mllvm -polly-vectorizer=stripmine \
@@ -648,6 +648,14 @@ OPT_FLAGS += -mllvm -polly-reschedule=1 \
 # else
 # OPT_FLAGS += -mllvm -polly-opt-fusion=max
 # endif
+
+# Polly may optimise loops with dead paths beyound what the linker
+# can understand. This may negate the effect of the linker's DCE
+# so we tell Polly to perfom proven DCE on the loops it optimises
+# in order to preserve the overall effect of the linker's DCE.
+ifdef CONFIG_LD_DEAD_CODE_DATA_ELIMINATION
+KBUILD_CFLAGS	+= -mllvm -polly-run-dce
+endif
 endif
 
 ifneq ($(CROSS_COMPILE),)

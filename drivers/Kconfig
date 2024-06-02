@@ -218,8 +218,6 @@ source "drivers/sensors/Kconfig"
 
 source "drivers/htc_radio/Kconfig"
 
-source "drivers/dts_eagle/Kconfig"
-
 source "drivers/energy_model/Kconfig"
 
 endmenu

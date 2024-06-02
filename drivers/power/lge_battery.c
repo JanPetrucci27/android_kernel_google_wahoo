@@ -39,19 +39,15 @@
 					__func__, ##__VA_ARGS__);	\
 	} while (0)
 
-#define OPT_VOLT			4200000 /* Optimum voltage for Li-ion battery*/
 #define LIM_VOLT			4100000
 #define PARALLEL_VOLT			4450000
 #define CHG_CURRENT_MAX			3550000
 #define LCD_ON_CURRENT			1000000
-#define WATCH_DELAY			30000
+#define WATCH_DELAY			10000
 #define DEMO_MODE_MAX			35
 #define DEMO_MODE_MIN			30
 #define DEFAULT_CHARGE_STOP_LEVEL	100
 #define DEFAULT_CHARGE_START_LEVEL	0
-
-#define DISABLE_CHARGE_100	99
-#define DISABLE_CHARGE_75	74
 
 enum debug_mask_print {
 	ASSERT = BIT(0),
@@ -227,51 +223,28 @@ static int battery_power_supply_changed(void)
 	return 0;
 }
 
+#ifndef CONFIG_FORCE_BATT_VOLTAGE_LIMIT
+#define force_batt_voltage_limit 0
+#endif
+
+static __always_inline
+void bypass_current(struct battery_manager *bm, int reason, int *fcc)
+{
+	if (bm->batt_soc >= (force_batt_voltage_limit ? 85 : 100)) {
+		*fcc = 0;
+		return;
+	}
+
 #ifdef CONFIG_FORCE_FAST_CHARGE
-static inline void bypass_current(struct battery_manager *bm, int *fcc)
-{
-	bool full_charge;
-
-	if (!force_fast_charge)
-		return;
-
-	full_charge = bm->batt_soc > (force_batt_voltage_limit ? (int)DISABLE_CHARGE_75 : (int)DISABLE_CHARGE_100);
-
-	if (!full_charge)
+	if (force_fast_charge && reason == BM_REASON_STEP)
 		*fcc = CHG_CURRENT_MAX;
-	else
-		*fcc = LCD_ON_CURRENT;
+#endif /* CONFIG_FORCE_FAST_CHARGE */
 }
-
-static int max_batt_volt = -1;
-
-static inline void bypass_batt_max_volt(struct battery_manager *bm, int *rc)
-{
-#ifdef CONFIG_FORCE_BATT_VOLTAGE_LIMIT
-	*rc = (force_batt_voltage_limit && bm->bm_active)
-				? (int)OPT_VOLT : (int)PARALLEL_VOLT;
-
-	if (max_batt_volt == *rc)
-		return;
-
-	max_batt_volt = *rc;
-
-	*rc = bm_set_property(bm->batt_psy,
-				 POWER_SUPPLY_PROP_VOLTAGE_MAX,
-				 max_batt_volt);
-
-	if (*rc < 0)
-		pr_info("BYPASS: Failed to set Max battery voltage.\n");
-	else
-		pr_info("BYPASS: Max battery voltage: %d \n", max_batt_volt);
-#endif
-}
-#endif
 
 static int bm_vote_fcc_update(struct battery_manager *bm)
 {
 	int fcc = INT_MAX;
-	int reason = -EINVAL;
+	int reason;
 	int i, rc = 0;
 
 	for (i = 0; i < BM_REASON_MAX; i++) {
@@ -283,31 +256,28 @@ static int bm_vote_fcc_update(struct battery_manager *bm)
 		}
 	}
 
-	if (reason != bm->bm_vote_fcc_reason || fcc != bm->bm_vote_fcc_value) {
-		if (fcc != bm->bm_vote_fcc_value) {
-			rc = bm_set_property(
-				bm->batt_psy,
-				POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX,
-				fcc);
-			if (rc < 0) {
-				pr_bm(ERROR,
-				      "Couldn't set current, rc=%d\n", rc);
-				return rc;
-			}
-			rc = bm_set_property(
-				bm->batt_psy,
-				POWER_SUPPLY_PROP_CHARGE_DISABLE,
-				(fcc == 0 ? 1 : 0));
-			if (rc < 0) {
-				pr_bm(ERROR,
-				      "Couldn't charge disable, rc=%d\n", rc);
-				return rc;
-			}
-		}
-		bm->bm_vote_fcc_reason = reason;
-		bm->bm_vote_fcc_value = fcc;
-		pr_bm(MISC, "vote id[%d], set cur[%d]\n", reason, fcc);
+	bypass_current(bm, reason, &fcc);
+
+	if (reason == bm->bm_vote_fcc_reason && fcc == bm->bm_vote_fcc_value)
+		return rc;
+
+	rc = bm_set_property(bm->batt_psy, POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX, fcc);
+	if (rc < 0) {
+		pr_bm(ERROR,
+		      "Couldn't set current, rc=%d\n", rc);
+		return rc;
 	}
+
+	rc = bm_set_property(bm->batt_psy, POWER_SUPPLY_PROP_CHARGE_DISABLE, (fcc == 0 ? 1 : 0));
+	if (rc < 0) {
+		pr_bm(ERROR,
+		      "Couldn't charge disable, rc=%d\n", rc);
+		return rc;
+	}
+
+	bm->bm_vote_fcc_reason = reason;
+	bm->bm_vote_fcc_value = fcc;
+	pr_bm(MISC, "vote id[%d], set cur[%d]\n", reason, fcc);
 
 	return rc;
 }
@@ -315,11 +285,6 @@ static int bm_vote_fcc_update(struct battery_manager *bm)
 static int bm_vote_fcc(struct battery_manager *bm, int reason, int fcc)
 {
 	int rc = 0;
-
-#ifdef CONFIG_FORCE_FAST_CHARGE
-	if (reason == BM_REASON_STEP && fcc != -EINVAL && fcc != 0)
-		bypass_current(bm, &fcc);
-#endif
 
 	bm_vote_fcc_table[reason] = fcc;
 	rc = bm_vote_fcc_update(bm);
@@ -415,21 +380,23 @@ void bm_check_therm_charging(struct battery_manager *bm,
 			break;
 	}
 
-	if (stat == BM_HEALTH_WARM && batt_volt >= LIM_VOLT) {
+	if (stat == BM_HEALTH_WARM && batt_volt >= LIM_VOLT)
 		stat = BM_HEALTH_WARM_LIM;
+
+	if (bm->therm_stat == stat)
+		return;
+
+	pr_bm(MISC, "STATE[%d->%d] TEMP[%d] CUR[%d] VOL[%d]\n",
+			  bm->therm_stat, stat, batt_temp,
+			  therm_table[stat].cur, batt_volt);
+	rc = bm_vote_fcc(bm, BM_REASON_THERM, therm_table[stat].cur);
+
+	if (rc < 0) {
+		pr_bm(ERROR, "Couldn't set ibat current rc=%d\n", rc);
+		return;
 	}
 
-	if (bm->therm_stat != stat) {
-		pr_bm(MISC, "STATE[%d->%d] TEMP[%d] CUR[%d] VOL[%d]\n",
-		      bm->therm_stat, stat, batt_temp,
-		      therm_table[stat].cur, batt_volt);
-		rc = bm_vote_fcc(bm, BM_REASON_THERM, therm_table[stat].cur);
-		if (rc < 0) {
-			pr_bm(ERROR, "Couldn't set ibat current rc=%d\n", rc);
-			return;
-		}
-		bm->therm_stat = stat;
-	}
+	bm->therm_stat = stat;
 }
 
 void bm_check_step_charging(struct battery_manager *bm, int volt)
@@ -453,23 +420,23 @@ void bm_check_step_charging(struct battery_manager *bm, int volt)
 			break;
 	}
 
-	if (bm->sc_status != stat) {
-		fcc = valid_batt_id[bm->batt_id].step_table[stat].cur;
+	if (bm->sc_status == stat)
+		return;
 
-		rc = bm_vote_fcc(bm, BM_REASON_STEP,
-			 fcc);
+	fcc = valid_batt_id[bm->batt_id].step_table[stat].cur;
+	rc = bm_vote_fcc(bm, BM_REASON_STEP,
+		 fcc);
 
-		if (rc < 0) {
-			pr_bm(ERROR, "Couldn't set ibat curr rc=%d\n", rc);
-			return;
-		}
-
-		pr_bm(MISC, "STATE[%d->%d] CUR[%d] VOL[%d]\n",
-			  bm->sc_status, stat,
-			  fcc, volt);
-
-		bm->sc_status = stat;
+	if (rc < 0) {
+		pr_bm(ERROR, "Couldn't set ibat curr rc=%d\n", rc);
+		return;
 	}
+
+	pr_bm(MISC, "STATE[%d->%d] CUR[%d] VOL[%d]\n",
+		  bm->sc_status, stat,
+		  fcc, volt);
+
+	bm->sc_status = stat;
 }
 
 static void bm_check_status(struct battery_manager *bm)
@@ -512,10 +479,6 @@ static void bm_watch_work(struct work_struct *work)
 
 	mutex_lock(&bm->work_lock);
 
-#ifdef CONFIG_FORCE_FAST_CHARGE
-	bypass_batt_max_volt(bm, &rc);
-#endif
-
 	rc = bm_get_property(bm->batt_psy,
 			     POWER_SUPPLY_PROP_VOLTAGE_NOW, &batt_volt);
 	if (rc < 0) {
@@ -535,6 +498,11 @@ static void bm_watch_work(struct work_struct *work)
 
 	bm_check_therm_charging(bm, batt_temp, batt_volt);
 
+#ifdef CONFIG_FORCE_FAST_CHARGE
+	/* Bypass current when charging should stop */
+	bm_vote_fcc_update(bm);
+#endif
+
 	rc = bm_get_property(bm->batt_psy,
 			     POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX,
 			     &ibat_max);
@@ -549,12 +517,8 @@ static void bm_watch_work(struct work_struct *work)
 error:
 	mutex_unlock(&bm->work_lock);
 
-	if (bm->therm_stat >= BM_HEALTH_WARM)
-		schedule_delayed_work(&bm->bm_watch,
-				      msecs_to_jiffies(WATCH_DELAY / 3));
-	else
-		schedule_delayed_work(&bm->bm_watch,
-				      msecs_to_jiffies(WATCH_DELAY));
+	schedule_delayed_work(&bm->bm_watch,
+			      msecs_to_jiffies(WATCH_DELAY));
 }
 
 static void bm_batt_update_work(struct work_struct *work)
@@ -565,10 +529,6 @@ static void bm_batt_update_work(struct work_struct *work)
 	int rc, batt_soc = bm->batt_soc;
 
 	mutex_lock(&bm->work_lock);
-
-#ifdef CONFIG_FORCE_FAST_CHARGE
-	bypass_batt_max_volt(bm, &rc);
-#endif
 
 	rc = bm_get_property(bm->batt_psy,
 			     POWER_SUPPLY_PROP_STATUS, &bm->chg_status);
@@ -599,27 +559,24 @@ static void bm_usb_update_work(struct work_struct *work)
 
 	mutex_lock(&bm->work_lock);
 
-#ifdef CONFIG_FORCE_FAST_CHARGE
-	bypass_batt_max_volt(bm, &rc);
-#endif
-
 	rc = bm_get_property(bm->usb_psy,
 			     POWER_SUPPLY_PROP_PRESENT, &bm->chg_present);
 	if (rc < 0)
-		goto error;
+		goto exit;
 
 	bm_check_status(bm);
 
-	if (bm->bm_active != chg_active) {
-		if (!bm->bm_active) {
-			bm_check_step_charging(bm, 0);
-			bm_check_therm_charging(bm, 250, 0);
-		}
+	if (bm->bm_active == chg_active)
+		goto exit;
 
-		if (bm->demo_enable)
-			bm_check_demo_mode(bm);
+	if (!bm->bm_active) {
+		bm_check_step_charging(bm, 0);
+		bm_check_therm_charging(bm, 250, 0);
 	}
-error:
+
+	if (bm->demo_enable)
+		bm_check_demo_mode(bm);
+exit:
 	mutex_unlock(&bm->work_lock);
 }
 
@@ -644,6 +601,7 @@ static int bm_ps_notifier_call(struct notifier_block *nb,
 		if (ev == PSY_EVENT_PROP_CHANGED && bm->usb_psy)
 			schedule_work(&bm->bm_usb_update);
 	}
+
 	return NOTIFY_OK;
 }
 
@@ -665,15 +623,7 @@ static void bm_fb_update_work(struct work_struct *work)
 						struct battery_manager,
 						bm_fb_update);
 
-#ifdef CONFIG_FORCE_FAST_CHARGE
-	int rc;
-#endif
-
 	mutex_lock(&bm->work_lock);
-
-#ifdef CONFIG_FORCE_FAST_CHARGE
-	bypass_batt_max_volt(bm, &rc);
-#endif
 
 	if (!(bm->fb_state & BL_CORE_FBBLANK))
 		bm_vote_fcc(bm, BM_REASON_LCD, LCD_ON_CURRENT);
@@ -822,8 +772,6 @@ static int bm_init(struct battery_manager *bm)
 			     PARALLEL_VOLT);
 	if (rc < 0)
 		pr_bm(ERROR, "Couldn't set pl float voltage, rc=%d", rc);
-	else
-		max_batt_volt = PARALLEL_VOLT;
 
 	rc = bm_vote_fcc(bm, BM_REASON_DEFAULT, CHG_CURRENT_MAX);
 	if (rc < 0)

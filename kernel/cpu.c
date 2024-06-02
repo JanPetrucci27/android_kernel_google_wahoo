@@ -823,10 +823,6 @@ static DECLARE_BITMAP(cpu_active_bits, CONFIG_NR_CPUS) __read_mostly;
 const struct cpumask *const cpu_active_mask = to_cpumask(cpu_active_bits);
 EXPORT_SYMBOL(cpu_active_mask);
 
-static DECLARE_BITMAP(cpu_isolated_bits, CONFIG_NR_CPUS) __read_mostly;
-const struct cpumask *const cpu_isolated_mask = to_cpumask(cpu_isolated_bits);
-EXPORT_SYMBOL(cpu_isolated_mask);
-
 #if CONFIG_LITTLE_CPU_MASK
 static const unsigned long lp_cpu_bits = CONFIG_LITTLE_CPU_MASK;
 const struct cpumask *const cpu_lp_mask = to_cpumask(&lp_cpu_bits);
@@ -877,14 +873,6 @@ void set_cpu_active(unsigned int cpu, bool active)
 		cpumask_clear_cpu(cpu, to_cpumask(cpu_active_bits));
 }
 
-void set_cpu_isolated(unsigned int cpu, bool isolated)
-{
-	if (isolated)
-		cpumask_set_cpu(cpu, to_cpumask(cpu_isolated_bits));
-	else
-		cpumask_clear_cpu(cpu, to_cpumask(cpu_isolated_bits));
-}
-
 void init_cpu_present(const struct cpumask *src)
 {
 	cpumask_copy(to_cpumask(cpu_present_bits), src);
@@ -915,11 +903,6 @@ static int __init mitigations_parse_cmdline(char *arg)
 	return 0;
 }
 early_param("mitigations", mitigations_parse_cmdline);
-
-void init_cpu_isolated(const struct cpumask *src)
-{
-	cpumask_copy(to_cpumask(cpu_isolated_bits), src);
-}
 
 static ATOMIC_NOTIFIER_HEAD(idle_notifier);
 

@@ -189,5 +189,3 @@ obj-$(CONFIG_BIF)		+= bif/
 obj-$(CONFIG_SENSORS_SSC)	+= sensors/
 obj-$(CONFIG_ESOC)              += esoc/
 obj-$(CONFIG_HTC_RADIO_SMEM)    += htc_radio/
-
-obj-$(CONFIG_AINUR_DTS_SW) += dts_eagle/
