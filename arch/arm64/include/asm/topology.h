@@ -9,6 +9,7 @@ struct cpu_topology {
 	int cluster_id;
 	cpumask_t thread_sibling;
 	cpumask_t core_sibling;
+	cpumask_t cluster_sibling;
 };
 
 extern struct cpu_topology cpu_topology[NR_CPUS];
@@ -17,24 +18,29 @@ extern struct cpu_topology cpu_topology[NR_CPUS];
 #define topology_core_id(cpu)		(cpu_topology[cpu].core_id)
 #define topology_core_cpumask(cpu)	(&cpu_topology[cpu].core_sibling)
 #define topology_sibling_cpumask(cpu)	(&cpu_topology[cpu].thread_sibling)
+#define topology_cluster_cpumask(cpu)	(&cpu_topology[cpu].cluster_sibling)
 
 void init_cpu_topology(void);
 void store_cpu_topology(unsigned int cpuid);
 const struct cpumask *cpu_coregroup_mask(int cpu);
+const struct cpumask *cpu_clustergroup_mask(int cpu);
 unsigned long arch_get_cpu_efficiency(int cpu);
 
 struct sched_domain;
 #ifdef CONFIG_CPU_FREQ
+
+#define arch_get_throttle_scale cpufreq_get_throttle_scale
+extern unsigned long cpufreq_get_throttle_scale(int cpu);
+
 #define arch_scale_freq_capacity cpufreq_get_freq_scale
 extern unsigned long cpufreq_get_freq_scale(int cpu);
-extern unsigned long cpufreq_get_pressure(int cpu);
+// extern unsigned long cpufreq_get_pressure(int cpu);
+#define cpufreq_get_pressure(cpu) (0)
+#define arch_scale_freq_tick(cpu) (0)
 
 #endif
 #define arch_scale_cpu_capacity scale_cpu_capacity
 extern unsigned long scale_cpu_capacity(int cpu);
-
-#define arch_get_hw_load_avg hw_load_avg_by_cpu
-extern u64 hw_load_avg_by_cpu(int cpu);
 
 #define arch_scale_freq_ref cpufreq_get_freq_ref
 extern unsigned long cpufreq_get_freq_ref(int cpu);

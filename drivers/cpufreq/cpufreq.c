@@ -17,7 +17,6 @@
 
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
-#include <linux/binfmts.h>
 #include <linux/cpu.h>
 #include <linux/cpufreq.h>
 #include <linux/delay.h>
@@ -364,74 +363,52 @@ static void adjust_jiffies(unsigned long val, struct cpufreq_freqs *ci)
  *********************************************************************/
 
 static DEFINE_PER_CPU(unsigned long, capacity_freq_ref) = 1;
+static DEFINE_PER_CPU(unsigned long, arch_freq_scale) = SCHED_CAPACITY_SCALE;
+static DEFINE_PER_CPU(unsigned int, first_cpu);
+static DEFINE_PER_CPU(unsigned int, cur_freq) = UINT_MAX;
+
+#define FIRST_CPU_OF(cpu)  \
+({ \
+	READ_ONCE(per_cpu(first_cpu, cpu)); \
+}) \
+
+#define READ_FROM_CPU(var, cpu)  \
+({ \
+	READ_ONCE(per_cpu(var, FIRST_CPU_OF(cpu))); \
+}) \
+
+#define WRITE_TO_CPU(var, cpu, val)  \
+({ \
+	WRITE_ONCE(per_cpu(var, cpu), val); \
+}) \
 
 void cpufreq_set_freq_ref(const struct cpumask *cpus,
 			       unsigned long max_freq)
 {
 	int cpu;
-
-	for_each_cpu(cpu, cpus) {
-		if (per_cpu(capacity_freq_ref, cpu) == max_freq)
-			return;
-	}
+	unsigned int i = cpumask_first(cpus);
 
 	for_each_cpu(cpu, cpus)
-		WRITE_ONCE(per_cpu(capacity_freq_ref, cpu), max_freq);
+		WRITE_ONCE(per_cpu(first_cpu, cpu), i);
+
+	WRITE_ONCE(per_cpu(cur_freq, i), max_freq);
+	WRITE_ONCE(per_cpu(capacity_freq_ref, i), max_freq);
 
 	pr_debug("cpus %*pbl : capacity_freq_ref = %lu kHz \n",
 		 cpumask_pr_args(cpus), max_freq);
 }
 
-static inline void thermal_update_policy_max(int cpu)
-{
-	struct cpufreq_policy *policy;
-	struct cpufreq_cpuinfo *cpuinfo;
-	unsigned int idx, throttle_freq;
-	unsigned long pressure, max_cap;
-
-	policy = cpufreq_cpu_get(cpu);
-    if (!policy) {
-        pr_debug("No policy found for CPU: %d \n", cpu);
-        return;
-    }
-
-	cpuinfo = &policy->cpuinfo;
-	throttle_freq = cpuinfo->max_freq;
-	max_cap = arch_scale_cpu_capacity(cpu);
-
-	pressure = arch_get_hw_load_avg(cpu);
-	if (pressure) {
-		pressure = max_cap - pressure;
-		throttle_freq = map_util_freq(pressure, throttle_freq, max_cap);
-
-		idx = cpufreq_frequency_table_target(policy, throttle_freq, CPUFREQ_RELATION_H);
-		throttle_freq = policy->freq_table[idx].frequency;
-	}
-
-	throttle_freq = clamp_val(throttle_freq, cpuinfo->min_freq, cpuinfo->max_freq);
-	if (policy->max == throttle_freq)
-		goto exit;
-
-    policy->max = throttle_freq;
-	pr_debug("New policy->max: %u \n", policy->max);
-
-exit:
-	cpufreq_cpu_put(policy);
-}
-
 unsigned long cpufreq_get_freq_ref(int cpu)
 {
-	thermal_update_policy_max(cpu);
-
-	return READ_ONCE(per_cpu(capacity_freq_ref, cpu));
+	return READ_FROM_CPU(capacity_freq_ref, cpu);
 }
 
-static DEFINE_PER_CPU(unsigned long, cpufreq_pressure) = 0;
+// static DEFINE_PER_CPU(unsigned long, cpufreq_pressure) = 0;
 
-unsigned long cpufreq_get_pressure(int cpu)
-{
-	return READ_ONCE(per_cpu(cpufreq_pressure, cpu));
-}
+// unsigned long cpufreq_get_pressure(int cpu)
+// {
+	// return READ_ONCE(per_cpu(cpufreq_pressure, cpu));
+// }
 
 /**
  * cpufreq_update_pressure() - Update cpufreq pressure for CPUs
@@ -465,40 +442,38 @@ unsigned long cpufreq_get_pressure(int cpu)
 		// WRITE_ONCE(per_cpu(cpufreq_pressure, cpu), pressure);
 // }
 
-static DEFINE_PER_CPU(unsigned long, freq_scale) = SCHED_CAPACITY_SCALE;
-
 /*********************************************************************
  *               FREQUENCY INVARIANT ACCOUNTING SUPPORT              *
  *********************************************************************/
 
-// __weak void arch_set_freq_scale(struct cpufreq_policy *policy)
-// {
-// }
-// EXPORT_SYMBOL_GPL(arch_set_freq_scale);
+__weak void arch_set_freq_scale(struct cpufreq_policy *policy)
+{
+}
+EXPORT_SYMBOL_GPL(arch_set_freq_scale);
 
 #define arch_set_freq_scale cpufreq_set_freq_scale
 
-static void
-cpufreq_set_freq_scale(struct cpufreq_policy *policy)
+static __always_inline
+void cpufreq_set_freq_scale(struct cpufreq_policy *policy)
 {
-	struct cpumask *cpus = policy->related_cpus;
-	int cpu = cpumask_first(cpus);
-	unsigned long cur_freq = policy->cur;
-	unsigned long max_freq = policy->max;
-	unsigned long scale;
+	unsigned long old_freq, new_freq, scale;
+	unsigned int cpu = FIRST_CPU_OF(policy->cpu);
 
-	scale = (cur_freq << SCHED_CAPACITY_SHIFT) / max_freq;
+	old_freq = READ_FROM_CPU(cur_freq, cpu);
+	new_freq = policy->cur;
 
-	for_each_cpu(cpu, cpus)
-		per_cpu(freq_scale, cpu) = scale;
+	if (old_freq == new_freq)
+		return;
 
-	pr_debug("cpus %*pbl cur freq/max freq %lu/%lu kHz freq scale %lu\n",
-		 cpumask_pr_args(cpus), cur_freq, max_freq, scale);
+	scale = (new_freq << SCHED_CAPACITY_SHIFT) / cpufreq_get_freq_ref(cpu);
+
+	WRITE_TO_CPU(cur_freq, cpu, new_freq);
+	WRITE_TO_CPU(arch_freq_scale, cpu, scale);
 }
 
 unsigned long cpufreq_get_freq_scale(int cpu)
 {
-	return per_cpu(freq_scale, cpu);
+	return READ_FROM_CPU(arch_freq_scale, cpu);
 }
 
 /**
@@ -876,11 +851,7 @@ static ssize_t store_##file_name					\
 	int ret, temp;							\
 	struct cpufreq_policy new_policy;				\
 									\
-    if (likely(task_is_booster(current)))                                   \
-        return count;                                           \
-									\
-    if (&policy->object == &policy->min)				\
-		return count;						\
+	return count;					\
 									\
 	memcpy(&new_policy, policy, sizeof(*policy));			\
 	new_policy.min = policy->user_policy.min;			\
@@ -2180,7 +2151,8 @@ static int __target_intermediate(struct cpufreq_policy *policy,
 	return ret;
 }
 
-static int __target_index(struct cpufreq_policy *policy, int index)
+static __always_inline
+int __target_index(struct cpufreq_policy *policy, int index)
 {
 	struct cpufreq_freqs freqs = {.old = policy->cur, .flags = 0};
 	unsigned int restore_freq, intermediate_freq = 0;
@@ -2267,9 +2239,9 @@ int __cpufreq_driver_target(struct cpufreq_policy *policy,
 	 * exactly same freq is called again and so we can save on few function
 	 * calls.
 	 */
-	if (target_freq == policy->cur &&
-	    !(cpufreq_driver->flags & CPUFREQ_NEED_UPDATE_LIMITS))
-		return -1;
+	// if (target_freq == policy->cur &&
+	//     !(cpufreq_driver->flags & CPUFREQ_NEED_UPDATE_LIMITS))
+	// 	return -1;
 
 	if (cpufreq_driver->target)
 		return cpufreq_driver->target(policy, target_freq, relation);
@@ -2590,9 +2562,6 @@ int cpufreq_update_policy(unsigned int cpu)
 	struct cpufreq_policy *policy;
 	struct cpufreq_policy new_policy;
 	int ret;
-
-	if (task_is_booster(current))
-		return 0;
 
 	policy = cpufreq_cpu_get(cpu);
 

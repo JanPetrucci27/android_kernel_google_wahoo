@@ -963,8 +963,6 @@ static inline bool policy_has_boost_freq(struct cpufreq_policy *policy)
 }
 #endif
 
-extern void arch_set_freq_scale(struct cpufreq_policy *policy);
-
 /* the following are really really optional */
 extern struct freq_attr cpufreq_freq_attr_scaling_available_freqs;
 extern struct freq_attr cpufreq_freq_attr_scaling_boost_freqs;
@@ -981,8 +979,7 @@ struct sched_domain;
 void cpufreq_set_freq_ref(const struct cpumask *cpus,
 			       unsigned long max_freq);
 unsigned long cpufreq_get_freq_ref(int cpu);
-unsigned long cpufreq_scale_freq_capacity(int cpu);
-unsigned long cpufreq_scale_max_freq_capacity(int cpu);
+unsigned long cpufreq_get_throttle_scale(int cpu);
 #endif /* _LINUX_CPUFREQ_H */
 
 /*********************************************************************

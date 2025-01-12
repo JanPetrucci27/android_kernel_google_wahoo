@@ -317,24 +317,48 @@ const struct sched_group_energy * const cpu_core_energy(int cpu)
 
 const struct cpumask *cpu_coregroup_mask(int cpu)
 {
-	return &cpu_topology[cpu].core_sibling;
+	const cpumask_t *core_mask = cpumask_of_node(cpu_to_node(cpu));
+
+	/* Find the smaller of NUMA, core or LLC siblings */
+	if (cpumask_subset(&cpu_topology[cpu].core_sibling, core_mask)) {
+		/* not numa in package, lets use the package siblings */
+		core_mask = &cpu_topology[cpu].core_sibling;
+	}
+
+	/*
+	 * For systems with no shared cpu-side LLC but with clusters defined,
+	 * extend core_mask to cluster_siblings. The sched domain builder will
+	 * then remove MC as redundant with CLS if SCHED_CLUSTER is enabled.
+	 */
+	if (IS_ENABLED(CONFIG_SCHED_CLUSTER) &&
+		cpumask_subset(core_mask, &cpu_topology[cpu].cluster_sibling))
+		core_mask = &cpu_topology[cpu].cluster_sibling;
+
+	return core_mask;
 }
 
-static int cpu_cpu_flags(void)
+const struct cpumask *cpu_clustergroup_mask(int cpu)
 {
-	return SD_ASYM_CPUCAPACITY;
-}
+	/*
+	 * Forbid cpu_clustergroup_mask() to span more or the same CPUs as
+	 * cpu_coregroup_mask().
+	 */
+	if (cpumask_subset(cpu_coregroup_mask(cpu),
+		&cpu_topology[cpu].cluster_sibling))
+		return topology_sibling_cpumask(cpu);
 
-static inline int cpu_corepower_flags(void)
-{
-	return SD_SHARE_LLC;
+	return &cpu_topology[cpu].cluster_sibling;
 }
 
 static struct sched_domain_topology_level arm64_topology[] = {
-#ifdef CONFIG_SCHED_MC
-	{ cpu_coregroup_mask, cpu_corepower_flags, cpu_core_energy, SD_INIT_NAME(MC) },
+#ifdef CONFIG_SCHED_CLUSTER
+	{ cpu_clustergroup_mask, cpu_cluster_flags, cpu_core_energy, SD_INIT_NAME(CLS) },
 #endif
-	{ cpu_cpu_mask, cpu_cpu_flags, cpu_cluster_energy, SD_INIT_NAME(DIE) },
+
+#ifdef CONFIG_SCHED_MC
+	{ cpu_coregroup_mask, cpu_core_flags, cpu_core_energy, SD_INIT_NAME(MC) },
+#endif
+	{ cpu_cpu_mask, NULL, cpu_cluster_energy, SD_INIT_NAME(DIE) },
 	{ NULL, },
 };
 
@@ -362,12 +386,18 @@ static void update_siblings_masks(unsigned int cpuid)
 	for_each_possible_cpu(cpu) {
 		cpu_topo = &cpu_topology[cpu];
 
-		if (cpuid_topo->cluster_id != cpu_topo->cluster_id)
-			continue;
-
 		cpumask_set_cpu(cpuid, &cpu_topo->core_sibling);
 		if (cpu != cpuid)
 			cpumask_set_cpu(cpu, &cpuid_topo->core_sibling);
+
+		if (cpuid_topo->cluster_id != cpu_topo->cluster_id)
+			continue;
+
+		if (cpuid_topo->cluster_id >= 0) {
+			cpumask_set_cpu(cpuid, &cpu_topo->cluster_sibling);
+			if (cpu != cpuid)
+				cpumask_set_cpu(cpu, &cpuid_topo->cluster_sibling);
+		}
 
 		if (cpuid_topo->core_id != cpu_topo->core_id)
 			continue;
@@ -426,6 +456,9 @@ static void __init reset_cpu_topology(void)
 		cpu_topo->thread_id = -1;
 		cpu_topo->core_id = 0;
 		cpu_topo->cluster_id = -1;
+
+		cpumask_clear(&cpu_topo->cluster_sibling);
+		cpumask_set_cpu(cpu, &cpu_topo->cluster_sibling);
 
 		cpumask_clear(&cpu_topo->core_sibling);
 		cpumask_set_cpu(cpu, &cpu_topo->core_sibling);

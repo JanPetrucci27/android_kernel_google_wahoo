@@ -31,8 +31,6 @@
 #include <linux/cpu_cooling.h>
 #include <trace/events/power.h>
 
-static DEFINE_MUTEX(l2bw_lock);
-
 static struct thermal_cooling_device *cdev[NR_CPUS];
 static struct clk *cpu_clk[NR_CPUS];
 static struct clk *l2_clk;
@@ -46,28 +44,8 @@ struct cpufreq_suspend_t {
 
 static DEFINE_PER_CPU(struct cpufreq_suspend_t, suspend_data);
 
-static int set_cpu_freq(struct cpufreq_policy *policy, unsigned int new_freq)
-{
-	int ret;
-	struct cpufreq_freqs freqs;
-	unsigned long rate;
-
-	freqs.old = policy->cur;
-	freqs.new = new_freq;
-	freqs.cpu = policy->cpu;
-
-	cpufreq_freq_transition_begin(policy, &freqs);
-
-	rate = new_freq * 1000;
-	rate = clk_round_rate(cpu_clk[policy->cpu], rate);
-	ret = clk_set_rate(cpu_clk[policy->cpu], rate);
-
-	cpufreq_freq_transition_end(policy, &freqs, ret);
-
-	return ret;
-}
-
-static int set_cpu_freq_index(struct cpufreq_policy *policy, unsigned long new_freq)
+static __always_inline
+int set_cpu_freq(struct cpufreq_policy *policy, unsigned long new_freq)
 {
 	new_freq = new_freq * 1000;
 	new_freq = clk_round_rate(cpu_clk[policy->cpu], new_freq);
@@ -78,6 +56,7 @@ static int set_cpu_freq_index(struct cpufreq_policy *policy, unsigned long new_f
 static int msm_cpufreq_target_index(struct cpufreq_policy *policy,
 				unsigned int idx)
 {
+	unsigned long new_freq;
 	int ret;
 
 	mutex_lock(&per_cpu(suspend_data, policy->cpu).suspend_mutex);
@@ -89,10 +68,17 @@ static int msm_cpufreq_target_index(struct cpufreq_policy *policy,
 		goto done;
 	}
 
-	ret = set_cpu_freq_index(policy, policy->freq_table[idx].frequency);
+	new_freq = policy->freq_table[idx].frequency;
+	if (policy->cur == new_freq) {
+		ret = 0;
+		goto done;
+	}
+
+	ret = set_cpu_freq(policy, new_freq);
 
 done:
 	mutex_unlock(&per_cpu(suspend_data, policy->cpu).suspend_mutex);
+
 	return ret;
 }
 
@@ -110,12 +96,9 @@ static unsigned int msm_cpufreq_get_freq(unsigned int cpu)
 
 static int msm_cpufreq_init(struct cpufreq_policy *policy)
 {
-	int cur_freq;
-	unsigned int index;
-	int ret = 0;
+	int cpu, ret;
 	struct cpufreq_frequency_table *table =
 			per_cpu(freq_table, policy->cpu);
-	int cpu;
 
 	/*
 	 * In some SoC, some cores are clocked by same source, and their
@@ -133,19 +116,7 @@ static int msm_cpufreq_init(struct cpufreq_policy *policy)
 		return ret;
 	}
 
-	cur_freq = msm_cpufreq_get_freq(policy->cpu);
-	index = cpufreq_frequency_table_target(policy, cur_freq, CPUFREQ_RELATION_H);
-
-	/*
-	 * Call set_cpu_freq unconditionally so that when cpu is set to
-	 * online, frequency limit will always be updated.
-	 */
-	ret = set_cpu_freq(policy, table[index].frequency);
-	if (ret)
-		return ret;
-	pr_debug("cpufreq: cpu%d init at %d switching to %d\n",
-			policy->cpu, cur_freq, table[index].frequency);
-	policy->cur = table[index].frequency;
+	policy->cur = msm_cpufreq_get_freq(policy->cpu);
 	policy->dvfs_possible_from_any_cpu = true;
 
 	return 0;
@@ -426,7 +397,7 @@ static int __init msm_cpufreq_probe(struct platform_device *pdev)
 	if (of_property_read_bool(dev->of_node, "qcom,governor-per-policy"))
 		msm_cpufreq_driver.flags |= CPUFREQ_HAVE_GOVERNOR_PER_POLICY;
 
-	/* Parse commong cpufreq table for all CPUs */
+	/* Parse common cpufreq table for all CPUs */
 	ftbl = cpufreq_parse_dt(dev, "qcom,cpufreq-table", 0);
 	if (!IS_ERR(ftbl)) {
 		for_each_possible_cpu(cpu)
@@ -511,8 +482,7 @@ static int __init msm_cpufreq_register(void)
 		/* Unblock hotplug if msm-cpufreq probe fails */
 		unregister_hotcpu_notifier(&msm_cpufreq_cpu_notifier);
 		for_each_possible_cpu(cpu)
-			mutex_destroy(&(per_cpu(suspend_data, cpu).
-					suspend_mutex));
+			mutex_destroy(&(per_cpu(suspend_data, cpu).suspend_mutex));
 		return rc;
 	}
 
