@@ -109,12 +109,7 @@
 		<  2419200000 0x0401007e 0x0a650065 0x3 28 >,
 		<  2419200000 0x0404007e 0x0a650065 0x3 29 >,
 		<  2496000000 0x04010082 0x0a680068 0x3 29 >,
-		<  2457600000 0x04040080 0x0a660066 0x3 30 >,
-		<  2553600000 0x04010085 0x0a6a006a 0x3 30 >,
-		<  2476800000 0x04040081 0x0a670067 0x3 31 >,
-		<  2572800000 0x04010086 0x0a6b006b 0x3 31 >,
-		<  2496000000 0x04040082 0x0a680068 0x3 32 >,
-		<  2592000000 0x04010087 0x0a6c006c 0x3 32 >;
+		<  2457600000 0x04040080 0x0a660066 0x3 30 >;
 
 	qcom,perfcl-speedbin1-v0 =
 		<   300000000 0x0004000f 0x01200020 0x1 1 >,
@@ -303,24 +298,22 @@
 	compatible = "qcom,gfxcc-8998-v2";
 	qcom,gfxfreq-speedbin0 =
 		<         0 0                           0 >,
-		< 180000000 1 RPM_SMD_REGULATOR_LEVEL_SVS >,
 		< 257000000 2 RPM_SMD_REGULATOR_LEVEL_SVS >,
 		< 342000000 3 RPM_SMD_REGULATOR_LEVEL_SVS >,
 		< 414000000 4 RPM_SMD_REGULATOR_LEVEL_SVS >,
 		< 515000000 5 RPM_SMD_REGULATOR_LEVEL_NOM >,
 		< 596000000 6 RPM_SMD_REGULATOR_LEVEL_NOM >,
 		< 670000000 7 RPM_SMD_REGULATOR_LEVEL_TURBO >,
-		< 750000000 8 RPM_SMD_REGULATOR_LEVEL_TURBO >;
+		< 710000000 8 RPM_SMD_REGULATOR_LEVEL_TURBO >;
 	qcom,gfxfreq-mx-speedbin0 =
 		<         0                           0 >,
-		< 180000000 RPM_SMD_REGULATOR_LEVEL_SVS >,
 		< 257000000 RPM_SMD_REGULATOR_LEVEL_SVS >,
 		< 342000000 RPM_SMD_REGULATOR_LEVEL_SVS >,
 		< 414000000 RPM_SMD_REGULATOR_LEVEL_SVS >,
 		< 515000000 RPM_SMD_REGULATOR_LEVEL_NOM >,
 		< 596000000 RPM_SMD_REGULATOR_LEVEL_NOM >,
 		< 670000000 RPM_SMD_REGULATOR_LEVEL_TURBO >,
-		< 750000000 RPM_SMD_REGULATOR_LEVEL_TURBO >;
+		< 710000000 RPM_SMD_REGULATOR_LEVEL_TURBO >;
 };
 
 &mdss_mdp {
@@ -1005,7 +998,7 @@
 
 	qcom,corner-frequencies =
 		<180000000 257000000 342000000 414000000
-		 515000000 596000000 670000000 750000000>;
+		 515000000 596000000 670000000 710000000>;
 
 	qcom,cpr-target-quotients =
 		<   0    0    0    0  331  357    0    0
@@ -1169,7 +1162,7 @@
 &msm_gpu {
 	/* Updated chip ID */
 	qcom,chipid = <0x05040001>;
-	qcom,initial-pwrlevel = <7>;
+	qcom,initial-pwrlevel = <6>;
 
 	qcom,gpu-pwrlevels {
 		#address-cells = <1>;
@@ -1179,7 +1172,7 @@
 
 		qcom,gpu-pwrlevel@0 {
 			reg = <0>;
-			qcom,gpu-freq = <750000000>;
+			qcom,gpu-freq = <710000000>;
 			qcom,bus-freq = <12>;
 			qcom,bus-min = <12>;
 			qcom,bus-max = <12>;
@@ -1235,14 +1228,6 @@
 
 		qcom,gpu-pwrlevel@7 {
 			reg = <7>;
-			qcom,gpu-freq = <180000000>;
-			qcom,bus-freq = <4>;
-			qcom,bus-min = <2>;
-			qcom,bus-max = <7>;
-		};
-
-		qcom,gpu-pwrlevel@8 {
-			reg = <8>;
 			qcom,gpu-freq = <27000000>;
 			qcom,bus-freq = <0>;
 			qcom,bus-min = <0>;
