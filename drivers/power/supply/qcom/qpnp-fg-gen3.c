@@ -1303,7 +1303,7 @@ static int fg_awake_cb(struct votable *votable, void *data, int awake,
 	struct fg_chip *chip = data;
 
 	if (awake)
-		pm_wakeup_event(chip->dev, 500);
+		pm_stay_awake(chip->dev);
 	else
 		pm_relax(chip->dev);
 
@@ -3358,7 +3358,7 @@ static int fg_psy_get_property(struct power_supply *psy,
 	struct fg_saved_data *sd = chip->saved_data + psp;
 	union power_supply_propval typec_sts = { .intval = -1 };
 	int rc = 0;
-	
+
 	switch (psp) {
 	case POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN:
 	case POWER_SUPPLY_PROP_RESISTANCE_ID:
@@ -3472,10 +3472,10 @@ static int fg_psy_get_property(struct power_supply *psy,
 
 	if (rc < 0)
 		return -ENODATA;
-	
+
 	sd->val = *pval;
 	sd->last_req_expires = jiffies + msecs_to_jiffies(FG_RATE_LIM_MS);
-	
+
 	return 0;
 }
 
@@ -3562,7 +3562,7 @@ static int fg_notifier_cb(struct notifier_block *nb,
 		 * We cannot vote for awake votable here as that takes
 		 * a mutex lock and this is executed in an atomic context.
 		 */
-		pm_wakeup_event(chip->dev, 0);
+		pm_stay_awake(chip->dev);
 		schedule_work(&chip->status_change_work);
 	}
 
@@ -4754,7 +4754,7 @@ static int fg_parse_dt(struct fg_chip *chip)
 		if (temp >= 60 || temp <= 240)
 			chip->dt.esr_meas_curr_ma = temp;
 	}
-	
+
 	chip->dt.soc_irq_disable =
 		of_property_read_bool(node, "google,fg-soc-irq-disable");
 
@@ -5016,7 +5016,7 @@ static int fg_gen3_probe(struct platform_device *pdev)
 	/* Keep SOC_UPDATE_IRQ disabled until we require it */
 	if (fg_irqs[SOC_UPDATE_IRQ].irq)
 		disable_irq_nosync(fg_irqs[SOC_UPDATE_IRQ].irq);
-	
+
 	if (chip->dt.soc_irq_disable) {
 		if (fg_irqs[MSOC_EMPTY_IRQ].irq)
 			disable_irq_nosync(fg_irqs[MSOC_EMPTY_IRQ].irq);

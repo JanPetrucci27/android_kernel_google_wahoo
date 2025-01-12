@@ -148,10 +148,10 @@ static int parse_options(struct super_block *sb, char *options, int silent,
 	}
 
 	if (*debug) {
-		pr_info("sdcardfs : options - debug:%d\n", *debug);
-		pr_info("sdcardfs : options - uid:%d\n",
+		pr_debug("sdcardfs : options - debug:%d\n", *debug);
+		pr_debug("sdcardfs : options - uid:%d\n",
 							opts->fs_low_uid);
-		pr_info("sdcardfs : options - gid:%d\n",
+		pr_debug("sdcardfs : options - gid:%d\n",
 							opts->fs_low_gid);
 	}
 
@@ -212,9 +212,9 @@ int parse_options_remount(struct super_block *sb, char *options, int silent,
 	}
 
 	if (debug) {
-		pr_info("sdcardfs : options - debug:%d\n", debug);
-		pr_info("sdcardfs : options - gid:%d\n", vfsopts->gid);
-		pr_info("sdcardfs : options - mask:%d\n", vfsopts->mask);
+		pr_debug("sdcardfs : options - debug:%d\n", debug);
+		pr_debug("sdcardfs : options - gid:%d\n", vfsopts->gid);
+		pr_debug("sdcardfs : options - mask:%d\n", vfsopts->mask);
 	}
 
 	return 0;
@@ -268,7 +268,7 @@ static int sdcardfs_read_super(struct vfsmount *mnt, struct super_block *sb,
 	struct sdcardfs_vfsmount_options *mnt_opt = mnt->data;
 	struct inode *inode;
 
-	pr_info("sdcardfs version 2.0\n");
+	pr_debug("sdcardfs version 2.0\n");
 
 	if (!dev_name) {
 		pr_err("sdcardfs: read_super: missing dev_name argument\n");
@@ -276,9 +276,9 @@ static int sdcardfs_read_super(struct vfsmount *mnt, struct super_block *sb,
 		goto out;
 	}
 
-	pr_info("sdcardfs: dev_name -> %s\n", dev_name);
-	pr_info("sdcardfs: options -> %s\n", (char *)raw_data);
-	pr_info("sdcardfs: mnt -> %p\n", mnt);
+	pr_debug("sdcardfs: dev_name -> %s\n", dev_name);
+	pr_debug("sdcardfs: options -> %s\n", (char *)raw_data);
+	pr_debug("sdcardfs: mnt -> %p\n", mnt);
 
 	/* parse lower path */
 	err = kern_path(dev_name, LOOKUP_FOLLOW | LOOKUP_DIRECTORY,
@@ -375,7 +375,7 @@ static int sdcardfs_read_super(struct vfsmount *mnt, struct super_block *sb,
 	mutex_unlock(&sdcardfs_super_list_lock);
 
 	if (!silent)
-		pr_info("sdcardfs: mounted on top of %s type %s\n",
+		pr_debug("sdcardfs: mounted on top of %s type %s\n",
 				dev_name, lower_sb->s_type->name);
 	goto out; /* all is well */
 
@@ -466,7 +466,7 @@ static int __init init_sdcardfs_fs(void)
 {
 	int err;
 
-	pr_info("Registering sdcardfs " SDCARDFS_VERSION "\n");
+	pr_debug("Registering sdcardfs " SDCARDFS_VERSION "\n");
 	
 	kmem_file_info_pool = KMEM_CACHE(sdcardfs_file_info, SLAB_HWCACHE_ALIGN);
 	if (!kmem_file_info_pool) {
@@ -501,7 +501,7 @@ static void __exit exit_sdcardfs_fs(void)
 	packagelist_exit();
 	unregister_filesystem(&sdcardfs_fs_type);
 	kmem_cache_destroy(kmem_file_info_pool);
-	pr_info("Completed sdcardfs module unload\n");
+	pr_debug("Completed sdcardfs module unload\n");
 }
 
 /* Original wrapfs authors */

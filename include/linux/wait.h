@@ -174,6 +174,7 @@ wait_queue_head_t *bit_waitqueue(void *, int);
 #define wake_up_interruptible_nr(x, nr)	__wake_up(x, TASK_INTERRUPTIBLE, nr, NULL)
 #define wake_up_interruptible_all(x)	__wake_up(x, TASK_INTERRUPTIBLE, 0, NULL)
 #define wake_up_interruptible_sync(x)	__wake_up_sync((x), TASK_INTERRUPTIBLE)
+#define wake_up_sync(x)			__wake_up_sync(x, TASK_NORMAL)
 
 /*
  * Wakeup macros to be used to report events to the targets.

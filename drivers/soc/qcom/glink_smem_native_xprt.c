@@ -32,6 +32,7 @@
 #include <linux/slab.h>
 #include <linux/spinlock.h>
 #include <linux/srcu.h>
+#include <linux/suspend.h>
 #include <linux/wait.h>
 #include <linux/cpumask.h>
 #include <soc/qcom/smem.h>
@@ -53,6 +54,8 @@
 #define RPM_FIFO_ADDR_ALIGN_BYTES 3
 #define TRACER_PKT_FEATURE BIT(2)
 #define DEFERRED_CMDS_THRESHOLD 25
+
+static int should_wake;
 /**
  * enum command_types - definition of the types of commands sent/received
  * @VERSION_CMD:		Version and feature set supported
@@ -1237,6 +1240,12 @@ static void rx_worker(struct kthread_work *work)
 irqreturn_t irq_handler(int irq, void *priv)
 {
 	struct edge_info *einfo = (struct edge_info *)priv;
+
+	if (should_wake) {
+		pr_info("%s: %d triggered %s\n", __func__, irq, einfo->xprt_cfg.name);
+		should_wake = false;
+		pm_system_wakeup();
+	}
 
 	if (einfo->rx_reset_reg)
 		writel_relaxed(einfo->out_irq_mask, einfo->rx_reset_reg);
@@ -2470,17 +2479,13 @@ static int glink_smem_native_probe(struct platform_device *pdev)
 
 	einfo->irq_line = irq_line;
 	rc = request_irq(irq_line, irq_handler,
-			IRQF_TRIGGER_RISING | IRQF_SHARED,
+			IRQF_TRIGGER_RISING | IRQF_NO_SUSPEND | IRQF_SHARED,
 			node->name, einfo);
 	if (rc < 0) {
 		pr_err("%s: request_irq on %d failed: %d\n", __func__, irq_line,
 									rc);
 		goto request_irq_fail;
 	}
-	rc = enable_irq_wake(irq_line);
-	if (rc < 0)
-		pr_err("%s: enable_irq_wake() failed on %d\n", __func__,
-								irq_line);
 	
 	key = "cpu-affinity";
 	cpu_size = of_property_count_u32_elems(node, key);
@@ -2742,10 +2747,6 @@ static int glink_rpm_native_probe(struct platform_device *pdev)
 									rc);
 		goto request_irq_fail;
 	}
-	rc = enable_irq_wake(irq_line);
-	if (rc < 0)
-		pr_err("%s: enable_irq_wake() failed on %d\n", __func__,
-								irq_line);
 
 	register_debugfs_info(einfo);
 	einfo->xprt_if.glink_core_if_ptr->link_up(&einfo->xprt_if);
@@ -2988,10 +2989,6 @@ static int glink_mailbox_probe(struct platform_device *pdev)
 									rc);
 		goto request_irq_fail;
 	}
-	rc = enable_irq_wake(irq_line);
-	if (rc < 0)
-		pr_err("%s: enable_irq_wake() failed on %d\n", __func__,
-								irq_line);
 
 	register_debugfs_info(einfo);
 
@@ -3199,6 +3196,26 @@ static int __init glink_smem_native_xprt_init(void)
 	return 0;
 }
 arch_initcall(glink_smem_native_xprt_init);
+
+static int qcom_glink_suspend_no_irq(struct device *dev)
+{
+	should_wake = true;
+
+	return 0;
+}
+
+static int qcom_glink_resume_no_irq(struct device *dev)
+{
+	should_wake = false;
+
+	return 0;
+}
+
+const struct dev_pm_ops glink_native_pm_ops = {
+	.suspend_noirq = qcom_glink_suspend_no_irq,
+	.resume_noirq = qcom_glink_resume_no_irq,
+};
+EXPORT_SYMBOL(glink_native_pm_ops);
 
 MODULE_DESCRIPTION("MSM G-Link SMEM Native Transport");
 MODULE_LICENSE("GPL v2");

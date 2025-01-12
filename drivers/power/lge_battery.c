@@ -230,8 +230,8 @@ static int battery_power_supply_changed(void)
 static __always_inline
 void bypass_current(struct battery_manager *bm, int reason, int *fcc)
 {
-	if (bm->batt_soc >= (force_batt_voltage_limit ? 85 : 100)) {
-		*fcc = 0;
+	if (force_batt_voltage_limit && bm->batt_soc >= 85) {
+		*fcc = min(*fcc, LCD_ON_CURRENT);
 		return;
 	}
 
@@ -259,26 +259,27 @@ static int bm_vote_fcc_update(struct battery_manager *bm)
 	bypass_current(bm, reason, &fcc);
 
 	if (reason == bm->bm_vote_fcc_reason && fcc == bm->bm_vote_fcc_value)
-		return rc;
+		goto ret;
 
 	rc = bm_set_property(bm->batt_psy, POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX, fcc);
 	if (rc < 0) {
 		pr_bm(ERROR,
 		      "Couldn't set current, rc=%d\n", rc);
-		return rc;
+		goto ret;
 	}
 
 	rc = bm_set_property(bm->batt_psy, POWER_SUPPLY_PROP_CHARGE_DISABLE, (fcc == 0 ? 1 : 0));
 	if (rc < 0) {
 		pr_bm(ERROR,
 		      "Couldn't charge disable, rc=%d\n", rc);
-		return rc;
+		goto ret;
 	}
 
 	bm->bm_vote_fcc_reason = reason;
 	bm->bm_vote_fcc_value = fcc;
 	pr_bm(MISC, "vote id[%d], set cur[%d]\n", reason, fcc);
 
+ret:
 	return rc;
 }
 

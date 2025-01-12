@@ -13,7 +13,6 @@
 
 #define pr_fmt(fmt) "dev-cpufreq: " fmt
 
-#include <linux/binfmts.h>
 #include <linux/devfreq.h>
 #include <linux/cpu.h>
 #include <linux/cpufreq.h>
@@ -74,9 +73,6 @@ static ssize_t store_##name(struct device *dev,				\
 	struct devfreq_node *n = df->data;				\
 	int ret;							\
 	unsigned int val;						\
-									\
-	if (likely(task_is_booster(current)))					\
-		return count;						\
 									\
 	ret = sscanf(buf, "%u", &val);					\
 	if (ret != 1)							\

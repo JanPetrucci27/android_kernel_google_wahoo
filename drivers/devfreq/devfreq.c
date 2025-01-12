@@ -10,7 +10,6 @@
  * published by the Free Software Foundation.
  */
 
-#include <linux/binfmts.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/errno.h>
@@ -1031,13 +1030,6 @@ static ssize_t min_freq_store(struct device *dev, struct device_attribute *attr,
 	if (ret != 1)
 		return -EINVAL;
 
-	if ((likely(task_is_booster(current))) && strstr(dev_name(df->dev.parent), "kgsl")) {
-		if (value == 257000000)
-			value = 180000000;
-		if (value == 710000000)
-			value = 750000000;
-	}
-
 	if (value == df->cached_min_freq)
 		return count;
 
@@ -1082,13 +1074,6 @@ static ssize_t max_freq_store(struct device *dev, struct device_attribute *attr,
 	ret = sscanf(buf, "%lu", &value);
 	if (ret != 1)
 		return -EINVAL;
-	
-	if ((likely(task_is_booster(current))) && strstr(dev_name(df->dev.parent), "kgsl")) {
-		if (value == 257000000)
-			value = 180000000;
-		if (value == 710000000)
-			value = 750000000;
-	}
 	
 	if (value == df->cached_max_freq)
 		return count;

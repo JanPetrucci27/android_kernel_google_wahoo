@@ -45,7 +45,7 @@
 
 DEFINE_LED_TRIGGER(bl_led_trigger);
 
-bool display_on = true;
+static bool display_on = true;
 bool is_display_on(void)
 {
 	return display_on;
