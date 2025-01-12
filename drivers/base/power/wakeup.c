@@ -906,6 +906,9 @@ bool pm_wakeup_pending(void)
 
 void pm_system_wakeup(void)
 {
+	if (pm_abort_suspend)
+		return;
+
 	pm_abort_suspend = true;
 	freeze_wake();
 }

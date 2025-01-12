@@ -243,7 +243,7 @@ int wcd9xxx_spmi_suspend(pm_message_t pmesg)
 
 	pr_debug("%s: enter\n", __func__);
 	/*
-	 * pm_qos_update_request() can be called after this suspend chain call
+	 * cpu_latency_qos_update_request() can be called after this suspend chain call
 	 * started. thus suspend can be called while lock is being held
 	 */
 	mutex_lock(&map.pm_lock);
@@ -324,8 +324,7 @@ bool wcd9xxx_spmi_lock_sleep(void)
 	mutex_lock(&map.pm_lock);
 	if (map.wlock_holders++ == 0) {
 		pr_debug("%s: holding wake lock\n", __func__);
-		pm_qos_update_request(&map.pm_qos_req,
-				      msm_cpuidle_get_deep_idle_latency());
+		cpu_latency_qos_update_request(&map.pm_qos_req, 10);
 		pm_stay_awake(&map.spmi[0]->dev);
 	}
 	mutex_unlock(&map.pm_lock);
@@ -369,7 +368,7 @@ void wcd9xxx_spmi_unlock_sleep(void)
 		 */
 		if (likely(map.pm_state == WCD9XXX_PM_AWAKE))
 			map.pm_state = WCD9XXX_PM_SLEEPABLE;
-		pm_qos_update_request(&map.pm_qos_req,
+		cpu_latency_qos_update_request(&map.pm_qos_req,
 				PM_QOS_DEFAULT_VALUE);
 		pm_relax(&map.spmi[0]->dev);
 	}
@@ -402,7 +401,7 @@ int wcd9xxx_spmi_irq_init(void)
 	map.wlock_holders = 0;
 	map.pm_state = WCD9XXX_PM_SLEEPABLE;
 	init_waitqueue_head(&map.pm_wq);
-	pm_qos_add_request(&map.pm_qos_req,
+	cpu_latency_qos_add_request(&map.pm_qos_req,
 				PM_QOS_CPU_DMA_LATENCY,
 				PM_QOS_DEFAULT_VALUE);
 

@@ -4046,8 +4046,7 @@ int glink_core_register_transport(struct glink_transport_if *if_ptr,
 		return ret;
 	}
 	INIT_DELAYED_WORK(&xprt_ptr->pm_qos_work, glink_pm_qos_cancel_worker);
-	pm_qos_add_request(&xprt_ptr->pm_qos_req, PM_QOS_CPU_DMA_LATENCY,
-			PM_QOS_DEFAULT_VALUE);
+	cpu_latency_qos_add_request(&xprt_ptr->pm_qos_req, PM_QOS_DEFAULT_VALUE);
 
 	if_ptr->glink_core_priv = xprt_ptr;
 	if_ptr->glink_core_if_ptr = &core_impl;
@@ -4089,7 +4088,7 @@ void glink_core_unregister_transport(struct glink_transport_if *if_ptr)
 	list_del(&xprt_ptr->list_node);
 	mutex_unlock(&transport_list_lock_lha0);
 	flush_delayed_work(&xprt_ptr->pm_qos_work);
-	pm_qos_remove_request(&xprt_ptr->pm_qos_req);
+	cpu_latency_qos_remove_request(&xprt_ptr->pm_qos_req);
 	ipc_log_context_destroy(xprt_ptr->log_ctx);
 	xprt_ptr->log_ctx = NULL;
 	rwref_put(&xprt_ptr->xprt_state_lhb0);
@@ -5698,7 +5697,7 @@ static void glink_pm_qos_vote(struct glink_core_xprt_ctx *xprt_ptr)
 {
 	if (glink_pm_qos && !xprt_ptr->qos_req_active) {
 		GLINK_PERF("%s: qos vote %u us\n", __func__, glink_pm_qos);
-		pm_qos_update_request(&xprt_ptr->pm_qos_req, glink_pm_qos);
+		cpu_latency_qos_update_request(&xprt_ptr->pm_qos_req, glink_pm_qos);
 		xprt_ptr->qos_req_active = true;
 	}
 	xprt_ptr->tx_path_activity = true;
@@ -5739,7 +5738,7 @@ static void glink_pm_qos_cancel_worker(struct work_struct *work)
 	if (!xprt_ptr->tx_path_activity) {
 		/* no more tx activity */
 		GLINK_PERF("%s: qos off\n", __func__);
-		pm_qos_update_request(&xprt_ptr->pm_qos_req,
+		cpu_latency_qos_update_request(&xprt_ptr->pm_qos_req,
 				PM_QOS_DEFAULT_VALUE);
 		xprt_ptr->qos_req_active = false;
 	}

@@ -1157,7 +1157,7 @@ static int _adreno_start(struct adreno_device *adreno_dev)
 	/* make sure ADRENO_DEVICE_STARTED is not set here */
 	BUG_ON(test_bit(ADRENO_DEVICE_STARTED, &adreno_dev->priv));
 
-	pm_qos_update_request(&device->pwrctrl.pm_qos_req_dma,
+	cpu_latency_qos_update_request(&device->pwrctrl.pm_qos_req_dma,
 			pmqos_wakeup_vote);
 
 	kgsl_cffdump_open(device);
@@ -1278,7 +1278,7 @@ static int _adreno_start(struct adreno_device *adreno_dev)
 	set_bit(ADRENO_DEVICE_STARTED, &adreno_dev->priv);
 
 	if (pmqos_active_vote != pmqos_wakeup_vote)
-		pm_qos_update_request(&device->pwrctrl.pm_qos_req_dma,
+		cpu_latency_qos_update_request(&device->pwrctrl.pm_qos_req_dma,
 				pmqos_active_vote);
 
 	return 0;
@@ -1291,7 +1291,7 @@ error_pwr_off:
 	kgsl_pwrctrl_change_state(device, state);
 
 	if (pmqos_active_vote != pmqos_wakeup_vote)
-		pm_qos_update_request(&device->pwrctrl.pm_qos_req_dma,
+		cpu_latency_qos_update_request(&device->pwrctrl.pm_qos_req_dma,
 				pmqos_active_vote);
 
 	return status;

@@ -1102,7 +1102,7 @@ out_gem_unload:
 		pci_disable_msi(dev->pdev);
 
 	intel_teardown_mchbar(dev);
-	pm_qos_remove_request(&dev_priv->pm_qos);
+	cpu_latency_qos_remove_request(&dev_priv->pm_qos);
 	destroy_workqueue(dev_priv->gpu_error.hangcheck_wq);
 out_freedpwq:
 	destroy_workqueue(dev_priv->hotplug.dp_wq);
@@ -1204,7 +1204,7 @@ int i915_driver_unload(struct drm_device *dev)
 	destroy_workqueue(dev_priv->hotplug.dp_wq);
 	destroy_workqueue(dev_priv->wq);
 	destroy_workqueue(dev_priv->gpu_error.hangcheck_wq);
-	pm_qos_remove_request(&dev_priv->pm_qos);
+	cpu_latency_qos_remove_request(&dev_priv->pm_qos);
 
 	i915_global_gtt_cleanup(dev);
 

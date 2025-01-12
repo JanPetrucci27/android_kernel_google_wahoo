@@ -1,7 +1,11 @@
 
 ccflags-$(CONFIG_PM_DEBUG)	:= -DDEBUG
 
+ifeq ($(CONFIG_PM_QOS_STUB), y)
+obj-y				+= qos_stub.o
+else
 obj-y				+= qos.o
+endif
 
 obj-$(CONFIG_PM)		+= main.o
 obj-$(CONFIG_VT_CONSOLE_SLEEP)	+= console.o

@@ -3065,7 +3065,7 @@ static void ufshcd_pm_qos_get_worker(struct work_struct *work)
 
 	mutex_lock(&hba->pm_qos.lock);
 	if (atomic_read(&hba->pm_qos.count) && !hba->pm_qos.active) {
-		pm_qos_update_request(&hba->pm_qos.req, 100);
+		cpu_latency_qos_update_request(&hba->pm_qos.req, 100);
 		hba->pm_qos.active = true;
 	}
 	mutex_unlock(&hba->pm_qos.lock);
@@ -3080,7 +3080,7 @@ static void ufshcd_pm_qos_put_worker(struct work_struct *work)
 
 	mutex_lock(&hba->pm_qos.lock);
 	if (!atomic_read(&hba->pm_qos.count) && hba->pm_qos.active) {
-		pm_qos_update_request(&hba->pm_qos.req, PM_QOS_DEFAULT_VALUE);
+		cpu_latency_qos_update_request(&hba->pm_qos.req, PM_QOS_DEFAULT_VALUE);
 		hba->pm_qos.active = false;
 	}
 	mutex_unlock(&hba->pm_qos.lock);
@@ -9096,9 +9096,9 @@ static int ufshcd_resume(struct ufs_hba *hba, enum ufs_pm_op pm_op)
 	};
 	int ret;
 
-	pm_qos_add_request(&req, PM_QOS_CPU_DMA_LATENCY, 100);
+	cpu_latency_qos_add_request(&req, 100);
 	ret = __ufshcd_resume(hba, pm_op);
-	pm_qos_remove_request(&req);
+	cpu_latency_qos_remove_request(&req);
 
 	return ret;
 }
@@ -9599,7 +9599,7 @@ void ufshcd_remove(struct ufs_hba *hba)
 	ufshcd_hba_stop(hba, true);
 	cancel_work_sync(&hba->pm_qos.put_work);
 	cancel_work_sync(&hba->pm_qos.get_work);
-	pm_qos_remove_request(&hba->pm_qos.req);
+	cpu_latency_qos_remove_request(&hba->pm_qos.req);
 
 	ufshcd_exit_clk_gating(hba);
 	ufshcd_exit_hibern8_on_idle(hba);
@@ -10283,8 +10283,7 @@ int ufshcd_init(struct ufs_hba *hba, void __iomem *mmio_base, unsigned int irq)
 	INIT_WORK(&hba->pm_qos.put_work, ufshcd_pm_qos_put_worker);
 	hba->pm_qos.req.type = PM_QOS_REQ_AFFINE_IRQ;
 	hba->pm_qos.req.irq = irq;
-	pm_qos_add_request(&hba->pm_qos.req, PM_QOS_CPU_DMA_LATENCY,
-				PM_QOS_DEFAULT_VALUE);
+	cpu_latency_qos_add_request(&hba->pm_qos.req, PM_QOS_DEFAULT_VALUE);
 
 	/* IRQ registration */
 	err = devm_request_irq(dev, irq, ufshcd_intr, IRQF_SHARED, UFSHCD, hba);
@@ -10381,7 +10380,7 @@ int ufshcd_init(struct ufs_hba *hba, void __iomem *mmio_base, unsigned int irq)
 out_remove_scsi_host:
 	scsi_remove_host(hba->host);
 exit_gating:
-	pm_qos_remove_request(&hba->pm_qos.req);
+	cpu_latency_qos_remove_request(&hba->pm_qos.req);
 	ufshcd_exit_clk_gating(hba);
 	ufshcd_exit_latency_hist(hba);
 	ufshcd_exit_slowio(hba);

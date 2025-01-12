@@ -291,8 +291,7 @@ int create_cluster_lvl_nodes(struct lpm_cluster *p, struct kobject *kobj)
 	return 0;
 }
 
-bool lpm_cpu_mode_allow(unsigned int cpu,
-		unsigned int index, bool from_idle)
+bool lpm_cpu_mode_allow(unsigned int cpu, unsigned int index)
 {
 	struct lpm_level_avail *avail = cpu_level_available[cpu];
 	
@@ -300,22 +299,19 @@ bool lpm_cpu_mode_allow(unsigned int cpu,
 		return 1;
 
 	if (!lpm_pdev || !avail)
-		return !from_idle;
+		return 1;
 
-	return !!(from_idle ? avail[index].idle_enabled :
-				avail[index].suspend_enabled);
+	return !!(avail[index].suspend_enabled);
 }
 
-bool lpm_cluster_mode_allow(struct lpm_cluster *cluster,
-		unsigned int mode, bool from_idle)
+bool lpm_cluster_mode_allow(struct lpm_cluster *cluster, unsigned int mode)
 {
 	struct lpm_level_avail *avail = &cluster->levels[mode].available;
 
 	if (!lpm_pdev || !avail)
 		return false;
 
-	return !!(from_idle ? avail->idle_enabled :
-				avail->suspend_enabled);
+	return !!(avail->suspend_enabled);
 }
 
 static int parse_legacy_cluster_params(struct device_node *node,

@@ -2253,9 +2253,9 @@ static int msm8996_get_ll_qos_val(struct snd_pcm_runtime *runtime)
 
 static int msm8996_mm5_prepare(struct snd_pcm_substream *substream)
 {
-	if (pm_qos_request_active(&substream->latency_pm_qos_req))
-		pm_qos_remove_request(&substream->latency_pm_qos_req);
-	pm_qos_add_request(&substream->latency_pm_qos_req,
+	if (cpu_latency_qos_request_active(&substream->latency_pm_qos_req))
+		cpu_latency_qos_remove_request(&substream->latency_pm_qos_req);
+	cpu_latency_qos_add_request(&substream->latency_pm_qos_req,
 			   PM_QOS_CPU_DMA_LATENCY,
 			   msm8996_get_ll_qos_val(substream->runtime));
 	return 0;

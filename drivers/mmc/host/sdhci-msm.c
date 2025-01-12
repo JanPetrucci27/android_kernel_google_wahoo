@@ -3551,7 +3551,7 @@ static void sdhci_msm_pm_qos_irq_unvote_work(struct work_struct *work)
 		return;
 
 	pm_qos_irq->latency = PM_QOS_DEFAULT_VALUE;
-	pm_qos_update_request(&pm_qos_irq->req, pm_qos_irq->latency);
+	cpu_latency_qos_update_request(&pm_qos_irq->req, pm_qos_irq->latency);
 }
 
 void sdhci_msm_pm_qos_irq_vote(struct sdhci_host *host)
@@ -3573,7 +3573,7 @@ void sdhci_msm_pm_qos_irq_vote(struct sdhci_host *host)
 
 	cancel_delayed_work_sync(&msm_host->pm_qos_irq.unvote_work);
 	msm_host->pm_qos_irq.latency = latency->latency[host->power_policy];
-	pm_qos_update_request(&msm_host->pm_qos_irq.req,
+	cpu_latency_qos_update_request(&msm_host->pm_qos_irq.req,
 				msm_host->pm_qos_irq.latency);
 }
 
@@ -3603,7 +3603,7 @@ void sdhci_msm_pm_qos_irq_unvote(struct sdhci_host *host, bool async)
 	}
 
 	msm_host->pm_qos_irq.latency = PM_QOS_DEFAULT_VALUE;
-	pm_qos_update_request(&msm_host->pm_qos_irq.req,
+	cpu_latency_qos_update_request(&msm_host->pm_qos_irq.req,
 			msm_host->pm_qos_irq.latency);
 }
 
@@ -3656,7 +3656,7 @@ sdhci_msm_pm_qos_irq_enable_store(struct device *dev,
 		cancel_delayed_work_sync(&msm_host->pm_qos_irq.unvote_work);
 		atomic_set(&msm_host->pm_qos_irq.counter, 0);
 		msm_host->pm_qos_irq.latency = PM_QOS_DEFAULT_VALUE;
-		pm_qos_update_request(&msm_host->pm_qos_irq.req,
+		cpu_latency_qos_update_request(&msm_host->pm_qos_irq.req,
 				msm_host->pm_qos_irq.latency);
 	}
 
@@ -3705,7 +3705,7 @@ void sdhci_msm_pm_qos_irq_init(struct sdhci_host *host)
 	irq_latency = &msm_host->pdata->pm_qos_data.irq_latency;
 	msm_host->pm_qos_irq.latency =
 		irq_latency->latency[SDHCI_PERFORMANCE_MODE];
-	pm_qos_add_request(&msm_host->pm_qos_irq.req, PM_QOS_CPU_DMA_LATENCY,
+	cpu_latency_qos_add_request(&msm_host->pm_qos_irq.req, PM_QOS_CPU_DMA_LATENCY,
 			msm_host->pm_qos_irq.latency);
 	msm_host->pm_qos_irq.enabled = true;
 
@@ -3797,7 +3797,7 @@ static ssize_t sdhci_msm_pm_qos_group_enable_store(struct device *dev,
 				&msm_host->pm_qos[i].unvote_work);
 			atomic_set(&msm_host->pm_qos[i].counter, 0);
 			msm_host->pm_qos[i].latency = PM_QOS_DEFAULT_VALUE;
-			pm_qos_update_request(&msm_host->pm_qos[i].req,
+			cpu_latency_qos_update_request(&msm_host->pm_qos[i].req,
 				msm_host->pm_qos[i].latency);
 		}
 	}
@@ -3846,7 +3846,7 @@ void sdhci_msm_pm_qos_cpu_vote(struct sdhci_host *host,
 	cancel_delayed_work_sync(&pm_qos_group->unvote_work);
 
 	pm_qos_group->latency = latency->latency[host->power_policy];
-	pm_qos_update_request(&pm_qos_group->req, pm_qos_group->latency);
+	cpu_latency_qos_update_request(&pm_qos_group->req, pm_qos_group->latency);
 }
 
 static void sdhci_msm_pm_qos_cpu_unvote_work(struct work_struct *work)
@@ -3859,7 +3859,7 @@ static void sdhci_msm_pm_qos_cpu_unvote_work(struct work_struct *work)
 		return;
 
 	group->latency = PM_QOS_DEFAULT_VALUE;
-	pm_qos_update_request(&group->req, group->latency);
+	cpu_latency_qos_update_request(&group->req, group->latency);
 }
 
 bool sdhci_msm_pm_qos_cpu_unvote(struct sdhci_host *host, int cpu, bool async)
@@ -3879,7 +3879,7 @@ bool sdhci_msm_pm_qos_cpu_unvote(struct sdhci_host *host, int cpu, bool async)
 	}
 
 	msm_host->pm_qos[group].latency = PM_QOS_DEFAULT_VALUE;
-	pm_qos_update_request(&msm_host->pm_qos[group].req,
+	cpu_latency_qos_update_request(&msm_host->pm_qos[group].req,
 				msm_host->pm_qos[group].latency);
 	return true;
 }
@@ -3912,7 +3912,7 @@ void sdhci_msm_pm_qos_cpu_init(struct sdhci_host *host,
 			*cpumask_bits(&msm_host->pdata->pm_qos_data.cpu_group_map.mask[i]));
 		/* We set default latency here for all pm_qos cpu groups. */
 		group->latency = PM_QOS_DEFAULT_VALUE;
-		pm_qos_add_request(&group->req, PM_QOS_CPU_DMA_LATENCY,
+		cpu_latency_qos_add_request(&group->req, PM_QOS_CPU_DMA_LATENCY,
 			group->latency);
 		pr_info("%s (): voted for group #%d (mask=0x%d) latency=%d\n",
 			__func__, i,

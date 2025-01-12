@@ -1355,8 +1355,8 @@ static irqreturn_t fts_interrupt_handler(int irq, void *handle)
 	unsigned short evtcount = 0;
 
 	/* prevent CPU from entering deep sleep */
-	pm_qos_update_request(&info->pm_touch_req, 100);
-	pm_qos_update_request(&info->pm_i2c_req, 100);
+	cpu_latency_qos_update_request(&info->pm_touch_req, 100);
+	cpu_latency_qos_update_request(&info->pm_i2c_req, 100);
 	evtcount = 0;
 
 	fts_read_reg(info, &regAdd[0], 3, (unsigned char *)&evtcount, 2);
@@ -1372,8 +1372,8 @@ static irqreturn_t fts_interrupt_handler(int irq, void *handle)
 				  FTS_EVENT_SIZE * evtcount);
 		fts_event_handler_type_b(info, info->data, evtcount);
 	}
-	pm_qos_update_request(&info->pm_i2c_req, PM_QOS_DEFAULT_VALUE);
-	pm_qos_update_request(&info->pm_touch_req, PM_QOS_DEFAULT_VALUE);
+	cpu_latency_qos_update_request(&info->pm_i2c_req, PM_QOS_DEFAULT_VALUE);
+	cpu_latency_qos_update_request(&info->pm_touch_req, PM_QOS_DEFAULT_VALUE);
 
 	return IRQ_HANDLED;
 }
@@ -1965,13 +1965,11 @@ static int fts_probe(struct i2c_client *client, const struct i2c_device_id *idp)
 
 	info->pm_i2c_req.type = PM_QOS_REQ_AFFINE_IRQ;
 	info->pm_i2c_req.irq = ctrl->rsrcs.irq;
-	pm_qos_add_request(&info->pm_i2c_req, PM_QOS_CPU_DMA_LATENCY,
-			   PM_QOS_DEFAULT_VALUE);
+	cpu_latency_qos_add_request(&info->pm_i2c_req, PM_QOS_DEFAULT_VALUE);
 
 	info->pm_touch_req.type = PM_QOS_REQ_AFFINE_IRQ;
 	info->pm_touch_req.irq = info->irq;
-	pm_qos_add_request(&info->pm_touch_req, PM_QOS_CPU_DMA_LATENCY,
-			   PM_QOS_DEFAULT_VALUE);
+	cpu_latency_qos_add_request(&info->pm_touch_req, PM_QOS_DEFAULT_VALUE);
 	
 	retval = request_threaded_irq(info->irq, fts_hard_interrupt_handler,
 			fts_interrupt_handler, info->board->irq_type,

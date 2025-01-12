@@ -1743,7 +1743,7 @@ static int sw49408_probe(struct device *dev)
 
 	sw49408_get_tci_info(dev);
 	sw49408_get_swipe_info(dev);
-	pm_qos_add_request(&d->pm_qos_req, PM_QOS_CPU_DMA_LATENCY,
+	cpu_latency_qos_add_request(&d->pm_qos_req, PM_QOS_CPU_DMA_LATENCY,
 				PM_QOS_DEFAULT_VALUE);
 
 	d->lcd_mode = LCD_MODE_U3;
@@ -1761,7 +1761,7 @@ static int sw49408_remove(struct device *dev)
 	struct sw49408_data* d = to_sw49408_data(dev);
 
 	TOUCH_TRACE();
-	pm_qos_remove_request(&d->pm_qos_req);
+	cpu_latency_qos_remove_request(&d->pm_qos_req);
 	sw49408_sic_abt_remove();
 	return 0;
 }
@@ -2881,11 +2881,11 @@ int sw49408_irq_handler(struct device *dev)
 	struct sw49408_data *d = to_sw49408_data(dev);
 	int ret = 0;
 
-	pm_qos_update_request(&d->pm_qos_req, 10);
+	cpu_latency_qos_update_request(&d->pm_qos_req, 10);
 	sw49408_reg_read(dev, tc_ic_status, &d->info,
 				sizeof(d->info));
 	ret = sw49408_check_status(dev);
-	pm_qos_update_request(&d->pm_qos_req, PM_QOS_DEFAULT_VALUE);
+	cpu_latency_qos_update_request(&d->pm_qos_req, PM_QOS_DEFAULT_VALUE);
 
 	if (ret < 0)
 		goto error;

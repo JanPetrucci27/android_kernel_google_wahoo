@@ -117,9 +117,9 @@ static int exynos5_busfreq_int_target(struct device *dev, unsigned long *_freq,
 		goto out;
 
 	if (freq > exynos5_int_opp_table[0].clk)
-		pm_qos_update_request(&data->int_req, freq * 16 / 1000);
+		cpu_latency_qos_update_request(&data->int_req, freq * 16 / 1000);
 	else
-		pm_qos_update_request(&data->int_req, -1);
+		cpu_latency_qos_update_request(&data->int_req, -1);
 
 	if (old_freq < freq)
 		err = exynos5_int_setvolt(data, volt);
@@ -352,7 +352,7 @@ static int exynos5_busfreq_int_probe(struct platform_device *pdev)
 	}
 
 	/* TODO: Add a new QOS class for int/mif bus */
-	pm_qos_add_request(&data->int_req, PM_QOS_NETWORK_THROUGHPUT, -1);
+	cpu_latency_qos_add_request(&data->int_req,  -1);
 
 	return 0;
 }
@@ -361,7 +361,7 @@ static int exynos5_busfreq_int_remove(struct platform_device *pdev)
 {
 	struct busfreq_data_int *data = platform_get_drvdata(pdev);
 
-	pm_qos_remove_request(&data->int_req);
+	cpu_latency_qos_remove_request(&data->int_req);
 	unregister_pm_notifier(&data->pm_notifier);
 
 	return 0;

@@ -1067,7 +1067,7 @@ static int viacam_streamon(struct file *filp, void *priv, enum v4l2_buf_type t)
 	 * requirement which will keep the CPU out of the deeper sleep
 	 * states.
 	 */
-	pm_qos_add_request(&cam->qos_request, PM_QOS_CPU_DMA_LATENCY, 50);
+	cpu_latency_qos_add_request(&cam->qos_request,  50);
 	/*
 	 * Fire things up.
 	 */
@@ -1092,7 +1092,7 @@ static int viacam_streamoff(struct file *filp, void *priv, enum v4l2_buf_type t)
 		ret = -EINVAL;
 		goto out;
 	}
-	pm_qos_remove_request(&cam->qos_request);
+	cpu_latency_qos_remove_request(&cam->qos_request);
 	viacam_stop_engine(cam);
 	/*
 	 * Videobuf will recycle all of the outstanding buffers, but

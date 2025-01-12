@@ -96,13 +96,14 @@ int cpuidle_register_governor(struct cpuidle_governor *gov)
 }
 EXPORT_SYMBOL_GPL(cpuidle_register_governor);
 
+#ifndef CONFIG_PM_QOS_STUB
 /**
  * cpuidle_governor_latency_req - Compute a latency constraint for CPU
  * @cpu: Target CPU
  */
 s64 cpuidle_governor_latency_req(unsigned int cpu)
 {
-	int global_req = pm_qos_request_for_cpu(PM_QOS_CPU_DMA_LATENCY, cpu);
+	int global_req = cpu_latency_qos_request_for_cpu(cpu);
 	struct device *device = get_cpu_device(cpu);
 	int device_req = dev_pm_qos_raw_read_value(device);
 
@@ -112,3 +113,4 @@ s64 cpuidle_governor_latency_req(unsigned int cpu)
 	return (s64)device_req * NSEC_PER_USEC;
 }
 EXPORT_SYMBOL_GPL(cpuidle_governor_latency_req);
+#endif /* CONFIG_PM_QOS_STUB */

@@ -559,7 +559,7 @@ static int a5xx_hw_init(struct msm_gpu *gpu)
 	struct a5xx_gpu *a5xx_gpu = to_a5xx_gpu(adreno_gpu);
 	int ret, bit = 0;
 
-	pm_qos_update_request(&gpu->pm_qos_req_dma, 101);
+	cpu_latency_qos_update_request(&gpu->pm_qos_req_dma, 101);
 
 	gpu_write(gpu, REG_A5XX_VBIF_ROUND_ROBIN_QOS_ARB, 0x00000003);
 	if (adreno_is_a540(adreno_gpu))
@@ -791,7 +791,7 @@ static int a5xx_hw_init(struct msm_gpu *gpu)
 	/* Last step - yield the ringbuffer */
 	a5xx_preempt_start(gpu);
 
-	pm_qos_update_request(&gpu->pm_qos_req_dma, 501);
+	cpu_latency_qos_update_request(&gpu->pm_qos_req_dma, 501);
 
 	return 0;
 }

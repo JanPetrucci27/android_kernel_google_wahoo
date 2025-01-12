@@ -330,6 +330,10 @@ config DEDUCE_WAKEUP_REASONS
 	bool
 	default n
 
+config PM_QOS_STUB
+	bool "Stub out pm qos functions"
+	default n
+
 config ENERGY_MODEL
 	bool "Energy Model for CPUs"
 	depends on SMP

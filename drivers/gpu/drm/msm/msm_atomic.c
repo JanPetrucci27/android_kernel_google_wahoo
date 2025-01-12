@@ -588,7 +588,7 @@ int msm_atomic_commit(struct drm_device *dev,
 	 */
 	 
 	if (!atomic_cmpxchg_acquire(&priv->pm_req_set, 1, 0))
-		pm_qos_update_request(&priv->pm_irq_req, 100);
+		cpu_latency_qos_update_request(&priv->pm_irq_req, 100);
 	mod_delayed_work(system_unbound_wq, &priv->pm_unreq_dwork, HZ / 10);
 	
 	ret = start_atomic(dev->dev_private, commit->crtc_mask);

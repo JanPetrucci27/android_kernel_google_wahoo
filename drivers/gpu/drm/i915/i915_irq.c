@@ -4380,7 +4380,7 @@ void intel_irq_init(struct drm_i915_private *dev_priv)
 	INIT_DELAYED_WORK(&dev_priv->gpu_error.hangcheck_work,
 			  i915_hangcheck_elapsed);
 
-	pm_qos_add_request(&dev_priv->pm_qos, PM_QOS_CPU_DMA_LATENCY, PM_QOS_DEFAULT_VALUE);
+	cpu_latency_qos_add_request(&dev_priv->pm_qos,  PM_QOS_DEFAULT_VALUE);
 
 	if (IS_GEN2(dev_priv)) {
 		dev->max_vblank_count = 0;

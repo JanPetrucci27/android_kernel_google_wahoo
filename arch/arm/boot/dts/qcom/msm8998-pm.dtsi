@@ -126,6 +126,7 @@
 					qcom,min-residency-us = <9183>;
 					qcom,min-child-idx = <2>;
 					qcom,is-reset;
+					local-timer-stop;
 				};
 
 				qcom,pm-cpu {
@@ -217,6 +218,7 @@
 					qcom,min-residency-us = <9419>;
 					qcom,min-child-idx = <2>;
 					qcom,is-reset;
+					local-timer-stop;
 				};
 
 				qcom,pm-cpu {

@@ -138,12 +138,8 @@ void free_cluster_node(struct lpm_cluster *cluster);
 void cluster_dt_walkthrough(struct lpm_cluster *cluster);
 
 int create_cluster_lvl_nodes(struct lpm_cluster *p, struct kobject *kobj);
-bool lpm_cpu_mode_allow(unsigned int cpu,
-		unsigned int mode, bool from_idle);
-bool lpm_cluster_mode_allow(struct lpm_cluster *cluster,
-		unsigned int mode, bool from_idle);
-uint32_t *get_per_cpu_max_residency(int cpu);
-uint32_t *get_per_cpu_min_residency(int cpu);
+bool lpm_cpu_mode_allow(unsigned int cpu, unsigned int mode);
+bool lpm_cluster_mode_allow(struct lpm_cluster *cluster, unsigned int mode);
 extern struct lpm_cluster *lpm_root_node;
 
 #ifdef CONFIG_SMP

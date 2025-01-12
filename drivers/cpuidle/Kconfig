@@ -17,12 +17,15 @@ config CPU_IDLE_MULTIPLE_DRIVERS
         bool
 
 config CPU_IDLE_GOV_LADDER
+	depends on !PM_QOS_STUB
 	bool "Ladder governor (for periodic timer tick)"
 
 config CPU_IDLE_GOV_MENU
+	depends on !PM_QOS_STUB
 	bool "Menu governor (for tickless system)"
 
 config CPU_IDLE_GOV_TEO
+	depends on !PM_QOS_STUB
 	bool "Timer events oriented (TEO) governor (for tickless systems)"
 	help
 	  This governor implements a simplified idle state selection method

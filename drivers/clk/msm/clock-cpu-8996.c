@@ -637,7 +637,7 @@ static int cpu_clk_8996_pre_set_rate(struct clk *c, unsigned long rate)
 		atomic_set(&cpuclk->req.cpus_affine,
 			*cpumask_bits(&cpuclk->cpumask));
 		cpuclk->req.type = PM_QOS_REQ_AFFINE_CORES;
-		pm_qos_add_request(&cpuclk->req, PM_QOS_CPU_DMA_LATENCY,
+		cpu_latency_qos_add_request(&cpuclk->req, PM_QOS_CPU_DMA_LATENCY,
 				   cpuclk->pm_qos_latency);
 
 		ret = smp_call_function_any(&cpuclk->cpumask, do_nothing,
@@ -671,7 +671,7 @@ static void cpu_clk_8996_post_set_rate(struct clk *c, unsigned long start_rate)
 	}
 
 	if (hw_low_power_ctrl)
-		pm_qos_remove_request(&cpuclk->req);
+		cpu_latency_qos_remove_request(&cpuclk->req);
 }
 
 static int cpu_clk_8996_set_rate(struct clk *c, unsigned long rate)

@@ -794,7 +794,7 @@ static void msm_irq_preinstall(struct drm_device *dev)
 	kms->funcs->irq_preinstall(kms);
 	priv->pm_irq_req.type = PM_QOS_REQ_AFFINE_IRQ;
 	priv->pm_irq_req.irq = sde_kms->irq_num;
-	pm_qos_add_request(&priv->pm_irq_req, PM_QOS_CPU_DMA_LATENCY,
+	cpu_latency_qos_add_request(&priv->pm_irq_req, PM_QOS_CPU_DMA_LATENCY,
 			   PM_QOS_DEFAULT_VALUE);
 }
 
@@ -813,7 +813,7 @@ static void msm_irq_uninstall(struct drm_device *dev)
 	BUG_ON(!kms);
 	kms->funcs->irq_uninstall(kms);
 	flush_delayed_work(&priv->pm_unreq_dwork);
-	pm_qos_remove_request(&priv->pm_irq_req);
+	cpu_latency_qos_remove_request(&priv->pm_irq_req);
 }
 
 static int msm_enable_vblank(struct drm_device *dev, unsigned int pipe)

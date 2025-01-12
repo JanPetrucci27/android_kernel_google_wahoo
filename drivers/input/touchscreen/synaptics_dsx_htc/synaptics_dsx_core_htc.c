@@ -2521,11 +2521,11 @@ static irqreturn_t synaptics_rmi4_irq(int irq, void *data)
 #endif
 
 	/* prevent CPU from entering deep sleep */
-	pm_qos_update_request(&rmi4_data->pm_touch_req, 100);
-	pm_qos_update_request(&rmi4_data->pm_i2c_req, 100);
+	cpu_latency_qos_update_request(&rmi4_data->pm_touch_req, 100);
+	cpu_latency_qos_update_request(&rmi4_data->pm_i2c_req, 100);
 	synaptics_rmi4_sensor_report(rmi4_data, true);
-	pm_qos_update_request(&rmi4_data->pm_i2c_req, PM_QOS_DEFAULT_VALUE);
-	pm_qos_update_request(&rmi4_data->pm_touch_req, PM_QOS_DEFAULT_VALUE);
+	cpu_latency_qos_update_request(&rmi4_data->pm_i2c_req, PM_QOS_DEFAULT_VALUE);
+	cpu_latency_qos_update_request(&rmi4_data->pm_touch_req, PM_QOS_DEFAULT_VALUE);
 
 exit:
 	return IRQ_HANDLED;
@@ -5712,13 +5712,11 @@ static int synaptics_rmi4_probe(struct platform_device *pdev)
 
 	rmi4_data->pm_i2c_req.type = PM_QOS_REQ_AFFINE_IRQ;
 	rmi4_data->pm_i2c_req.irq = i2c_irq;
-	pm_qos_add_request(&rmi4_data->pm_i2c_req, PM_QOS_CPU_DMA_LATENCY,
-			   PM_QOS_DEFAULT_VALUE);
+	cpu_latency_qos_add_request(&rmi4_data->pm_i2c_req, PM_QOS_DEFAULT_VALUE);
 
 	rmi4_data->pm_touch_req.type = PM_QOS_REQ_AFFINE_IRQ;
 	rmi4_data->pm_touch_req.irq = rmi4_data->irq;
-	pm_qos_add_request(&rmi4_data->pm_touch_req, PM_QOS_CPU_DMA_LATENCY,
-			   PM_QOS_DEFAULT_VALUE);
+	cpu_latency_qos_add_request(&rmi4_data->pm_touch_req, PM_QOS_DEFAULT_VALUE);
 
 #if IS_ENABLED(CONFIG_TOUCHSCREEN_SYNAPTICS_DSX_CORE_HTC)
 	retval = request_threaded_irq(rmi4_data->irq, synaptics_rmi4_hardirq,

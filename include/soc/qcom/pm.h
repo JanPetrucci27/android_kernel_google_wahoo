@@ -127,7 +127,6 @@ void msm_pm_set_rpm_wakeup_irq(unsigned int irq);
 int msm_pm_wait_cpu_shutdown(unsigned int cpu);
 int __init msm_pm_sleep_status_init(void);
 void lpm_cpu_hotplug_enter(unsigned int cpu);
-s32 msm_cpuidle_get_deep_idle_latency(void);
 int msm_pm_collapse(unsigned long unused);
 
 /**
@@ -167,7 +166,6 @@ static inline void lpm_cpu_hotplug_enter(unsigned int cpu)
 	msm_arch_idle();
 };
 
-static inline s32 msm_cpuidle_get_deep_idle_latency(void) { return 0; }
 #define msm_pm_collapse NULL
 
 static inline int lpm_get_latency(struct latency_level *level,
