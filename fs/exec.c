@@ -1566,7 +1566,9 @@ static void android_service_blacklist(const char *name)
 		const char *path;
 		size_t len;
 	} static const blacklist[] = {
+#ifdef CONFIG_IRQ_SBALANCE
 		FULL("/vendor/bin/msm_irqbalance"),
+#endif
 		FULL("/vendor/bin/hw/android.hardware.atrace@1.0-service")
 	};
 #undef FULL

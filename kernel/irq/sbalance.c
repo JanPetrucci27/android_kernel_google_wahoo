@@ -52,15 +52,15 @@ struct bal_irq {
 	struct list_head move_node;
 	struct rcu_head rcu;
 	struct irq_desc *desc;
-	unsigned long delta_nr;
-	unsigned long old_nr;
+	unsigned int delta_nr;
+	unsigned int old_nr;
 	int prev_cpu;
 };
 
 struct bal_domain {
 	struct list_head movable_irqs;
-	unsigned long intrs;
 	unsigned long old_total;
+	unsigned int intrs;
 	int cpu;
 };
 
@@ -219,9 +219,9 @@ static void balance_irqs(void)
 	struct bal_irq *bi;
 	int cpu;
 
+	get_online_cpus();
 	rcu_read_lock();
 
-	/* Find the available CPUs for balancing, if there are any */
 	cpumask_copy(&cpus, cpu_active_mask);
 	if (unlikely(cpumask_weight(&cpus) <= 1))
 		goto unlock;
@@ -257,6 +257,8 @@ static void balance_irqs(void)
 			continue;
 		}
 
+		/* Add this IRQ to its CPU's list of movable IRQs */
+		bd = per_cpu_ptr(&balance_data, cpu);
 		list_add_tail(&bi->move_node, &bd->movable_irqs);
 	}
 
@@ -336,6 +338,7 @@ try_next_heaviest:
 		goto try_next_heaviest;
 unlock:
 	rcu_read_unlock();
+	put_online_cpus();
 
 	/* Reset each balance domain for the next run */
 	for_each_possible_cpu(cpu) {
