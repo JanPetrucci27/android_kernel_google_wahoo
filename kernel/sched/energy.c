@@ -160,8 +160,8 @@ void init_sched_energy_costs(void)
 		}
 
 		if (!freq_energy_model) {
-			check_max_cap_vs_cpu_scale(cpu, sge_array[cpu][SD_LEVEL0]);
 			arch_update_cpu_capacity(cpu);
+			check_max_cap_vs_cpu_scale(cpu, sge_array[cpu][SD_LEVEL0]);
 		}
 	}
 	sge_ready = true;

@@ -403,7 +403,7 @@ static void domain_dirty_limits(struct dirty_throttle_control *dtc)
 	if (bg_thresh >= thresh)
 		bg_thresh = thresh / 2;
 	tsk = current;
-	if (tsk->flags & PF_LESS_THROTTLE || rt_task(tsk)) {
+	if (tsk->flags & PF_LESS_THROTTLE || rt_or_dl_task(tsk)) {
 		bg_thresh += bg_thresh / 4;
 		thresh += thresh / 4;
 	}
@@ -453,7 +453,7 @@ static unsigned long zone_dirty_limit(struct zone *zone)
 	else
 		dirty = vm_dirty_ratio * zone_memory / 100;
 
-	if (tsk->flags & PF_LESS_THROTTLE || rt_task(tsk))
+	if (tsk->flags & PF_LESS_THROTTLE || rt_or_dl_task(tsk))
 		dirty += dirty / 4;
 
 	return dirty;

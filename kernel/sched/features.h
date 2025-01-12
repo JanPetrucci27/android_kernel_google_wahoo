@@ -10,10 +10,19 @@
  */
 #define SCHED_FEAT_PLACE_DEADLINE_INITIAL 1
 /*
+ * Preserve relative virtual deadline on 'migration'.
+ */
+#define SCHED_FEAT_PLACE_REL_DEADLINE 1
+/*
  * Inhibit (wakeup) preemption until the current task has either matched the
  * 0-lag point or until is has exhausted it's slice.
  */
 #define SCHED_FEAT_RUN_TO_PARITY 1
+/*
+ * Allow wakeup of tasks with a shorter slice to cancel RUN_TO_PARITY for
+ * current.
+ */
+#define SCHED_FEAT_PREEMPT_SHORT 1
 
 /*
  * Prefer to schedule the task we woke last (assuming it failed
@@ -29,14 +38,24 @@
 #define SCHED_FEAT_CACHE_HOT_BUDDY 1
 
 /*
+ * Delay dequeueing tasks until they get selected or woken.
+ *
+ * By delaying the dequeue for non-eligible tasks, they remain in the
+ * competition and can burn off their negative lag. When they get selected
+ * they'll have positive lag by definition.
+ *
+ * DELAY_ZERO clips the lag on dequeue (or wakeup) to 0.
+ */
+#define SCHED_FEAT_DELAY_DEQUEUE 0
+#define SCHED_FEAT_DELAY_ZERO 1
+
+/*
  * Allow wakeup-time preemption of the current task:
  */
 #define SCHED_FEAT_WAKEUP_PREEMPTION 1
 
 #define SCHED_FEAT_HRTICK 0
 #define SCHED_FEAT_HRTICK_DL 0
-#define SCHED_FEAT_DOUBLE_TICK 0
-
 /*
  * Decrement CPU capacity based on time not spent running tasks
  */
@@ -60,7 +79,7 @@
  */
 #define SCHED_FEAT_WARN_DOUBLE_CLOCK 0
 
-#ifdef HAVE_RT_PUSH_IPI
+#if defined(CONFIG_IRQ_WORK) && defined(CONFIG_SMP)
 /*
  * In order to avoid a thundering herd attack of CPUs that are
  * lowering their priorities at the same time, and there being
@@ -87,8 +106,6 @@
  * UtilEstimation. Use estimated CPU utilization.
  */
 #define SCHED_FEAT_UTIL_EST 1
-
-#define SCHED_FEAT_HZ_BW 1
 
 /*
  * Request max frequency from schedutil whenever a RT task is running.

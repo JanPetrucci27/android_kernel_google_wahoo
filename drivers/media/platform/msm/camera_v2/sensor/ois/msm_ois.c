@@ -160,8 +160,6 @@ static void msm_ois_read_work(struct work_struct *work)
 	sched_setscheduler(current, SCHED_FIFO, &param);
 	*/
 
-	sched_set_fifo(current);
-
 	ois_timer_in_t = container_of(work, struct ois_timer, g_work);
 	get_monotonic_boottime(&ts);
 	rc = ois_timer_in_t->o_ctrl->i2c_client.i2c_func_tbl->i2c_read_seq(

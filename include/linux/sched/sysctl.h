@@ -35,7 +35,16 @@ enum { sysctl_hung_task_timeout_secs = 0 };
 
 extern int sysctl_max_map_count;
 
+#ifdef CONFIG_SCHED_BORE
+#ifdef CONFIG_SCHED_DEBUG
+extern unsigned int sched_bore;
+#endif
+extern unsigned int sysctl_sched_min_base_slice;
+extern __read_mostly uint sysctl_sched_base_slice;
+#else // !CONFIG_SCHED_BORE
 extern unsigned int sysctl_sched_base_slice;
+#endif // CONFIG_SCHED_BORE
+
 extern unsigned int sysctl_sched_cstate_aware;
 
 enum sched_tunable_scaling {
