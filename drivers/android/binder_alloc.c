@@ -24,7 +24,7 @@
 #include <linux/highmem.h>
 #include <linux/sizes.h>
 #include "binder_alloc.h"
-#include "binder_trace.h"
+//#include "binder_trace.h"
 
 struct list_lru binder_alloc_lru;
 
@@ -55,22 +55,6 @@ static inline void binder_alloc_debug(uint32_t mask, const char *fmt, ...)
 {
 }
 #endif
-
-static struct kmem_cache *binder_buffer_pool;
-
-int binder_buffer_pool_create(void)
-{
-	binder_buffer_pool = KMEM_CACHE(binder_buffer, SLAB_HWCACHE_ALIGN);
-	if (!binder_buffer_pool)
-		return -ENOMEM;
-
-	return 0;
-}
-
-void binder_buffer_pool_destroy(void)
-{
-	kmem_cache_destroy(binder_buffer_pool);
-}
 
 static struct binder_buffer *binder_buffer_next(struct binder_buffer *buffer)
 {
@@ -220,7 +204,7 @@ static int binder_update_page_range(struct binder_alloc *alloc, int allocate,
 	if (end <= start)
 		return 0;
 
-	trace_binder_update_page_range(alloc, allocate, start, end);
+	// trace_binder_update_page_range(alloc, allocate, start, end);
 
 	if (allocate == 0)
 		goto free_range;
@@ -257,19 +241,19 @@ static int binder_update_page_range(struct binder_alloc *alloc, int allocate,
 		page = &alloc->pages[index];
 
 		if (page->page_ptr) {
-			trace_binder_alloc_lru_start(alloc, index);
+			// trace_binder_alloc_lru_start(alloc, index);
 
 			on_lru = list_lru_del(&binder_alloc_lru, &page->lru);
 			WARN_ON(!on_lru);
 
-			trace_binder_alloc_lru_end(alloc, index);
+			// trace_binder_alloc_lru_end(alloc, index);
 			continue;
 		}
 
 		if (WARN_ON(!vma))
 			goto err_page_ptr_cleared;
 
-		trace_binder_alloc_page_start(alloc, index);
+		// trace_binder_alloc_page_start(alloc, index);
 		page->page_ptr = alloc_page(GFP_KERNEL |
 					    __GFP_ZERO);
 		if (!page->page_ptr) {
@@ -291,7 +275,7 @@ static int binder_update_page_range(struct binder_alloc *alloc, int allocate,
 		if (index + 1 > alloc->pages_high)
 			alloc->pages_high = index + 1;
 
-		trace_binder_alloc_page_end(alloc, index);
+		// trace_binder_alloc_page_end(alloc, index);
 		/* vm_insert_page does not seem to increment the refcount */
 	}
 	if (mm) {
@@ -308,12 +292,12 @@ free_range:
 		index = (page_addr - alloc->buffer) / PAGE_SIZE;
 		page = &alloc->pages[index];
 
-		trace_binder_free_lru_start(alloc, index);
+		// trace_binder_free_lru_start(alloc, index);
 
 		ret = list_lru_add(&binder_alloc_lru, &page->lru);
 		WARN_ON(!ret);
 
-		trace_binder_free_lru_end(alloc, index);
+		// trace_binder_free_lru_end(alloc, index);
 		if (page_addr == start)
 			break;
 		continue;
@@ -532,7 +516,7 @@ static struct binder_buffer *binder_alloc_new_buf_locked(
 	if (buffer_size != size) {
 		struct binder_buffer *new_buffer;
 
-		new_buffer = kmem_cache_zalloc(binder_buffer_pool, GFP_KERNEL);
+		new_buffer = kzalloc(sizeof(*buffer), GFP_KERNEL);
 		if (!new_buffer) {
 			pr_err("%s: %d failed to alloc new buffer struct\n",
 			       __func__, alloc->pid);
@@ -671,7 +655,7 @@ static void binder_delete_free_buffer(struct binder_alloc *alloc,
 					 buffer_start_page(buffer) + PAGE_SIZE);
 	}
 	list_del(&buffer->entry);
-	kmem_cache_free(binder_buffer_pool, buffer);
+	kfree(buffer);
 }
 
 static void binder_free_buf_locked(struct binder_alloc *alloc,
@@ -792,7 +776,7 @@ int binder_alloc_mmap_handler(struct binder_alloc *alloc,
 
 	alloc->buffer = (void __user *)vma->vm_start;
 
-	alloc->pages = kcalloc(alloc->buffer_size / PAGE_SIZE,
+	alloc->pages = kvcalloc(alloc->buffer_size / PAGE_SIZE,
 			       sizeof(alloc->pages[0]),
 			       GFP_KERNEL);
 	if (alloc->pages == NULL) {
@@ -801,7 +785,7 @@ int binder_alloc_mmap_handler(struct binder_alloc *alloc,
 		goto err_alloc_pages_failed;
 	}
 
-	buffer = kmem_cache_zalloc(binder_buffer_pool, GFP_KERNEL);
+	buffer = kzalloc(sizeof(*buffer), GFP_KERNEL);
 	if (!buffer) {
 		ret = -ENOMEM;
 		failure_string = "alloc buffer struct";
@@ -819,7 +803,7 @@ int binder_alloc_mmap_handler(struct binder_alloc *alloc,
 	return 0;
 
 err_alloc_buf_struct_failed:
-	kfree(alloc->pages);
+	kvfree(alloc->pages);
 	alloc->pages = NULL;
 err_alloc_pages_failed:
 	alloc->buffer = NULL;
@@ -866,7 +850,7 @@ void binder_alloc_deferred_release(struct binder_alloc *alloc)
 
 		list_del(&buffer->entry);
 		WARN_ON_ONCE(!list_empty(&alloc->buffers));
-		kmem_cache_free(binder_buffer_pool, buffer);
+		kfree(buffer);
 	}
 
 	page_count = 0;
@@ -890,7 +874,7 @@ void binder_alloc_deferred_release(struct binder_alloc *alloc)
 			__free_page(alloc->pages[i].page_ptr);
 			page_count++;
 		}
-		kfree(alloc->pages);
+		kvfree(alloc->pages);
 	}
 	mutex_unlock(&alloc->mutex);
 	if (alloc->vma_vm_mm)
@@ -1043,21 +1027,21 @@ enum lru_status binder_alloc_free_page(struct list_head *item,
 	spin_unlock(lock);
 
 	if (vma) {
-		trace_binder_unmap_user_start(alloc, index);
+		// trace_binder_unmap_user_start(alloc, index);
 
 		zap_page_range(vma, page_addr, PAGE_SIZE, NULL);
 
-		trace_binder_unmap_user_end(alloc, index);
+		// trace_binder_unmap_user_end(alloc, index);
 	}
 	up_read(&mm->mmap_sem);
 	mmput_async(mm);
 
-	trace_binder_unmap_kernel_start(alloc, index);
+	// trace_binder_unmap_kernel_start(alloc, index);
 
 	__free_page(page->page_ptr);
 	page->page_ptr = NULL;
 
-	trace_binder_unmap_kernel_end(alloc, index);
+	// trace_binder_unmap_kernel_end(alloc, index);
 
 	spin_lock(lock);
 	mutex_unlock(&alloc->mutex);
